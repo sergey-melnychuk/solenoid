@@ -16,6 +16,8 @@ pub enum ExecutorError {
     StackOverflow,
     #[error("Stack underflow")]
     StackUnderflow,
+    #[error("Call depth limit reached")]
+    CallDepthLimitReached,
     #[error("Out of memory: {0} bytes requested")]
     OutOfMemory(usize),
     #[error("Invalid jump")]
@@ -36,6 +38,8 @@ pub enum ExecutorError {
 }
 
 const STACK_LIMIT: usize = 1024;
+
+const CALL_DEPTH_LIMIT: usize = 1024;
 
 #[derive(Debug, Default)]
 pub struct Evm {
@@ -156,9 +160,7 @@ pub enum MemoryEvent {
     W(usize, Vec<u8>),
 }
 
-// TODO: deal with nestedness: add `depth` property?
-// TODO: deal with revert-awareness (only for Memory?)
-pub enum Event {
+pub enum EventData {
     Opcode {
         pc: usize,
         op: u8,
@@ -170,14 +172,19 @@ pub enum Event {
         hash: [u8; 32],
     },
     // TODO: Gas
-    // TODO: Nonce, Balance
-    // TODO: Created(code, addr)
+    // TODO: Created { code, addr }
     Stack(StackEvent),
     State(StateEvent),
     Memory(MemoryEvent),
     Call(Call, Option<Context>),
     Return(Vec<u8>),
-    Revert(Vec<StateEvent>),
+    // Balance, Nonce (, Tx, Block): these happen on higher level then execution of call
+}
+
+pub struct Event {
+    pub data: EventData,
+    pub depth: usize,
+    pub reverted: bool,
 }
 
 #[allow(unused_variables)] // default impl ignores all arguments
@@ -189,7 +196,7 @@ pub trait EventTracer: Default {
     fn fork(&self) -> Self {
         Self::default()
     }
-    fn merge(&mut self, other: Self, reverted: bool) {}
+    fn join(&mut self, other: Self, reverted: bool) {}
 }
 
 #[derive(Default)]
@@ -200,6 +207,8 @@ impl EventTracer for NoopTracer {}
 #[derive(Clone)]
 pub struct Context {
     // TODO: gas
+    // TODO: origin?
+    pub depth: usize,
     pub target: Address,
     pub is_static_call: bool,
     pub is_delegate_call: bool,
@@ -230,30 +239,42 @@ impl<T: EventTracer> Executor<T> {
         call: &Call,
         ext: &mut Ext,
     ) -> Result<(T, Evm, Vec<u8>), ExecutorError> {
-        self.tracer.add(Event::Call(call.clone(), None));
+        self.tracer.add(Event {
+            reverted: false,
+            depth: 0,
+            data: EventData::Call(call.clone(), None),
+        });
         let ctx = Context {
+            depth: 0,
             target: call.from.clone(),
             is_delegate_call: false,
             is_static_call: false,
         };
-        self.execute_with_context(code, call, &ctx, ext).await?;
-        Ok((self.tracer, self.evm, self.ret))
+        self.execute_with_context(code, call, &ctx, ext).await
     }
 
     async fn execute_with_context(
-        &mut self,
+        mut self,
         code: &Bytecode,
         call: &Call,
         ctx: &Context,
         ext: &mut Ext,
-    ) -> Result<&[u8], ExecutorError> {
+    ) -> Result<(T, Evm, Vec<u8>), ExecutorError> {
+        if ctx.depth > CALL_DEPTH_LIMIT {
+            return Err(ExecutorError::CallDepthLimitReached);
+        }
+
         while !self.evm.stopped && self.evm.pc < code.instructions.len() {
             let instruction = &code.instructions[self.evm.pc];
-            self.tracer.add(Event::Opcode {
-                pc: self.evm.pc,
-                op: instruction.opcode.code,
-                name: instruction.opcode.name(),
-                data: instruction.argument.clone(),
+            self.tracer.add(Event {
+                depth: ctx.depth,
+                reverted: false,
+                data: EventData::Opcode {
+                    pc: self.evm.pc,
+                    op: instruction.opcode.code,
+                    name: instruction.opcode.name(),
+                    data: instruction.argument.clone(),
+                },
             });
 
             let data = instruction
@@ -298,14 +319,14 @@ impl<T: EventTracer> Executor<T> {
                 .for_each(|word| println!("{word:#02x}"));
         }
 
-        Ok(&self.ret)
+        Ok((self.tracer, self.evm, self.ret))
     }
 
     pub async fn execute_instruction(
         &mut self,
         code: &Bytecode,
         call: &Call,
-        _ctx: &Context, // TODO: will be necessary for proper {DELEGATE, STATIC}CALL impl
+        ctx: &Context,
         ext: &mut Ext,
         instruction: &Instruction,
     ) -> Result<(), ExecutorError> {
@@ -681,27 +702,32 @@ impl<T: EventTracer> Executor<T> {
                     to: address.into(),
                 };
 
-                let future = executor.execute(&code, &nested_call, ext);
+                let nexted_ctx = Context {
+                    depth: ctx.depth + 1,
+                    target: call.to.clone(),
+                    is_static_call: false,
+                    is_delegate_call: false,
+                };
+
+                let future = executor.execute_with_context(&code, &nested_call, &nexted_ctx, ext);
                 let (tracer, evm, ret) = Box::pin(future).await?;
+                self.tracer.join(tracer, evm.reverted);
 
-                self.tracer.merge(tracer, evm.reverted);
-
-                if ret.len() == ret_size {
-                    let size = ret_offset + ret_size;
-                    if size > self.evm.memory.len() {
-                        if size > 1_000_000_000 {
-                            // TODO: make the limit configurable
-                            return Err(ExecutorError::OutOfMemory(size));
+                if !evm.reverted {
+                    if ret.len() == ret_size {
+                        let size = ret_offset + ret_size;
+                        if size > self.evm.memory.len() {
+                            if size > 1_000_000_000 {
+                                // TODO: make the limit configurable
+                                return Err(ExecutorError::OutOfMemory(size));
+                            }
+                            self.evm.memory.resize(size, 0);
                         }
-                        self.evm.memory.resize(size, 0);
+                        self.evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+                        self.evm.push(U256::one())?;
                     }
-                    self.evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
-                    self.evm.push(U256::one())?;
                 } else {
-                    return Err(ExecutorError::WrongCallRetDataSize {
-                        exp: ret_size,
-                        got: ret.len(),
-                    });
+                    self.evm.push(U256::zero())?;
                 }
             }
             #[allow(unused_variables)]
