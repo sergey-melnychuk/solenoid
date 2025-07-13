@@ -18,12 +18,12 @@ pub struct Instruction {
 }
 
 #[derive(Debug)]
-pub struct DecodedBytecode {
+pub struct Bytecode {
     pub instructions: Vec<Instruction>,
     pub jumptable: Vec<(usize, usize)>,
 }
 
-impl DecodedBytecode {
+impl Bytecode {
     pub fn new(instructions: Vec<Instruction>, jumptable: Vec<(usize, usize)>) -> Self {
         Self {
             instructions,
@@ -49,7 +49,7 @@ impl<'a> Decoder<'a> {
         Self { bytecode }
     }
 
-    pub fn decode(&self) -> Result<DecodedBytecode, DecoderError> {
+    pub fn decode(&self) -> Result<Bytecode, DecoderError> {
         let mut instructions = Vec::new();
         let mut jumptable = Vec::new();
 
@@ -88,7 +88,7 @@ impl<'a> Decoder<'a> {
             instructions.push(instruction);
         }
 
-        Ok(DecodedBytecode {
+        Ok(Bytecode {
             instructions,
             jumptable,
         })

@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     common::{address::Address, hash::keccak256},
-    decoder::{DecodedBytecode, Instruction},
+    decoder::{Bytecode, Instruction},
     eth::EthClient,
 };
 
@@ -162,7 +162,7 @@ impl Interpreter {
 
     pub async fn execute(
         &mut self,
-        code: &DecodedBytecode,
+        code: &Bytecode,
         call: &Call,
         ext: &mut Ext,
     ) -> Result<&[u8], InterpreterError> {
@@ -221,7 +221,7 @@ impl Interpreter {
     #[allow(unused_variables)]
     pub async fn execute_instruction(
         &mut self,
-        code: &DecodedBytecode,
+        code: &Bytecode,
         call: &Call,
         ext: &mut Ext,
         instruction: &Instruction,

@@ -1,6 +1,6 @@
 use primitive_types::U256;
 use solenoid::{
-    decoder::{DecodedBytecode, Decoder},
+    decoder::{Bytecode, Decoder},
     eth::EthClient,
     interpreter::{Call, Ext, Interpreter},
 };
@@ -76,7 +76,7 @@ async fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn dump(decoded: &DecodedBytecode) {
+fn dump(decoded: &Bytecode) {
     println!("{:<6} {:<15} Argument", "PC", "OpCode");
     println!("{}", "─".repeat(40));
 
