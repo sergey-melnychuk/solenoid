@@ -26,7 +26,7 @@ impl Opcode {
 }
 
 static OPCODES: Lazy<[Opcode; 256]> = Lazy::new(|| {
-    let mut table = [Opcode::new(0xfe, "INVALID", 0); 256];
+    let mut table = [Opcode::new(0xfe, "undefined", 0); 256];
     // 0s: Stop and Arithmetic Operations
     table[0x00] = Opcode::new(0x00, "STOP", 0);
     table[0x01] = Opcode::new(0x01, "ADD", 0);
@@ -152,15 +152,14 @@ pub fn get_opcode(value: u8) -> Opcode {
 mod tests {
     use super::*;
     #[test]
-    #[ignore = "WIP"]
     fn test_all_opcodes_covered() {
-        let mut missing = Vec::with_capacity(255);
         for i in 0..0xffu8 {
-            if OPCODES[i as usize].code != i {
-                missing.push(format!("{i:02x?}"));
+            if OPCODES[i as usize].code == i {
+                assert_ne!(OPCODES[i as usize].name, "undefined");
+                continue;
             }
+            assert_eq!(OPCODES[i as usize].code, 0xfe);
+            assert_eq!(OPCODES[i as usize].name, "undefined");
         }
-        let empty: Vec<String> = vec![];
-        assert_eq!(missing, empty);
     }
 }

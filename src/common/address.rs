@@ -1,6 +1,6 @@
 use primitive_types::U256;
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct Address(pub [u8; 20]);
 
 impl From<&Address> for U256 {

@@ -1,10 +1,13 @@
+use std::{collections::HashMap, time::Instant};
+
 use i256::I256;
 use primitive_types::U256;
 use thiserror::Error;
 
 use crate::{
-    common::{address::Address, hash::sha3},
+    common::{address::Address, hash::keccak256},
     decoder::{DecodedBytecode, Instruction},
+    eth::EthClient,
 };
 
 #[derive(Error, Debug)]
@@ -13,12 +16,16 @@ pub enum InterpreterError {
     StackOverflow,
     #[error("Stack underflow")]
     StackUnderflow,
-    #[error("Unsupported opcode: 0x{0:02x}:{1}")]
-    UnsupportedOpcode(u8, String),
     #[error("Invalid jump")]
     InvalidJump,
     #[error("Missing data")]
     MissingData,
+    #[error("Invalid opcode: {0:#02x}")]
+    InvalidOpcode(u8),
+    #[error("Unknown opcode: {0:#02x}")]
+    UnknownOpcode(u8),
+    #[error("{0}")]
+    Eyre(#[from] eyre::ErrReport),
 }
 
 const STACK_LIMIT: usize = 1024;
@@ -50,42 +57,131 @@ pub struct Call {
     pub calldata: Vec<u8>,
     pub value: U256,
     pub from: Address,
+    pub to: Address,
 }
 
-pub struct Interpreter<'a> {
-    bytecode: &'a DecodedBytecode,
+#[derive(Default)]
+pub struct State {
+    r: Vec<(U256, U256)>,
+    w: Vec<(U256, U256)>,
+}
+
+impl State {
+    fn get(&self, key: &U256) -> Option<U256> {
+        self.r
+            .iter()
+            .filter(|(k, _)| k == key)
+            .map(|(_, v)| v)
+            .next()
+            .cloned()
+    }
+
+    fn hit(&mut self, key: U256, val: U256) {
+        self.r.push((key, val));
+    }
+
+    fn put(&mut self, key: U256, val: U256) {
+        if let Some((_, v)) = self.w.iter_mut().find(|(k, _)| k == &key) {
+            *v = val;
+        } else {
+            self.w.push((key, val));
+        }
+    }
+}
+
+pub struct Ext {
+    block_hash: String,
+    state: HashMap<Address, State>,
+    eth: EthClient,
+}
+
+impl Ext {
+    pub fn new(block_hash: String, eth: EthClient) -> Self {
+        Self {
+            block_hash,
+            state: Default::default(),
+            eth,
+        }
+    }
+}
+
+pub struct Account {
+    pub balance: U256,
+    pub nonce: U256,
+    pub code: U256,
+    pub root: U256,
+}
+
+impl Ext {
+    fn hit(&mut self, addr: &Address, key: U256, val: U256) {
+        let e = self.state.entry(addr.clone()).or_default();
+        e.hit(key, val);
+    }
+
+    pub async fn get(&mut self, addr: &Address, key: &U256) -> eyre::Result<U256> {
+        let val = if let Some(val) = self.state.get(addr).and_then(|s| s.get(key)) {
+            val
+        } else {
+            let now = Instant::now();
+            let hex = format!("0x{key:064x}");
+            let address = format!("0x{}", hex::encode(addr.0));
+            let val = self
+                .eth
+                .get_storage_at(&self.block_hash, &address, &hex)
+                .await?;
+            let ms = now.elapsed().as_millis();
+            let addr = hex::encode(addr.0);
+            tracing::info!("SLOAD: [{ms} ms] 0x{addr}[{key:#x}]={val:#x}");
+            val
+        };
+
+        self.hit(addr, *key, val);
+        Ok(val)
+    }
+
+    pub async fn put(&mut self, addr: &Address, key: U256, val: U256) {
+        let state = self.state.entry(addr.clone()).or_default();
+        state.put(key, val);
+    }
+
+    pub async fn acc(&mut self, _addr: &Address) -> eyre::Result<Account> {
+        todo!("eth_getAccount");
+    }
+}
+
+#[derive(Default)]
+pub struct Interpreter {
     state: EvmState,
-    call: &'a Call,
     ret: Vec<u8>,
 }
 
-impl<'a> Interpreter<'a> {
-    pub fn new(bytecode: &'a DecodedBytecode, call: &'a Call) -> Self {
-        Self {
-            bytecode,
-            state: EvmState::default(),
-            call,
-            ret: Vec::new(),
-        }
+impl Interpreter {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub fn execute(&mut self, _call: &Call) -> Result<&[u8], InterpreterError> {
-        // TODO: `call` should probably be used somehow here
-        while !self.state.stopped && self.state.pc < self.bytecode.instructions.len() {
-            let instruction = &self.bytecode.instructions[self.state.pc];
+    pub async fn execute(
+        &mut self,
+        code: &DecodedBytecode,
+        call: &Call,
+        ext: &mut Ext,
+    ) -> Result<&[u8], InterpreterError> {
+        while !self.state.stopped && self.state.pc < code.instructions.len() {
+            let instruction = &code.instructions[self.state.pc];
 
             let data = instruction
                 .argument
                 .as_ref()
                 .map(|data| format!("0x{}", hex::encode(data)));
             println!(
-                "\n0x{:04x}: {} {}",
+                "\n{:#04x}: {} {}",
                 self.state.pc,
                 instruction.opcode.name(),
                 data.unwrap_or_default()
             );
 
-            self.execute_instruction(instruction)?;
+            self.execute_instruction(code, call, ext, instruction)
+                .await?;
 
             println!(
                 "MEMORY:{}",
@@ -102,7 +198,7 @@ impl<'a> Interpreter<'a> {
                 .for_each(|(index, word)| {
                     let offset = index << 5;
                     let word = hex::encode(word);
-                    println!("0x{offset:04x}: {word}");
+                    println!("{offset:#04x}: {word}");
                 });
             println!(
                 "STACK:{}",
@@ -116,19 +212,24 @@ impl<'a> Interpreter<'a> {
                 .stack
                 .iter()
                 .rev()
-                .for_each(|word| println!("0x{word:04x}"));
+                .for_each(|word| println!("{word:#02x}"));
         }
 
         Ok(&self.ret)
     }
 
-    pub fn execute_instruction(
+    #[allow(unused_variables)]
+    pub async fn execute_instruction(
         &mut self,
+        code: &DecodedBytecode,
+        call: &Call,
+        ext: &mut Ext,
         instruction: &Instruction,
     ) -> Result<(), InterpreterError> {
         let mut pc_increment = true;
 
-        match instruction.opcode.code {
+        let opcode = instruction.opcode.code;
+        match opcode {
             // 0x00: STOP
             0x00 => {
                 self.state.stopped = true;
@@ -317,33 +418,33 @@ impl<'a> Interpreter<'a> {
                     return Err(InterpreterError::MissingData);
                 }
                 let data = &self.state.memory[offset..offset + size];
-                let hash = U256::from_big_endian(&sha3(data));
+                let hash = U256::from_big_endian(&keccak256(data));
                 self.state.push(hash)?;
             }
 
             // 30-3f
             0x33 => {
                 // CALLER
-                self.state.push((&self.call.from).into())?;
+                self.state.push((&call.from).into())?;
             }
             0x34 => {
                 // CALLVALUE
-                self.state.push(self.call.value)?;
+                self.state.push(call.value)?;
             }
             0x35 => {
                 // CALLDATALOAD
                 let offset = self.state.pop()?.as_usize();
-                if offset > self.call.calldata.len() {
+                if offset > call.calldata.len() {
                     return Err(InterpreterError::MissingData);
                 }
                 let mut data = [0u8; 32];
-                let copy = self.call.calldata.len().min(offset + 32) - offset;
-                data[0..copy].copy_from_slice(&self.call.calldata[offset..offset + copy]);
+                let copy = call.calldata.len().min(offset + 32) - offset;
+                data[0..copy].copy_from_slice(&call.calldata[offset..offset + copy]);
                 self.state.push(U256::from_big_endian(&data))?;
             }
             0x36 => {
                 // CALLDATASIZE
-                self.state.push(U256::from(self.call.calldata.len()))?;
+                self.state.push(U256::from(call.calldata.len()))?;
             }
 
             // 40-4a
@@ -386,28 +487,22 @@ impl<'a> Interpreter<'a> {
             0x54 => {
                 // SLOAD
                 let key = self.state.pop()?;
-
-                // unimplemented!("SLOAD(0x{key:0x})");
-                eprintln!("SLOAD(0x{key:0x})");
-
-                self.state.push(U256::zero())?;
+                let val = ext.get(&call.from, &key).await?;
+                self.state.push(val)?;
             }
             0x55 => {
                 // SSTORE
                 let key = self.state.pop()?;
                 let val = self.state.pop()?;
-
-                // unimplemented!("SSTORE(0x{key:0x}, 0x{val:0x})");
-                eprintln!("SSTORE(0x{key:0x}, 0x{val:0x})");
+                ext.put(&call.from, key, val).await;
             }
             0x56 => {
                 // JUMP
                 let dest = self.state.pop()?.as_usize();
-                let dest = self
-                    .bytecode
+                let dest = code
                     .resolve_jump(dest)
                     .ok_or(InterpreterError::InvalidJump)?;
-                if self.bytecode.instructions[dest].opcode.code != 0x5b {
+                if code.instructions[dest].opcode.code != 0x5b {
                     return Err(InterpreterError::InvalidJump);
                 }
                 self.state.pc = dest;
@@ -416,13 +511,12 @@ impl<'a> Interpreter<'a> {
             0x57 => {
                 // JUMPI
                 let dest = self.state.pop()?.as_usize();
-                let dest = self
-                    .bytecode
+                let dest = code
                     .resolve_jump(dest)
                     .ok_or(InterpreterError::InvalidJump)?;
                 let cond = self.state.pop()?;
                 if !cond.is_zero() {
-                    if self.bytecode.instructions[dest].opcode.code != 0x5b {
+                    if code.instructions[dest].opcode.code != 0x5b {
                         return Err(InterpreterError::InvalidJump);
                     }
                     self.state.pc = dest;
@@ -474,14 +568,42 @@ impl<'a> Interpreter<'a> {
                 self.state.stack.swap(stack_len - 1, stack_len - 1 - n);
             }
 
-            // f3: RETURN
-            0xf3 => {
-                // TODO: return the data
-                self.state.stopped = true;
-            }
+            0xf0 => {
+                // CREATE
+                let value = self.state.pop()?;
+                let offset = self.state.pop()?;
+                let size = self.state.pop()?;
 
-            // fd: REVERT
-            0xfd => {
+                todo!("CREATE");
+                // put address of the created contract on the stack
+            }
+            0xf1 => {
+                // CALL
+                let gas = self.state.pop()?;
+                let address = self.state.pop()?;
+                let value = self.state.pop()?;
+                let args_offset = self.state.pop()?;
+                let args_size = self.state.pop()?;
+                let ret_offset = self.state.pop()?;
+                let ret_size = self.state.pop()?;
+
+                todo!("CALL");
+                //self.state.push(U256::zero())?;
+            }
+            0xf2 => {
+                // CALLCODE
+                let gas = self.state.pop()?;
+                let address = self.state.pop()?;
+                let value = self.state.pop()?;
+                let args_offset = self.state.pop()?;
+                let args_size = self.state.pop()?;
+                let ret_offset = self.state.pop()?;
+                let ret_size = self.state.pop()?;
+
+                todo!("CALLCODE");
+            }
+            0xf3 | 0xfd => {
+                // REVERT | RETURN
                 self.state.stopped = true;
 
                 let offset = self.state.pop()?.as_usize();
@@ -496,12 +618,48 @@ impl<'a> Interpreter<'a> {
                     self.ret.clear();
                 }
             }
+            0xf4 => {
+                // DELEGATECALL
+                let gas = self.state.pop()?;
+                let address = self.state.pop()?;
+                let args_offset = self.state.pop()?;
+                let args_size = self.state.pop()?;
+                let ret_offset = self.state.pop()?;
+                let ret_size = self.state.pop()?;
 
+                todo!("DELEGATECALL");
+            }
+            0xf5 => {
+                // CREATE2
+                let value = self.state.pop()?;
+                let offset = self.state.pop()?;
+                let size = self.state.pop()?;
+                let salt = self.state.pop()?;
+
+                todo!("CREATE2");
+                // put address of the created contract on the stack
+            }
+            0xfa => {
+                // STATICCALL
+                let gas = self.state.pop()?;
+                let address = self.state.pop()?;
+                let args_offset = self.state.pop()?;
+                let args_size = self.state.pop()?;
+                let ret_offset = self.state.pop()?;
+                let ret_size = self.state.pop()?;
+
+                todo!("STATICCALL");
+            }
+            0xfe => {
+                // INVALID
+                return Err(InterpreterError::InvalidOpcode(opcode));
+            }
+            0xff => {
+                // SELFDESTRUCT
+                todo!("SELFDESTRUCT");
+            }
             _ => {
-                return Err(InterpreterError::UnsupportedOpcode(
-                    instruction.opcode.code,
-                    instruction.opcode.name.to_string(),
-                ));
+                return Err(InterpreterError::UnknownOpcode(opcode));
             }
         }
 
