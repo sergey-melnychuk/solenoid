@@ -5,7 +5,7 @@ use primitive_types::U256;
 use thiserror::Error;
 
 use crate::{
-    common::{address::Address, hash::keccak256},
+    common::{account::Account, address::Address, hash::keccak256},
     decoder::{Bytecode, Decoder, DecoderError, Instruction},
     eth::EthClient,
 };
@@ -16,6 +16,8 @@ pub enum InterpreterError {
     StackOverflow,
     #[error("Stack underflow")]
     StackUnderflow,
+    #[error("Out of memory: {0} bytes requested")]
+    OutOfMemory(usize),
     #[error("Invalid jump")]
     InvalidJump,
     #[error("Missing data")]
@@ -41,6 +43,7 @@ pub struct EvmState {
     pub memory: Vec<u8>,
     pub pc: usize,
     pub stopped: bool,
+    pub reverted: bool,
 }
 
 impl EvmState {
@@ -57,7 +60,7 @@ impl EvmState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Call {
     pub calldata: Vec<u8>,
     pub value: U256,
@@ -100,13 +103,6 @@ pub struct Ext {
     eth: EthClient,
 }
 
-pub struct Account {
-    pub balance: U256,
-    pub nonce: U256,
-    pub code: U256,
-    pub root: U256,
-}
-
 impl Ext {
     pub fn new(block_hash: String, eth: EthClient) -> Self {
         Self {
@@ -147,8 +143,9 @@ impl Ext {
         state.put(key, val);
     }
 
-    pub async fn acc(&mut self, _addr: &Address) -> eyre::Result<Account> {
-        todo!("eth_getAccount");
+    pub async fn acc(&mut self, addr: &Address) -> eyre::Result<Account> {
+        let address = format!("0x{}", hex::encode(addr.0));
+        self.eth.get_account(&self.block_hash, &address).await
     }
 
     pub async fn code(&mut self, addr: &Address) -> eyre::Result<Vec<u8>> {
@@ -157,15 +154,88 @@ impl Ext {
     }
 }
 
+pub enum StackEvent {
+    Push(U256),
+    Pop(U256),
+}
+
+pub enum StateEvent {
+    R(Address, U256, U256),
+    W(Address, U256, U256),
+}
+
+pub enum MemoryEvent {
+    R(usize, Vec<u8>),
+    W(usize, Vec<u8>),
+}
+
+// TODO: deal with nestedness: add `depth` property?
+// TODO: deal with revert-awareness (only for Memory?)
+pub enum Event {
+    Opcode {
+        pc: usize,
+        op: u8,
+        name: String,
+        data: Option<Vec<u8>>,
+    },
+    Keccak {
+        data: Vec<u8>,
+        hash: [u8; 32],
+    },
+    // TODO: Gas
+    Stack(StackEvent),
+    State(StateEvent),
+    Memory(MemoryEvent),
+    Call(Call, Option<Context>),
+    Return(Vec<u8>),
+    Revert(Vec<StateEvent>),
+}
+
+pub trait EventTracer: Default {
+    fn get(&self) -> Vec<Event> {
+        vec![]
+    }
+    fn add(&mut self, _event: Event) {}
+    fn fork(&self) -> Self {
+        Self::default()
+    }
+    fn merge(&mut self, _other: Self, _reverted: bool) {}
+}
+
 #[derive(Default)]
-pub struct Interpreter {
+pub struct NoopTracer;
+
+impl EventTracer for NoopTracer {}
+
+#[derive(Clone)]
+pub struct Context {
+    // TODO: gas
+    pub target: Address,
+    pub is_static_call: bool,
+    pub is_delegate_call: bool,
+}
+
+#[derive(Default)]
+pub struct Interpreter<T: EventTracer> {
+    tracer: T,
     state: EvmState,
     ret: Vec<u8>,
 }
 
-impl Interpreter {
+impl<T: EventTracer> Interpreter<T> {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_tracer<G: EventTracer>(tracer: G) -> Interpreter<G> {
+        Interpreter {
+            tracer,
+            ..Default::default()
+        }
+    }
+
+    pub fn stop(self) -> (T, EvmState, Vec<u8>) {
+        (self.tracer, self.state, self.ret)
     }
 
     pub async fn execute(
@@ -173,9 +243,32 @@ impl Interpreter {
         code: &Bytecode,
         call: &Call,
         ext: &mut Ext,
+    ) -> Result<(), InterpreterError> {
+        self.tracer.add(Event::Call(call.clone(), None));
+        let ctx = Context {
+            target: call.from.clone(),
+            is_delegate_call: false,
+            is_static_call: false,
+        };
+        self.execute_with_context(code, call, &ctx, ext).await?;
+        Ok(())
+    }
+
+    async fn execute_with_context(
+        &mut self,
+        code: &Bytecode,
+        call: &Call,
+        ctx: &Context,
+        ext: &mut Ext,
     ) -> Result<&[u8], InterpreterError> {
         while !self.state.stopped && self.state.pc < code.instructions.len() {
             let instruction = &code.instructions[self.state.pc];
+            self.tracer.add(Event::Opcode {
+                pc: self.state.pc,
+                op: instruction.opcode.code,
+                name: instruction.opcode.name(),
+                data: instruction.argument.clone(),
+            });
 
             let data = instruction
                 .argument
@@ -188,7 +281,7 @@ impl Interpreter {
                 data.unwrap_or_default()
             );
 
-            self.execute_instruction(code, call, ext, instruction)
+            self.execute_instruction(code, call, ctx, ext, instruction)
                 .await?;
 
             println!(
@@ -230,6 +323,7 @@ impl Interpreter {
         &mut self,
         code: &Bytecode,
         call: &Call,
+        _ctx: &Context, // TODO: will be necessary for proper {DELEGATE, STATIC}CALL impl
         ext: &mut Ext,
         instruction: &Instruction,
     ) -> Result<(), InterpreterError> {
@@ -240,6 +334,8 @@ impl Interpreter {
             // 0x00: STOP
             0x00 => {
                 self.state.stopped = true;
+                self.state.reverted = false;
+                self.ret.clear();
             }
             // 0x01..0x0b: Arithmetic Operations
             0x01 => {
@@ -267,7 +363,7 @@ impl Interpreter {
                 // DIV
                 let a = self.state.pop()?;
                 let b = self.state.pop()?;
-                if b.is_zero() {
+                if b.is_zero() || a.is_zero() {
                     self.state.push(U256::zero())?;
                 } else {
                     self.state.push(a / b)?;
@@ -394,14 +490,14 @@ impl Interpreter {
             }
             0x1a => {
                 // BYTE
-                let i = self.state.pop()?;
-                let x = self.state.pop()?;
-                let mut ret = U256::zero();
-                if i < U256::from(32) {
-                    let byte_index = 31 - i.as_usize();
-                    ret = U256::from(x.byte(byte_index));
+                let index = self.state.pop()?;
+                let value: U256 = self.state.pop()?;
+                if index < U256::from(32) {
+                    let byte_index = 31 - index.as_usize();
+                    self.state.push(U256::from(value.byte(byte_index)))?;
+                } else {
+                    self.state.push(U256::zero())?;
                 }
-                self.state.push(ret)?;
             }
             0x1b => {
                 // SHL
@@ -598,7 +694,7 @@ impl Interpreter {
 
                 let code = ext.code(&address.into()).await?;
                 let code = Decoder::decode(&code)?;
-                let mut interpreter = Interpreter::new();
+                let mut interpreter = Interpreter::<T>::with_tracer(self.tracer.fork());
 
                 let nested_call = Call {
                     calldata: self.state.memory[args_offset..args_offset + args_size].to_vec(),
@@ -607,54 +703,54 @@ impl Interpreter {
                     to: address.into(),
                 };
 
-                let f = interpreter.execute(&code, &nested_call, ext);
-                let ret = Box::pin(f).await;
-                match ret {
-                    Ok(ret) => {
-                        if ret.len() == ret_size {
-                            let size = ret_offset + ret_size;
-                            if size > self.state.memory.len() {
-                                self.state.memory.resize(size, 0);
-                            }
-                            self.state.memory[ret_offset..ret_offset + ret_size]
-                                .copy_from_slice(ret);
-                            self.state.push(U256::zero())?;
-                        } else {
-                            return Err(InterpreterError::WrongCallRetDataSize {
-                                exp: ret_size,
-                                got: ret.len(),
-                            });
+                let future = interpreter.execute(&code, &nested_call, ext);
+                Box::pin(future).await?;
+
+                let (tracer, state, ret) = interpreter.stop();
+                self.tracer.merge(tracer, state.reverted);
+
+                if ret.len() == ret_size {
+                    let size = ret_offset + ret_size;
+                    if size > self.state.memory.len() {
+                        if size > 1_000_000_000 {
+                            // TODO: make the limit configurable
+                            return Err(InterpreterError::OutOfMemory(size));
                         }
+                        self.state.memory.resize(size, 0);
                     }
-                    Err(e) => {
-                        todo!("CALL failed: {e}");
-                    }
+                    self.state.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+                    self.state.push(U256::one())?;
+                } else {
+                    return Err(InterpreterError::WrongCallRetDataSize {
+                        exp: ret_size,
+                        got: ret.len(),
+                    });
                 }
             }
             #[allow(unused_variables)]
             0xf2 => {
                 // CALLCODE
-                let gas = self.state.pop()?;
-                let address = self.state.pop()?;
-                let value = self.state.pop()?;
-                let args_offset = self.state.pop()?;
-                let args_size = self.state.pop()?;
-                let ret_offset = self.state.pop()?;
-                let ret_size = self.state.pop()?;
-
-                todo!("CALLCODE");
+                unimplemented!("CALLCODE");
+                // let gas = self.state.pop()?;
+                // let address = self.state.pop()?;
+                // let value = self.state.pop()?;
+                // let args_offset = self.state.pop()?;
+                // let args_size = self.state.pop()?;
+                // let ret_offset = self.state.pop()?;
+                // let ret_size = self.state.pop()?;
             }
             0xf3 | 0xfd => {
                 // REVERT | RETURN
                 self.state.stopped = true;
+                self.state.reverted = opcode == 0xf3;
 
                 let offset = self.state.pop()?.as_usize();
                 let size = self.state.pop()?.as_usize();
 
-                if offset > self.state.memory.len() || offset + size > self.state.memory.len() {
-                    return Err(InterpreterError::MissingData);
-                }
                 if size > 0 {
+                    if offset > self.state.memory.len() || offset + size > self.state.memory.len() {
+                        return Err(InterpreterError::MissingData);
+                    }
                     self.ret = self.state.memory[offset..offset + size].to_vec();
                 } else {
                     self.ret.clear();
@@ -697,7 +793,9 @@ impl Interpreter {
             }
             0xfe => {
                 // INVALID
-                return Err(InterpreterError::InvalidOpcode(opcode));
+                self.state.stopped = true;
+                self.state.reverted = true;
+                // TODO: gas: consume or refund?
             }
             0xff => {
                 // SELFDESTRUCT

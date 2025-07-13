@@ -3,6 +3,8 @@ use std::time::Duration;
 use eyre::OptionExt;
 use primitive_types::U256;
 
+use crate::common::account::Account;
+
 #[derive(Clone)]
 pub struct EthClient {
     http: reqwest::Client,
@@ -78,6 +80,10 @@ impl EthClient {
         }))
         .await
         .and_then(|value| hex_to_vec(&value))
+    }
+
+    pub async fn get_account(&self, _block_hash: &str, _address: &str) -> eyre::Result<Account> {
+        todo!("eth_getAccount"); // TODO
     }
 
     pub async fn call(
