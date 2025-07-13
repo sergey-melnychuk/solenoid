@@ -70,31 +70,9 @@ pub struct Call {
 
 #[derive(Default)]
 pub struct State {
-    r: Vec<(U256, U256)>,
-    w: Vec<(U256, U256)>,
-}
-
-impl State {
-    fn get(&self, key: &U256) -> Option<U256> {
-        self.r
-            .iter()
-            .filter(|(k, _)| k == key)
-            .map(|(_, v)| v)
-            .next()
-            .cloned()
-    }
-
-    fn hit(&mut self, key: U256, val: U256) {
-        self.r.push((key, val));
-    }
-
-    fn put(&mut self, key: U256, val: U256) {
-        if let Some((_, v)) = self.w.iter_mut().find(|(k, _)| k == &key) {
-            *v = val;
-        } else {
-            self.w.push((key, val));
-        }
-    }
+    account: Account,
+    data: HashMap<U256, U256>,
+    code: Vec<u8>,
 }
 
 pub struct Ext {
@@ -112,13 +90,8 @@ impl Ext {
         }
     }
 
-    fn hit(&mut self, addr: &Address, key: U256, val: U256) {
-        let e = self.state.entry(addr.clone()).or_default();
-        e.hit(key, val);
-    }
-
     pub async fn get(&mut self, addr: &Address, key: &U256) -> eyre::Result<U256> {
-        let val = if let Some(val) = self.state.get(addr).and_then(|s| s.get(key)) {
+        let val = if let Some(val) = self.state.get(addr).and_then(|s| s.data.get(key)).copied() {
             val
         } else {
             let now = Instant::now();
@@ -133,24 +106,38 @@ impl Ext {
             tracing::info!("SLOAD: [{ms} ms] 0x{addr}[{key:#x}]={val:#x}");
             val
         };
-
-        self.hit(addr, *key, val);
         Ok(val)
     }
 
     pub async fn put(&mut self, addr: &Address, key: U256, val: U256) {
         let state = self.state.entry(addr.clone()).or_default();
-        state.put(key, val);
+        state.data.insert(key, val);
     }
 
     pub async fn acc(&mut self, addr: &Address) -> eyre::Result<Account> {
-        let address = format!("0x{}", hex::encode(addr.0));
-        self.eth.get_account(&self.block_hash, &address).await
+        if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
+            Ok(acc)
+        } else {
+            let address = format!("0x{}", hex::encode(addr.0));
+            let account = self.eth.get_account(&self.block_hash, &address).await?;
+
+            let state = self.state.entry(addr.clone()).or_default();
+            state.account = account.clone();
+            Ok(account)
+        }
     }
 
     pub async fn code(&mut self, addr: &Address) -> eyre::Result<Vec<u8>> {
-        let address = format!("0x{}", hex::encode(addr.0));
-        self.eth.get_code(&self.block_hash, &address).await
+        if let Some(code) = self.state.get(addr).map(|s| s.code.clone()) {
+            Ok(code)
+        } else {
+            let address = format!("0x{}", hex::encode(addr.0));
+            let code = self.eth.get_code(&self.block_hash, &address).await?;
+
+            let state = self.state.entry(addr.clone()).or_default();
+            state.code = code.clone();
+            Ok(code)
+        }
     }
 }
 
@@ -183,6 +170,7 @@ pub enum Event {
         hash: [u8; 32],
     },
     // TODO: Gas
+    // TODO: Nonce, Balance, Created(code, addr)
     Stack(StackEvent),
     State(StateEvent),
     Memory(MemoryEvent),
@@ -303,11 +291,7 @@ impl<T: EventTracer> Interpreter<T> {
                 });
             println!(
                 "STACK:{}",
-                if self.evm.stack.is_empty() {
-                    " []"
-                } else {
-                    ""
-                }
+                if self.evm.stack.is_empty() { " []" } else { "" }
             );
             self.evm
                 .stack
