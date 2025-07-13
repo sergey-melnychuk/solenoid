@@ -38,7 +38,7 @@ pub enum InterpreterError {
 const STACK_LIMIT: usize = 1024;
 
 #[derive(Debug, Default)]
-pub struct EvmState {
+pub struct Evm {
     pub stack: Vec<U256>,
     pub memory: Vec<u8>,
     pub pc: usize,
@@ -46,7 +46,7 @@ pub struct EvmState {
     pub reverted: bool,
 }
 
-impl EvmState {
+impl Evm {
     pub fn push(&mut self, value: U256) -> Result<(), InterpreterError> {
         if self.stack.len() >= STACK_LIMIT {
             return Err(InterpreterError::StackOverflow);
@@ -218,7 +218,7 @@ pub struct Context {
 #[derive(Default)]
 pub struct Interpreter<T: EventTracer> {
     tracer: T,
-    state: EvmState,
+    evm: Evm,
     ret: Vec<u8>,
 }
 
@@ -234,8 +234,8 @@ impl<T: EventTracer> Interpreter<T> {
         }
     }
 
-    pub fn stop(self) -> (T, EvmState, Vec<u8>) {
-        (self.tracer, self.state, self.ret)
+    pub fn stop(self) -> (T, Evm, Vec<u8>) {
+        (self.tracer, self.evm, self.ret)
     }
 
     pub async fn execute(
@@ -261,10 +261,10 @@ impl<T: EventTracer> Interpreter<T> {
         ctx: &Context,
         ext: &mut Ext,
     ) -> Result<&[u8], InterpreterError> {
-        while !self.state.stopped && self.state.pc < code.instructions.len() {
-            let instruction = &code.instructions[self.state.pc];
+        while !self.evm.stopped && self.evm.pc < code.instructions.len() {
+            let instruction = &code.instructions[self.evm.pc];
             self.tracer.add(Event::Opcode {
-                pc: self.state.pc,
+                pc: self.evm.pc,
                 op: instruction.opcode.code,
                 name: instruction.opcode.name(),
                 data: instruction.argument.clone(),
@@ -276,7 +276,7 @@ impl<T: EventTracer> Interpreter<T> {
                 .map(|data| format!("0x{}", hex::encode(data)));
             println!(
                 "\n{:#04x}: {} {}",
-                self.state.pc,
+                self.evm.pc,
                 instruction.opcode.name(),
                 data.unwrap_or_default()
             );
@@ -286,13 +286,13 @@ impl<T: EventTracer> Interpreter<T> {
 
             println!(
                 "MEMORY:{}",
-                if self.state.memory.is_empty() {
+                if self.evm.memory.is_empty() {
                     " []"
                 } else {
                     ""
                 }
             );
-            self.state
+            self.evm
                 .memory
                 .chunks(32)
                 .enumerate()
@@ -303,13 +303,13 @@ impl<T: EventTracer> Interpreter<T> {
                 });
             println!(
                 "STACK:{}",
-                if self.state.stack.is_empty() {
+                if self.evm.stack.is_empty() {
                     " []"
                 } else {
                     ""
                 }
             );
-            self.state
+            self.evm
                 .stack
                 .iter()
                 .rev()
@@ -333,46 +333,46 @@ impl<T: EventTracer> Interpreter<T> {
         match opcode {
             // 0x00: STOP
             0x00 => {
-                self.state.stopped = true;
-                self.state.reverted = false;
+                self.evm.stopped = true;
+                self.evm.reverted = false;
                 self.ret.clear();
             }
             // 0x01..0x0b: Arithmetic Operations
             0x01 => {
                 // ADD
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
                 let res = a.saturating_add(b);
-                self.state.push(res)?;
+                self.evm.push(res)?;
             }
             0x02 => {
                 // MUL
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
                 let res = a.saturating_mul(b);
-                self.state.push(res)?;
+                self.evm.push(res)?;
             }
             0x03 => {
                 // SUB
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
                 let res = a.saturating_sub(b);
-                self.state.push(res)?;
+                self.evm.push(res)?;
             }
             0x04 => {
                 // DIV
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
                 if b.is_zero() || a.is_zero() {
-                    self.state.push(U256::zero())?;
+                    self.evm.push(U256::zero())?;
                 } else {
-                    self.state.push(a / b)?;
+                    self.evm.push(a / b)?;
                 }
             }
             0x05 => {
                 // SDIV
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.to_big_endian());
                 let b_signed = I256::from_be_bytes(b.to_big_endian());
                 let res = if b.is_zero() {
@@ -382,22 +382,22 @@ impl<T: EventTracer> Interpreter<T> {
                 } else {
                     a_signed / b_signed
                 };
-                self.state.push(U256::from_big_endian(&res.to_be_bytes()))?;
+                self.evm.push(U256::from_big_endian(&res.to_be_bytes()))?;
             }
             0x06 => {
                 // MOD
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
                 if b.is_zero() {
-                    self.state.push(U256::zero())?;
+                    self.evm.push(U256::zero())?;
                 } else {
-                    self.state.push(a % b)?;
+                    self.evm.push(a % b)?;
                 }
             }
             0x07 => {
                 // SMOD
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.to_big_endian());
                 let b_signed = I256::from_be_bytes(b.to_big_endian());
                 let res = if b.is_zero() {
@@ -405,7 +405,7 @@ impl<T: EventTracer> Interpreter<T> {
                 } else {
                     a_signed % b_signed
                 };
-                self.state.push(U256::from_big_endian(&res.to_be_bytes()))?;
+                self.evm.push(U256::from_big_endian(&res.to_be_bytes()))?;
             }
             0x08 => {
                 // ADDMOD
@@ -417,9 +417,9 @@ impl<T: EventTracer> Interpreter<T> {
             }
             0x0a => {
                 // EXP
-                let base = self.state.pop()?;
-                let exponent = self.state.pop()?;
-                self.state.push(base.pow(exponent))?;
+                let base = self.evm.pop()?;
+                let exponent = self.evm.pop()?;
+                self.evm.push(base.pow(exponent))?;
             }
             0x0b => {
                 // SIGNEXTEND
@@ -429,16 +429,16 @@ impl<T: EventTracer> Interpreter<T> {
             // 0x10s: Comparison & Bitwise Logic
             0x10 => {
                 // LT
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
-                self.state
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                self.evm
                     .push(if a < b { U256::one() } else { U256::zero() })?;
             }
             0x11 => {
                 // GT
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
-                self.state
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                self.evm
                     .push(if a > b { U256::one() } else { U256::zero() })?;
             }
             0x12 => {
@@ -451,15 +451,15 @@ impl<T: EventTracer> Interpreter<T> {
             }
             0x14 => {
                 // EQ
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
-                self.state
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                self.evm
                     .push(if a == b { U256::one() } else { U256::zero() })?;
             }
             0x15 => {
                 // ISZERO
-                let a = self.state.pop()?;
-                self.state.push(if a.is_zero() {
+                let a = self.evm.pop()?;
+                self.evm.push(if a.is_zero() {
                     U256::one()
                 } else {
                     U256::zero()
@@ -467,36 +467,36 @@ impl<T: EventTracer> Interpreter<T> {
             }
             0x16 => {
                 // AND
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
-                self.state.push(a & b)?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                self.evm.push(a & b)?;
             }
             0x17 => {
                 // OR
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
-                self.state.push(a | b)?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                self.evm.push(a | b)?;
             }
             0x18 => {
                 // XOR
-                let a = self.state.pop()?;
-                let b = self.state.pop()?;
-                self.state.push(a ^ b)?;
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                self.evm.push(a ^ b)?;
             }
             0x19 => {
                 // NOT
-                let a = self.state.pop()?;
-                self.state.push(!a)?;
+                let a = self.evm.pop()?;
+                self.evm.push(!a)?;
             }
             0x1a => {
                 // BYTE
-                let index = self.state.pop()?;
-                let value: U256 = self.state.pop()?;
+                let index = self.evm.pop()?;
+                let value: U256 = self.evm.pop()?;
                 if index < U256::from(32) {
                     let byte_index = 31 - index.as_usize();
-                    self.state.push(U256::from(value.byte(byte_index)))?;
+                    self.evm.push(U256::from(value.byte(byte_index)))?;
                 } else {
-                    self.state.push(U256::zero())?;
+                    self.evm.push(U256::zero())?;
                 }
             }
             0x1b => {
@@ -514,40 +514,40 @@ impl<T: EventTracer> Interpreter<T> {
 
             0x20 => {
                 // SHA3 (KECCAK256)
-                let offset = self.state.pop()?.as_usize();
-                let size = self.state.pop()?.as_usize();
+                let offset = self.evm.pop()?.as_usize();
+                let size = self.evm.pop()?.as_usize();
 
-                if offset + size > self.state.memory.len() {
+                if offset + size > self.evm.memory.len() {
                     return Err(InterpreterError::MissingData);
                 }
-                let data = &self.state.memory[offset..offset + size];
+                let data = &self.evm.memory[offset..offset + size];
                 let hash = U256::from_big_endian(&keccak256(data));
-                self.state.push(hash)?;
+                self.evm.push(hash)?;
             }
 
             // 30-3f
             0x33 => {
                 // CALLER
-                self.state.push((&call.from).into())?;
+                self.evm.push((&call.from).into())?;
             }
             0x34 => {
                 // CALLVALUE
-                self.state.push(call.value)?;
+                self.evm.push(call.value)?;
             }
             0x35 => {
                 // CALLDATALOAD
-                let offset = self.state.pop()?.as_usize();
+                let offset = self.evm.pop()?.as_usize();
                 if offset > call.calldata.len() {
                     return Err(InterpreterError::MissingData);
                 }
                 let mut data = [0u8; 32];
                 let copy = call.calldata.len().min(offset + 32) - offset;
                 data[0..copy].copy_from_slice(&call.calldata[offset..offset + copy]);
-                self.state.push(U256::from_big_endian(&data))?;
+                self.evm.push(U256::from_big_endian(&data))?;
             }
             0x36 => {
                 // CALLDATASIZE
-                self.state.push(U256::from(call.calldata.len()))?;
+                self.evm.push(U256::from(call.calldata.len()))?;
             }
 
             // 40-4a
@@ -555,84 +555,84 @@ impl<T: EventTracer> Interpreter<T> {
             // 0x50s: Stack, Memory, Storage and Flow Operations
             0x50 => {
                 // POP
-                self.state.pop()?;
+                self.evm.pop()?;
             }
             0x51 => {
                 // MLOAD
-                let offset = self.state.pop()?.as_usize();
+                let offset = self.evm.pop()?.as_usize();
                 let end = offset + 32;
-                if end > self.state.memory.len() {
-                    self.state.memory.resize(end, 0);
+                if end > self.evm.memory.len() {
+                    self.evm.memory.resize(end, 0);
                 }
-                let value = U256::from_big_endian(&self.state.memory[offset..end]);
-                self.state.push(value)?;
+                let value = U256::from_big_endian(&self.evm.memory[offset..end]);
+                self.evm.push(value)?;
             }
             0x52 => {
                 // MSTORE
-                let offset = self.state.pop()?.as_usize();
-                let value = self.state.pop()?;
+                let offset = self.evm.pop()?.as_usize();
+                let value = self.evm.pop()?;
                 let end = offset + 32;
-                if end > self.state.memory.len() {
-                    self.state.memory.resize(end, 0);
+                if end > self.evm.memory.len() {
+                    self.evm.memory.resize(end, 0);
                 }
                 let bytes = &value.to_big_endian();
-                self.state.memory[offset..end].copy_from_slice(bytes);
+                self.evm.memory[offset..end].copy_from_slice(bytes);
             }
             0x53 => {
                 // MSTORE8
-                let offset = self.state.pop()?.as_usize();
-                let value = self.state.pop()?;
-                if offset >= self.state.memory.len() {
-                    self.state.memory.resize(offset + 1, 0);
+                let offset = self.evm.pop()?.as_usize();
+                let value = self.evm.pop()?;
+                if offset >= self.evm.memory.len() {
+                    self.evm.memory.resize(offset + 1, 0);
                 }
-                self.state.memory[offset] = value.to_little_endian()[0];
+                self.evm.memory[offset] = value.to_little_endian()[0];
             }
             0x54 => {
                 // SLOAD
-                let key = self.state.pop()?;
+                let key = self.evm.pop()?;
                 let val = ext.get(&call.from, &key).await?;
-                self.state.push(val)?;
+                self.evm.push(val)?;
             }
             0x55 => {
                 // SSTORE
-                let key = self.state.pop()?;
-                let val = self.state.pop()?;
+                let key = self.evm.pop()?;
+                let val = self.evm.pop()?;
                 ext.put(&call.from, key, val).await;
             }
             0x56 => {
                 // JUMP
-                let dest = self.state.pop()?.as_usize();
+                let dest = self.evm.pop()?.as_usize();
                 let dest = code
                     .resolve_jump(dest)
                     .ok_or(InterpreterError::InvalidJump)?;
                 if code.instructions[dest].opcode.code != 0x5b {
                     return Err(InterpreterError::InvalidJump);
                 }
-                self.state.pc = dest;
+                self.evm.pc = dest;
                 pc_increment = false;
             }
             0x57 => {
                 // JUMPI
-                let dest = self.state.pop()?.as_usize();
+                let dest = self.evm.pop()?.as_usize();
                 let dest = code
                     .resolve_jump(dest)
                     .ok_or(InterpreterError::InvalidJump)?;
-                let cond = self.state.pop()?;
+                let cond = self.evm.pop()?;
                 if !cond.is_zero() {
                     if code.instructions[dest].opcode.code != 0x5b {
                         return Err(InterpreterError::InvalidJump);
                     }
-                    self.state.pc = dest;
+                    self.evm.pc = dest;
                     pc_increment = false;
                 }
             }
             0x58 => {
                 // PC
-                self.state.push(U256::from(instruction.offset))?;
+                self.evm.push(U256::from(instruction.offset))?;
             }
             0x59 => {
                 // MSIZE
-                self.state.push(U256::from(self.state.memory.len()))?;
+                self.evm.push(U256::from(self.evm.memory.len()))?;
             }
             0x5b => {
                 // JUMPDEST: noop, a valid destination for JUMP/JUMPI
@@ -640,7 +640,7 @@ impl<T: EventTracer> Interpreter<T> {
 
             0x5f => {
                 // PUSH0
-                self.state.push(U256::zero())?;
+                self.evm.push(U256::zero())?;
             }
             // 0x60..=0x7f: PUSH1 to PUSH32
             0x60..=0x7f => {
@@ -648,35 +648,35 @@ impl<T: EventTracer> Interpreter<T> {
                     .argument
                     .as_ref()
                     .ok_or(InterpreterError::MissingData)?;
-                self.state.push(U256::from_big_endian(arg))?;
+                self.evm.push(U256::from_big_endian(arg))?;
             }
 
             // 0x80..=0x8f: DUP1 to DUP16
             0x80..=0x8f => {
                 let n = instruction.opcode.n as usize;
-                if self.state.stack.len() < n {
+                if self.evm.stack.len() < n {
                     return Err(InterpreterError::StackUnderflow);
                 }
-                let val = self.state.stack[self.state.stack.len() - n];
-                self.state.push(val)?;
+                let val = self.evm.stack[self.evm.stack.len() - n];
+                self.evm.push(val)?;
             }
 
             // 0x90..=0x9f: SWAP1 to SWAP16
             0x90..=0x9f => {
                 let n = instruction.opcode.n as usize;
-                if self.state.stack.len() <= n {
+                if self.evm.stack.len() <= n {
                     return Err(InterpreterError::StackUnderflow);
                 }
-                let stack_len = self.state.stack.len();
-                self.state.stack.swap(stack_len - 1, stack_len - 1 - n);
+                let stack_len = self.evm.stack.len();
+                self.evm.stack.swap(stack_len - 1, stack_len - 1 - n);
             }
 
             #[allow(unused_variables)]
             0xf0 => {
                 // CREATE
-                let value = self.state.pop()?;
-                let offset = self.state.pop()?;
-                let size = self.state.pop()?;
+                let value = self.evm.pop()?;
+                let offset = self.evm.pop()?;
+                let size = self.evm.pop()?;
 
                 todo!("CREATE");
                 // put address of the created contract on the stack
@@ -684,20 +684,20 @@ impl<T: EventTracer> Interpreter<T> {
             #[allow(unused_variables)]
             0xf1 => {
                 // CALL
-                let gas = self.state.pop()?;
-                let address = &self.state.pop()?;
-                let value = self.state.pop()?;
-                let args_offset = self.state.pop()?.as_usize();
-                let args_size = self.state.pop()?.as_usize();
-                let ret_offset = self.state.pop()?.as_usize();
-                let ret_size = self.state.pop()?.as_usize();
+                let gas = self.evm.pop()?;
+                let address = &self.evm.pop()?;
+                let value = self.evm.pop()?;
+                let args_offset = self.evm.pop()?.as_usize();
+                let args_size = self.evm.pop()?.as_usize();
+                let ret_offset = self.evm.pop()?.as_usize();
+                let ret_size = self.evm.pop()?.as_usize();
 
                 let code = ext.code(&address.into()).await?;
                 let code = Decoder::decode(&code)?;
                 let mut interpreter = Interpreter::<T>::with_tracer(self.tracer.fork());
 
                 let nested_call = Call {
-                    calldata: self.state.memory[args_offset..args_offset + args_size].to_vec(),
+                    calldata: self.evm.memory[args_offset..args_offset + args_size].to_vec(),
                     value,
                     from: call.to.clone(),
                     to: address.into(),
@@ -706,20 +706,20 @@ impl<T: EventTracer> Interpreter<T> {
                 let future = interpreter.execute(&code, &nested_call, ext);
                 Box::pin(future).await?;
 
-                let (tracer, state, ret) = interpreter.stop();
-                self.tracer.merge(tracer, state.reverted);
+                let (tracer, evm, ret) = interpreter.stop();
+                self.tracer.merge(tracer, evm.reverted);
 
                 if ret.len() == ret_size {
                     let size = ret_offset + ret_size;
-                    if size > self.state.memory.len() {
+                    if size > self.evm.memory.len() {
                         if size > 1_000_000_000 {
                             // TODO: make the limit configurable
                             return Err(InterpreterError::OutOfMemory(size));
                         }
-                        self.state.memory.resize(size, 0);
+                        self.evm.memory.resize(size, 0);
                     }
-                    self.state.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
-                    self.state.push(U256::one())?;
+                    self.evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+                    self.evm.push(U256::one())?;
                 } else {
                     return Err(InterpreterError::WrongCallRetDataSize {
                         exp: ret_size,
@@ -741,17 +741,17 @@ impl<T: EventTracer> Interpreter<T> {
             }
             0xf3 | 0xfd => {
                 // REVERT | RETURN
-                self.state.stopped = true;
-                self.state.reverted = opcode == 0xf3;
+                self.evm.stopped = true;
+                self.evm.reverted = opcode == 0xf3;
 
-                let offset = self.state.pop()?.as_usize();
-                let size = self.state.pop()?.as_usize();
+                let offset = self.evm.pop()?.as_usize();
+                let size = self.evm.pop()?.as_usize();
 
                 if size > 0 {
-                    if offset > self.state.memory.len() || offset + size > self.state.memory.len() {
+                    if offset > self.evm.memory.len() || offset + size > self.evm.memory.len() {
                         return Err(InterpreterError::MissingData);
                     }
-                    self.ret = self.state.memory[offset..offset + size].to_vec();
+                    self.ret = self.evm.memory[offset..offset + size].to_vec();
                 } else {
                     self.ret.clear();
                 }
@@ -759,22 +759,22 @@ impl<T: EventTracer> Interpreter<T> {
             #[allow(unused_variables)]
             0xf4 => {
                 // DELEGATECALL
-                let gas = self.state.pop()?;
-                let address = self.state.pop()?;
-                let args_offset = self.state.pop()?;
-                let args_size = self.state.pop()?;
-                let ret_offset = self.state.pop()?;
-                let ret_size = self.state.pop()?;
+                let gas = self.evm.pop()?;
+                let address = self.evm.pop()?;
+                let args_offset = self.evm.pop()?;
+                let args_size = self.evm.pop()?;
+                let ret_offset = self.evm.pop()?;
+                let ret_size = self.evm.pop()?;
 
                 todo!("DELEGATECALL");
             }
             #[allow(unused_variables)]
             0xf5 => {
                 // CREATE2
-                let value = self.state.pop()?;
-                let offset = self.state.pop()?;
-                let size = self.state.pop()?;
-                let salt = self.state.pop()?;
+                let value = self.evm.pop()?;
+                let offset = self.evm.pop()?;
+                let size = self.evm.pop()?;
+                let salt = self.evm.pop()?;
 
                 todo!("CREATE2");
                 // put address of the created contract on the stack
@@ -782,19 +782,19 @@ impl<T: EventTracer> Interpreter<T> {
             #[allow(unused_variables)]
             0xfa => {
                 // STATICCALL
-                let gas = self.state.pop()?;
-                let address = self.state.pop()?;
-                let args_offset = self.state.pop()?;
-                let args_size = self.state.pop()?;
-                let ret_offset = self.state.pop()?;
-                let ret_size = self.state.pop()?;
+                let gas = self.evm.pop()?;
+                let address = self.evm.pop()?;
+                let args_offset = self.evm.pop()?;
+                let args_size = self.evm.pop()?;
+                let ret_offset = self.evm.pop()?;
+                let ret_size = self.evm.pop()?;
 
                 todo!("STATICCALL");
             }
             0xfe => {
                 // INVALID
-                self.state.stopped = true;
-                self.state.reverted = true;
+                self.evm.stopped = true;
+                self.evm.reverted = true;
                 // TODO: gas: consume or refund?
             }
             0xff => {
@@ -807,7 +807,7 @@ impl<T: EventTracer> Interpreter<T> {
         }
 
         if pc_increment {
-            self.state.pc += 1;
+            self.evm.pc += 1;
         }
 
         Ok(())

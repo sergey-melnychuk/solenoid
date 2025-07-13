@@ -57,8 +57,8 @@ async fn main() -> eyre::Result<()> {
 
     let mut int = Interpreter::<NoopTracer>::new();
     int.execute(&decoded, &call, &mut ext).await?;
-    let (_, state, ret) = int.stop();
-    if !state.reverted {
+    let (_, evm, ret) = int.stop();
+    if !evm.reverted {
         println!("\nOK: 0x{}", hex::encode(ret));
     } else {
         println!("\nFAILED: reverted");
