@@ -11,7 +11,7 @@ use crate::{
 };
 
 #[derive(Error, Debug)]
-pub enum InterpreterError {
+pub enum ExecutorError {
     #[error("Stack overflow")]
     StackOverflow,
     #[error("Stack underflow")]
@@ -47,16 +47,16 @@ pub struct Evm {
 }
 
 impl Evm {
-    pub fn push(&mut self, value: U256) -> Result<(), InterpreterError> {
+    pub fn push(&mut self, value: U256) -> Result<(), ExecutorError> {
         if self.stack.len() >= STACK_LIMIT {
-            return Err(InterpreterError::StackOverflow);
+            return Err(ExecutorError::StackOverflow);
         }
         self.stack.push(value);
         Ok(())
     }
 
-    pub fn pop(&mut self) -> Result<U256, InterpreterError> {
-        self.stack.pop().ok_or(InterpreterError::StackUnderflow)
+    pub fn pop(&mut self) -> Result<U256, ExecutorError> {
+        self.stack.pop().ok_or(ExecutorError::StackUnderflow)
     }
 }
 
@@ -204,34 +204,30 @@ pub struct Context {
 }
 
 #[derive(Default)]
-pub struct Interpreter<T: EventTracer> {
+pub struct Executor<T: EventTracer> {
     tracer: T,
     evm: Evm,
     ret: Vec<u8>,
 }
 
-impl<T: EventTracer> Interpreter<T> {
+impl<T: EventTracer> Executor<T> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_tracer<G: EventTracer>(tracer: G) -> Interpreter<G> {
-        Interpreter {
+    pub fn with_tracer<G: EventTracer>(tracer: G) -> Executor<G> {
+        Executor {
             tracer,
             ..Default::default()
         }
     }
 
-    pub fn stop(self) -> (T, Evm, Vec<u8>) {
-        (self.tracer, self.evm, self.ret)
-    }
-
     pub async fn execute(
-        &mut self,
+        mut self,
         code: &Bytecode,
         call: &Call,
         ext: &mut Ext,
-    ) -> Result<(), InterpreterError> {
+    ) -> Result<(T, Evm, Vec<u8>), ExecutorError> {
         self.tracer.add(Event::Call(call.clone(), None));
         let ctx = Context {
             target: call.from.clone(),
@@ -239,7 +235,7 @@ impl<T: EventTracer> Interpreter<T> {
             is_static_call: false,
         };
         self.execute_with_context(code, call, &ctx, ext).await?;
-        Ok(())
+        Ok((self.tracer, self.evm, self.ret))
     }
 
     async fn execute_with_context(
@@ -248,7 +244,7 @@ impl<T: EventTracer> Interpreter<T> {
         call: &Call,
         ctx: &Context,
         ext: &mut Ext,
-    ) -> Result<&[u8], InterpreterError> {
+    ) -> Result<&[u8], ExecutorError> {
         while !self.evm.stopped && self.evm.pc < code.instructions.len() {
             let instruction = &code.instructions[self.evm.pc];
             self.tracer.add(Event::Opcode {
@@ -310,7 +306,7 @@ impl<T: EventTracer> Interpreter<T> {
         _ctx: &Context, // TODO: will be necessary for proper {DELEGATE, STATIC}CALL impl
         ext: &mut Ext,
         instruction: &Instruction,
-    ) -> Result<(), InterpreterError> {
+    ) -> Result<(), ExecutorError> {
         let mut pc_increment = true;
 
         let opcode = instruction.opcode.code;
@@ -502,7 +498,7 @@ impl<T: EventTracer> Interpreter<T> {
                 let size = self.evm.pop()?.as_usize();
 
                 if offset + size > self.evm.memory.len() {
-                    return Err(InterpreterError::MissingData);
+                    return Err(ExecutorError::MissingData);
                 }
                 let data = &self.evm.memory[offset..offset + size];
                 let hash = U256::from_big_endian(&keccak256(data));
@@ -522,7 +518,7 @@ impl<T: EventTracer> Interpreter<T> {
                 // CALLDATALOAD
                 let offset = self.evm.pop()?.as_usize();
                 if offset > call.calldata.len() {
-                    return Err(InterpreterError::MissingData);
+                    return Err(ExecutorError::MissingData);
                 }
                 let mut data = [0u8; 32];
                 let copy = call.calldata.len().min(offset + 32) - offset;
@@ -586,11 +582,9 @@ impl<T: EventTracer> Interpreter<T> {
             0x56 => {
                 // JUMP
                 let dest = self.evm.pop()?.as_usize();
-                let dest = code
-                    .resolve_jump(dest)
-                    .ok_or(InterpreterError::InvalidJump)?;
+                let dest = code.resolve_jump(dest).ok_or(ExecutorError::InvalidJump)?;
                 if code.instructions[dest].opcode.code != 0x5b {
-                    return Err(InterpreterError::InvalidJump);
+                    return Err(ExecutorError::InvalidJump);
                 }
                 self.evm.pc = dest;
                 pc_increment = false;
@@ -598,13 +592,11 @@ impl<T: EventTracer> Interpreter<T> {
             0x57 => {
                 // JUMPI
                 let dest = self.evm.pop()?.as_usize();
-                let dest = code
-                    .resolve_jump(dest)
-                    .ok_or(InterpreterError::InvalidJump)?;
+                let dest = code.resolve_jump(dest).ok_or(ExecutorError::InvalidJump)?;
                 let cond = self.evm.pop()?;
                 if !cond.is_zero() {
                     if code.instructions[dest].opcode.code != 0x5b {
-                        return Err(InterpreterError::InvalidJump);
+                        return Err(ExecutorError::InvalidJump);
                     }
                     self.evm.pc = dest;
                     pc_increment = false;
@@ -631,7 +623,7 @@ impl<T: EventTracer> Interpreter<T> {
                 let arg = instruction
                     .argument
                     .as_ref()
-                    .ok_or(InterpreterError::MissingData)?;
+                    .ok_or(ExecutorError::MissingData)?;
                 self.evm.push(U256::from_big_endian(arg))?;
             }
 
@@ -639,7 +631,7 @@ impl<T: EventTracer> Interpreter<T> {
             0x80..=0x8f => {
                 let n = instruction.opcode.n as usize;
                 if self.evm.stack.len() < n {
-                    return Err(InterpreterError::StackUnderflow);
+                    return Err(ExecutorError::StackUnderflow);
                 }
                 let val = self.evm.stack[self.evm.stack.len() - n];
                 self.evm.push(val)?;
@@ -649,7 +641,7 @@ impl<T: EventTracer> Interpreter<T> {
             0x90..=0x9f => {
                 let n = instruction.opcode.n as usize;
                 if self.evm.stack.len() <= n {
-                    return Err(InterpreterError::StackUnderflow);
+                    return Err(ExecutorError::StackUnderflow);
                 }
                 let stack_len = self.evm.stack.len();
                 self.evm.stack.swap(stack_len - 1, stack_len - 1 - n);
@@ -678,7 +670,7 @@ impl<T: EventTracer> Interpreter<T> {
 
                 let code = ext.code(&address.into()).await?;
                 let code = Decoder::decode(&code)?;
-                let mut interpreter = Interpreter::<T>::with_tracer(self.tracer.fork());
+                let executor = Executor::<T>::with_tracer(self.tracer.fork());
 
                 let nested_call = Call {
                     calldata: self.evm.memory[args_offset..args_offset + args_size].to_vec(),
@@ -687,10 +679,9 @@ impl<T: EventTracer> Interpreter<T> {
                     to: address.into(),
                 };
 
-                let future = interpreter.execute(&code, &nested_call, ext);
-                Box::pin(future).await?;
+                let future = executor.execute(&code, &nested_call, ext);
+                let (tracer, evm, ret) = Box::pin(future).await?;
 
-                let (tracer, evm, ret) = interpreter.stop();
                 self.tracer.merge(tracer, evm.reverted);
 
                 if ret.len() == ret_size {
@@ -698,14 +689,14 @@ impl<T: EventTracer> Interpreter<T> {
                     if size > self.evm.memory.len() {
                         if size > 1_000_000_000 {
                             // TODO: make the limit configurable
-                            return Err(InterpreterError::OutOfMemory(size));
+                            return Err(ExecutorError::OutOfMemory(size));
                         }
                         self.evm.memory.resize(size, 0);
                     }
                     self.evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
                     self.evm.push(U256::one())?;
                 } else {
-                    return Err(InterpreterError::WrongCallRetDataSize {
+                    return Err(ExecutorError::WrongCallRetDataSize {
                         exp: ret_size,
                         got: ret.len(),
                     });
@@ -733,7 +724,7 @@ impl<T: EventTracer> Interpreter<T> {
 
                 if size > 0 {
                     if offset > self.evm.memory.len() || offset + size > self.evm.memory.len() {
-                        return Err(InterpreterError::MissingData);
+                        return Err(ExecutorError::MissingData);
                     }
                     self.ret = self.evm.memory[offset..offset + size].to_vec();
                 } else {
@@ -786,7 +777,7 @@ impl<T: EventTracer> Interpreter<T> {
                 todo!("SELFDESTRUCT");
             }
             _ => {
-                return Err(InterpreterError::UnknownOpcode(opcode));
+                return Err(ExecutorError::UnknownOpcode(opcode));
             }
         }
 

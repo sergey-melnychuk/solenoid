@@ -2,7 +2,7 @@ use primitive_types::U256;
 use solenoid::{
     decoder::{Bytecode, Decoder},
     eth::EthClient,
-    interpreter::{Call, Ext, Interpreter, NoopTracer},
+    executor::{Call, Executor, Ext, NoopTracer},
 };
 
 #[tokio::main]
@@ -55,9 +55,8 @@ async fn main() -> eyre::Result<()> {
 
     println!("\nEXECUTION:");
 
-    let mut int = Interpreter::<NoopTracer>::new();
-    int.execute(&decoded, &call, &mut ext).await?;
-    let (_, evm, ret) = int.stop();
+    let executor = Executor::<NoopTracer>::new();
+    let (_, evm, ret) = executor.execute(&decoded, &call, &mut ext).await?;
     if !evm.reverted {
         println!("\nOK: 0x{}", hex::encode(ret));
     } else {
