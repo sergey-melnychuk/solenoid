@@ -4,23 +4,22 @@ use solenoid::{
     eth::EthClient,
     interpreter::{Call, Ext, Interpreter},
 };
-use std::{env, process, time::Instant};
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
 
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = std::env::args().collect();
     if args.len() != 3 {
         eprintln!("Usage: {} <bytecode> <input>", args[0]);
-        process::exit(1);
+        std::process::exit(1);
     }
 
     let bytecode = hex::decode(args[1].trim_start_matches("0x"))?;
     let calldata = hex::decode(args[2].trim_start_matches("0x"))?;
 
-    let decoded = Decoder::new(&bytecode).decode()?;
+    let decoded = Decoder::decode(&bytecode)?;
     dump(&decoded);
 
     let value = U256::from_str_radix("0", 10).unwrap();
@@ -56,26 +55,15 @@ async fn main() -> eyre::Result<()> {
 
     println!("\nEXECUTION:");
 
-    let now = Instant::now();
     let mut int = Interpreter::new();
-    if let Ok(ret) = int.execute(&decoded, &call, &mut ext).await {
-        println!("\nRET: 0x{}", hex::encode(ret));
+    match int.execute(&decoded, &call, &mut ext).await {
+        Ok(ret) => {
+            println!("\nOK: 0x{}", hex::encode(ret));
+        }
+        Err(e) => {
+            println!("\nFAILED: {e}");
+        }
     }
-    let cold = now.elapsed().as_millis();
-
-    let now = Instant::now();
-    let mut int = Interpreter::new();
-    if let Ok(ret) = int.execute(&decoded, &call, &mut ext).await {
-        println!("\nRET: 0x{}", hex::encode(ret));
-    }
-    let warm = now.elapsed().as_millis();
-
-    eprintln!("cold: {cold} ms");
-    let w = warm as f64;
-    let c = cold as f64;
-    let percent = ((1.0f64 - w / c) * 100f64).round() as u32;
-    eprintln!("warm: {warm} ms [-{percent}%]");
-
     Ok(())
 }
 

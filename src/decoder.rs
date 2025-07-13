@@ -40,22 +40,16 @@ impl Bytecode {
     }
 }
 
-pub struct Decoder<'a> {
-    bytecode: &'a [u8],
-}
+pub struct Decoder;
 
-impl<'a> Decoder<'a> {
-    pub fn new(bytecode: &'a [u8]) -> Self {
-        Self { bytecode }
-    }
-
-    pub fn decode(&self) -> Result<Bytecode, DecoderError> {
+impl Decoder {
+    pub fn decode(code: &[u8]) -> Result<Bytecode, DecoderError> {
         let mut instructions = Vec::new();
         let mut jumptable = Vec::new();
 
         let mut pos = 0;
-        while pos < self.bytecode.len() {
-            let opcode = get_opcode(self.bytecode[pos]);
+        while pos < code.len() {
+            let opcode = get_opcode(code[pos]);
             let mut instruction = Instruction {
                 opcode,
                 offset: pos,
@@ -74,14 +68,14 @@ impl<'a> Decoder<'a> {
                 let start = pos;
                 let end = pos + push_bytes;
 
-                if end > self.bytecode.len() {
+                if end > code.len() {
                     return Err(DecoderError::UnexpectedEndOfBytecode(
                         opcode.name.to_string(),
                         pos,
                     ));
                 }
 
-                instruction.argument = Some(self.bytecode[start..end].to_vec());
+                instruction.argument = Some(code[start..end].to_vec());
                 pos = end;
             }
 

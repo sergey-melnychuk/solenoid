@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     common::{address::Address, hash::keccak256},
-    decoder::{Bytecode, Instruction},
+    decoder::{Bytecode, Decoder, DecoderError, Instruction},
     eth::EthClient,
 };
 
@@ -24,6 +24,11 @@ pub enum InterpreterError {
     InvalidOpcode(u8),
     #[error("Unknown opcode: {0:#02x}")]
     UnknownOpcode(u8),
+    #[error("Wrong returned data size: expected {exp} but got {got}")]
+    WrongCallRetDataSize { exp: usize, got: usize },
+    #[error("Bytcode decoding error: {0}")]
+    DecoderError(#[from] DecoderError),
+
     #[error("{0}")]
     Eyre(#[from] eyre::ErrReport),
 }
@@ -95,16 +100,6 @@ pub struct Ext {
     eth: EthClient,
 }
 
-impl Ext {
-    pub fn new(block_hash: String, eth: EthClient) -> Self {
-        Self {
-            block_hash,
-            state: Default::default(),
-            eth,
-        }
-    }
-}
-
 pub struct Account {
     pub balance: U256,
     pub nonce: U256,
@@ -113,6 +108,14 @@ pub struct Account {
 }
 
 impl Ext {
+    pub fn new(block_hash: String, eth: EthClient) -> Self {
+        Self {
+            block_hash,
+            state: Default::default(),
+            eth,
+        }
+    }
+
     fn hit(&mut self, addr: &Address, key: U256, val: U256) {
         let e = self.state.entry(addr.clone()).or_default();
         e.hit(key, val);
@@ -146,6 +149,11 @@ impl Ext {
 
     pub async fn acc(&mut self, _addr: &Address) -> eyre::Result<Account> {
         todo!("eth_getAccount");
+    }
+
+    pub async fn code(&mut self, addr: &Address) -> eyre::Result<Vec<u8>> {
+        let address = format!("0x{}", hex::encode(addr.0));
+        self.eth.get_code(&self.block_hash, &address).await
     }
 }
 
@@ -581,15 +589,47 @@ impl Interpreter {
             0xf1 => {
                 // CALL
                 let gas = self.state.pop()?;
-                let address = self.state.pop()?;
+                let address = &self.state.pop()?;
                 let value = self.state.pop()?;
-                let args_offset = self.state.pop()?;
-                let args_size = self.state.pop()?;
-                let ret_offset = self.state.pop()?;
-                let ret_size = self.state.pop()?;
+                let args_offset = self.state.pop()?.as_usize();
+                let args_size = self.state.pop()?.as_usize();
+                let ret_offset = self.state.pop()?.as_usize();
+                let ret_size = self.state.pop()?.as_usize();
 
-                todo!("CALL");
-                //self.state.push(U256::zero())?;
+                let code = ext.code(&address.into()).await?;
+                let code = Decoder::decode(&code)?;
+                let mut interpreter = Interpreter::new();
+
+                let nested_call = Call {
+                    calldata: self.state.memory[args_offset..args_offset + args_size].to_vec(),
+                    value,
+                    from: call.to.clone(),
+                    to: address.into(),
+                };
+
+                let f = interpreter.execute(&code, &nested_call, ext);
+                let ret = Box::pin(f).await;
+                match ret {
+                    Ok(ret) => {
+                        if ret.len() == ret_size {
+                            let size = ret_offset + ret_size;
+                            if size > self.state.memory.len() {
+                                self.state.memory.resize(size, 0);
+                            }
+                            self.state.memory[ret_offset..ret_offset + ret_size]
+                                .copy_from_slice(ret);
+                            self.state.push(U256::zero())?;
+                        } else {
+                            return Err(InterpreterError::WrongCallRetDataSize {
+                                exp: ret_size,
+                                got: ret.len(),
+                            });
+                        }
+                    }
+                    Err(e) => {
+                        todo!("CALL failed: {e}");
+                    }
+                }
             }
             #[allow(unused_variables)]
             0xf2 => {
