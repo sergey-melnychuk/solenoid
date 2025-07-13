@@ -92,7 +92,6 @@ impl EthClient {
             "params": [
                 {
                     "to": address,
-                    "value": "0x0",
                     "data": calldata,
                 },
                 {

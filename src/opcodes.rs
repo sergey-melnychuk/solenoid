@@ -27,6 +27,7 @@ impl Opcode {
 
 static OPCODES: Lazy<[Opcode; 256]> = Lazy::new(|| {
     let mut table = [Opcode::new(0xfe, "undefined", 0); 256];
+
     // 0s: Stop and Arithmetic Operations
     table[0x00] = Opcode::new(0x00, "STOP", 0);
     table[0x01] = Opcode::new(0x01, "ADD", 0);

@@ -218,7 +218,6 @@ impl Interpreter {
         Ok(&self.ret)
     }
 
-    #[allow(unused_variables)]
     pub async fn execute_instruction(
         &mut self,
         code: &Bytecode,
@@ -568,6 +567,7 @@ impl Interpreter {
                 self.state.stack.swap(stack_len - 1, stack_len - 1 - n);
             }
 
+            #[allow(unused_variables)]
             0xf0 => {
                 // CREATE
                 let value = self.state.pop()?;
@@ -577,6 +577,7 @@ impl Interpreter {
                 todo!("CREATE");
                 // put address of the created contract on the stack
             }
+            #[allow(unused_variables)]
             0xf1 => {
                 // CALL
                 let gas = self.state.pop()?;
@@ -590,6 +591,7 @@ impl Interpreter {
                 todo!("CALL");
                 //self.state.push(U256::zero())?;
             }
+            #[allow(unused_variables)]
             0xf2 => {
                 // CALLCODE
                 let gas = self.state.pop()?;
@@ -618,6 +620,7 @@ impl Interpreter {
                     self.ret.clear();
                 }
             }
+            #[allow(unused_variables)]
             0xf4 => {
                 // DELEGATECALL
                 let gas = self.state.pop()?;
@@ -629,6 +632,7 @@ impl Interpreter {
 
                 todo!("DELEGATECALL");
             }
+            #[allow(unused_variables)]
             0xf5 => {
                 // CREATE2
                 let value = self.state.pop()?;
@@ -639,6 +643,7 @@ impl Interpreter {
                 todo!("CREATE2");
                 // put address of the created contract on the stack
             }
+            #[allow(unused_variables)]
             0xfa => {
                 // STATICCALL
                 let gas = self.state.pop()?;

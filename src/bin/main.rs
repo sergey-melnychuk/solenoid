@@ -71,7 +71,10 @@ async fn main() -> eyre::Result<()> {
     let warm = now.elapsed().as_millis();
 
     eprintln!("cold: {cold} ms");
-    eprintln!("warm: {warm} ms");
+    let w = warm as f64;
+    let c = cold as f64;
+    let percent = ((1.0f64 - w / c) * 100f64).round() as u32;
+    eprintln!("warm: {warm} ms [-{percent}%]");
 
     Ok(())
 }
