@@ -170,7 +170,8 @@ pub enum Event {
         hash: [u8; 32],
     },
     // TODO: Gas
-    // TODO: Nonce, Balance, Created(code, addr)
+    // TODO: Nonce, Balance
+    // TODO: Created(code, addr)
     Stack(StackEvent),
     State(StateEvent),
     Memory(MemoryEvent),
@@ -179,15 +180,16 @@ pub enum Event {
     Revert(Vec<StateEvent>),
 }
 
+#[allow(unused_variables)] // default impl ignores all arguments
 pub trait EventTracer: Default {
     fn get(&self) -> Vec<Event> {
         vec![]
     }
-    fn add(&mut self, _event: Event) {}
+    fn add(&mut self, event: Event) {}
     fn fork(&self) -> Self {
         Self::default()
     }
-    fn merge(&mut self, _other: Self, _reverted: bool) {}
+    fn merge(&mut self, other: Self, reverted: bool) {}
 }
 
 #[derive(Default)]
