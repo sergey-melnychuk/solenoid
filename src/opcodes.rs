@@ -13,11 +13,11 @@ impl Opcode {
     }
 
     pub fn name(&self) -> String {
-        self.name.replace('n', &self.n.to_string())
+        self.name.replace('_', &self.n.to_string())
     }
 
     pub fn push_width(&self) -> usize {
-        if self.name != "PUSHn" {
+        if self.name != "PUSH_" {
             0
         } else {
             self.n as usize
@@ -112,22 +112,22 @@ static OPCODES: Lazy<[Opcode; 256]> = Lazy::new(|| {
 
     // PUSH{1..32} Operations
     for i in 0..32 {
-        table[0x60 + i] = Opcode::new(0x60 + i as u8, "PUSHn", i as u8 + 1);
+        table[0x60 + i] = Opcode::new(0x60 + i as u8, "PUSH_", i as u8 + 1);
     }
 
     // DUP{1..16}
     for i in 0..16 {
-        table[0x80 + i] = Opcode::new(0x80 + i as u8, "DUPn", i as u8 + 1);
+        table[0x80 + i] = Opcode::new(0x80 + i as u8, "DUP_", i as u8 + 1);
     }
 
     // SWAP{1..16}
     for i in 0..16 {
-        table[0x90 + i] = Opcode::new(0x90 + i as u8, "SWAPn", i as u8 + 1);
+        table[0x90 + i] = Opcode::new(0x90 + i as u8, "SWAP_", i as u8 + 1);
     }
 
     // LOG{1..4}
     for i in 0..5 {
-        table[0xa0 + i] = Opcode::new(0xa0 + i as u8, "LOGn", i as u8 + 1);
+        table[0xa0 + i] = Opcode::new(0xa0 + i as u8, "LOG_", i as u8 + 1);
     }
 
     // System operations

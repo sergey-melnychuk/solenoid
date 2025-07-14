@@ -235,6 +235,7 @@ impl<T: EventTracer> Executor<T> {
 
     pub async fn execute(
         mut self,
+        bytecode: &[u8],
         code: &Bytecode,
         call: &Call,
         ext: &mut Ext,
@@ -250,11 +251,13 @@ impl<T: EventTracer> Executor<T> {
             is_delegate_call: false,
             is_static_call: false,
         };
-        self.execute_with_context(code, call, &ctx, ext).await
+        self.execute_with_context(bytecode, code, call, &ctx, ext)
+            .await
     }
 
     async fn execute_with_context(
         mut self,
+        bytecode: &[u8],
         code: &Bytecode,
         call: &Call,
         ctx: &Context,
@@ -288,7 +291,7 @@ impl<T: EventTracer> Executor<T> {
                 data.unwrap_or_default()
             );
 
-            self.execute_instruction(code, call, ctx, ext, instruction)
+            self.execute_instruction(bytecode, code, call, ctx, ext, instruction)
                 .await?;
 
             println!(
@@ -324,6 +327,7 @@ impl<T: EventTracer> Executor<T> {
 
     pub async fn execute_instruction(
         &mut self,
+        bytecode: &[u8],
         code: &Bytecode,
         call: &Call,
         ctx: &Context,
@@ -446,11 +450,27 @@ impl<T: EventTracer> Executor<T> {
             }
             0x12 => {
                 // SLT
-                todo!()
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                let a_signed = I256::from_be_bytes(a.to_big_endian());
+                let b_signed = I256::from_be_bytes(b.to_big_endian());
+                self.evm.push(if a_signed <= b_signed {
+                    U256::one()
+                } else {
+                    U256::zero()
+                })?;
             }
             0x13 => {
                 // SGT
-                todo!()
+                let a = self.evm.pop()?;
+                let b = self.evm.pop()?;
+                let a_signed = I256::from_be_bytes(a.to_big_endian());
+                let b_signed = I256::from_be_bytes(b.to_big_endian());
+                self.evm.push(if a_signed >= b_signed {
+                    U256::one()
+                } else {
+                    U256::zero()
+                })?;
             }
             0x14 => {
                 // EQ
@@ -504,15 +524,23 @@ impl<T: EventTracer> Executor<T> {
             }
             0x1b => {
                 // SHL
-                todo!()
+                let shift = self.evm.pop()?.as_usize();
+                let value = self.evm.pop()?;
+
+                let ret = value << shift;
+                self.evm.push(ret)?;
             }
             0x1c => {
-                // SLT
-                todo!()
+                // SHR
+                let shift = self.evm.pop()?.as_usize();
+                let value = self.evm.pop()?;
+
+                let ret = value >> shift;
+                self.evm.push(ret)?;
             }
             0x1d => {
                 // SAR
-                todo!()
+                todo!("0x1d:SAR")
             }
 
             0x20 => {
@@ -551,6 +579,19 @@ impl<T: EventTracer> Executor<T> {
             0x36 => {
                 // CALLDATASIZE
                 self.evm.push(U256::from(call.calldata.len()))?;
+            }
+            0x39 => {
+                // CODECOPY
+                let dest_offset = self.evm.pop()?.as_usize();
+                let offset = self.evm.pop()?.as_usize();
+                let size = self.evm.pop()?.as_usize();
+
+                if self.evm.memory.len() < dest_offset + size {
+                    self.evm.memory.resize(dest_offset + size, 0);
+                }
+
+                self.evm.memory[dest_offset..dest_offset + size]
+                    .copy_from_slice(&bytecode[offset..offset + size]);
             }
 
             // 40-4a
@@ -691,8 +732,8 @@ impl<T: EventTracer> Executor<T> {
                 let ret_offset = self.evm.pop()?.as_usize();
                 let ret_size = self.evm.pop()?.as_usize();
 
-                let code = ext.code(&address.into()).await?;
-                let code = Decoder::decode(&code)?;
+                let bytecode = ext.code(&address.into()).await?;
+                let code = Decoder::decode(&bytecode)?;
                 let executor = Executor::<T>::with_tracer(self.tracer.fork());
 
                 let nested_call = Call {
@@ -709,7 +750,8 @@ impl<T: EventTracer> Executor<T> {
                     is_delegate_call: false,
                 };
 
-                let future = executor.execute_with_context(&code, &nested_call, &nexted_ctx, ext);
+                let future =
+                    executor.execute_with_context(&bytecode, &code, &nested_call, &nexted_ctx, ext);
                 let (tracer, evm, ret) = Box::pin(future).await?;
                 self.tracer.join(tracer, evm.reverted);
 
@@ -743,9 +785,9 @@ impl<T: EventTracer> Executor<T> {
                 // let ret_size = self.state.pop()?;
             }
             0xf3 | 0xfd => {
-                // REVERT | RETURN
+                // RETURN | REVERT
                 self.evm.stopped = true;
-                self.evm.reverted = opcode == 0xf3;
+                self.evm.reverted = opcode == 0xfd;
 
                 let offset = self.evm.pop()?.as_usize();
                 let size = self.evm.pop()?.as_usize();

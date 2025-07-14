@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use eyre::OptionExt;
 use primitive_types::U256;
 
@@ -14,7 +12,6 @@ pub struct EthClient {
 impl EthClient {
     pub fn new(url: &str) -> Self {
         let http = reqwest::ClientBuilder::new()
-            .timeout(Duration::from_secs(60))
             .build()
             .expect("Failed to create HTTP client");
         Self {
@@ -164,11 +161,13 @@ mod tests {
     }
 
     #[test]
-    fn test_selector() {
+    fn test_selectors() {
         assert_eq!(
             get_method_selector("transfer(address,uint256)"),
             "0xa9059cbb"
         );
+        assert_eq!(get_method_selector("get()"), "0x6d4ce63c");
+        assert_eq!(get_method_selector("set(uint256)"), "0x60fe47b1");
     }
 
     #[test]
