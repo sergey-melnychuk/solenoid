@@ -1,10 +1,9 @@
 use primitive_types::U256;
 use solenoid::{
-    common::address::Address,
-    common::call::Call,
+    common::{address::Address, call::Call},
     decoder::{Bytecode, Decoder},
     eth::EthClient,
-    executor::{Evm, Executor},
+    executor::{Evm, Executor, StateChange},
     ext::Ext,
     tracer::NoopTracer,
 };
@@ -20,15 +19,16 @@ async fn call(
     calldata: &str,
     to: Address,
     overrides: Vec<(Address, U256, U256)>,
-) -> eyre::Result<(NoopTracer, Evm, Vec<u8>)> {
+) -> eyre::Result<(NoopTracer, Vec<u8>, Evm)> {
     let value = U256::zero();
     let from = Address::try_from("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")?;
     let call = Call {
         calldata: hex::decode(calldata.trim_start_matches("0x"))?,
         value,
+        origin: from,
         from,
         to,
-        gas: U256::zero(),
+        gas: U256::max_value(),
     };
 
     // TODO: use mock http server for hermetic tests
@@ -42,7 +42,11 @@ async fn call(
     }
 
     let executor = Executor::<NoopTracer>::new();
-    Ok(executor.execute(&code()?, &call, &mut ext).await?)
+    let mut evm = Evm::default();
+    let (tracer, ret) = executor
+        .execute(&code()?, &call, &mut evm, &mut ext)
+        .await?;
+    Ok((tracer, ret, evm))
 }
 
 #[tokio::test]
@@ -65,11 +69,13 @@ async fn test_deploy() -> eyre::Result<()> {
     let call = Call {
         calldata: vec![],
         value,
+        origin: from,
         from,
         to,
-        gas: U256::zero(),
+        gas: U256::from(100500),
     };
-    let (_, evm, ret) = executor.execute(&code, &call, &mut ext).await?;
+    let mut evm = Evm::default();
+    let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
 
     assert!(!evm.reverted);
     let exp = hex::decode(CODE.trim_start_matches("0x"))?;
@@ -81,10 +87,13 @@ async fn test_deploy() -> eyre::Result<()> {
 async fn test_get() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
-    let (_, evm, ret) = call("0x6d4ce63c", to, vec![]).await?;
+    let (_, ret, evm) = call("0x6d4ce63c", to, vec![]).await?;
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 32]);
-    assert_eq!(evm.state, vec![(to, U256::zero(), U256::zero(), None),]);
+    assert_eq!(
+        evm.state,
+        vec![StateChange(to, U256::zero(), U256::zero(), None),]
+    );
     Ok(())
 }
 
@@ -92,7 +101,7 @@ async fn test_get() -> eyre::Result<()> {
 async fn test_get_with_override() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
-    let (_, evm, ret) = call(
+    let (_, ret, evm) = call(
         "0x6d4ce63c",
         to,
         vec![(
@@ -107,7 +116,10 @@ async fn test_get_with_override() -> eyre::Result<()> {
         ret,
         hex::decode("0000000000000000000000000000000000000000000000000000000000000001")?
     );
-    assert_eq!(evm.state, vec![(to, U256::zero(), U256::one(), None),]);
+    assert_eq!(
+        evm.state,
+        vec![StateChange(to, U256::zero(), U256::one(), None),]
+    );
     Ok(())
 }
 
@@ -115,13 +127,16 @@ async fn test_get_with_override() -> eyre::Result<()> {
 async fn test_dec() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
-    let (_, evm, ret) = call("0xb3bcfa82", to, vec![]).await?;
+    let (_, ret, evm) = call("0xb3bcfa82", to, vec![]).await?;
     assert!(evm.reverted);
     assert_eq!(
         ret,
         hex::decode("4e487b710000000000000000000000000000000000000000000000000000000000000011")?
     );
-    assert_eq!(evm.state, vec![(to, U256::zero(), U256::zero(), None),]);
+    assert_eq!(
+        evm.state,
+        vec![StateChange(to, U256::zero(), U256::zero(), None)]
+    );
     Ok(())
 }
 
@@ -129,7 +144,7 @@ async fn test_dec() -> eyre::Result<()> {
 async fn test_dec_with_override() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
-    let (_, evm, ret) = call(
+    let (_, ret, evm) = call(
         "0xb3bcfa82",
         to,
         vec![(
@@ -144,8 +159,8 @@ async fn test_dec_with_override() -> eyre::Result<()> {
     assert_eq!(
         evm.state,
         vec![
-            (to, U256::zero(), U256::one(), None),
-            (to, U256::zero(), U256::one(), Some(U256::zero())),
+            StateChange(to, U256::zero(), U256::one(), None),
+            StateChange(to, U256::zero(), U256::one(), Some(U256::zero())),
         ]
     );
     Ok(())
@@ -155,14 +170,14 @@ async fn test_dec_with_override() -> eyre::Result<()> {
 async fn test_inc() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
-    let (_, evm, ret) = call("0x371303c0", to, vec![]).await?;
+    let (_, ret, evm) = call("0x371303c0", to, vec![]).await?;
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 0]);
     assert_eq!(
         evm.state,
         vec![
-            (to, U256::zero(), U256::zero(), None),
-            (to, U256::zero(), U256::zero(), Some(U256::one())),
+            StateChange(to, U256::zero(), U256::zero(), None),
+            StateChange(to, U256::zero(), U256::zero(), Some(U256::one())),
         ]
     );
     Ok(())
@@ -172,7 +187,7 @@ async fn test_inc() -> eyre::Result<()> {
 async fn test_set() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
-    let (_, evm, ret) = call(
+    let (_, ret, evm) = call(
         "0x60fe47b10000000000000000000000000000000000000000000000000000000000000042",
         to,
         vec![],
@@ -182,7 +197,7 @@ async fn test_set() -> eyre::Result<()> {
     assert_eq!(ret, vec![0u8; 0]);
     assert_eq!(
         evm.state,
-        vec![(
+        vec![StateChange(
             to,
             U256::zero(),
             U256::zero(),

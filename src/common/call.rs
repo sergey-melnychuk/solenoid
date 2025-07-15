@@ -6,6 +6,7 @@ use crate::common::address::Address;
 pub struct Call {
     pub calldata: Vec<u8>,
     pub value: U256,
+    pub origin: Address,
     pub from: Address,
     pub to: Address,
     pub gas: U256,

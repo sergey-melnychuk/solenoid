@@ -6,7 +6,7 @@ async fn main() -> eyre::Result<()> {
         common::{address::Address, call::Call},
         decoder::{Bytecode, Decoder},
         eth::EthClient,
-        executor::Executor,
+        executor::{Evm, Executor, StateChange},
         ext::Ext,
         tracer::NoopTracer,
     };
@@ -56,9 +56,10 @@ async fn main() -> eyre::Result<()> {
     let call = Call {
         calldata,
         value,
+        origin: from,
         from,
         to,
-        gas: U256::zero(),
+        gas: U256::from(100500),
     };
 
     let url = std::env::var("URL")?;
@@ -71,21 +72,24 @@ async fn main() -> eyre::Result<()> {
 
     println!("\nEXECUTION:");
     let executor = Executor::<NoopTracer>::new().with_log();
-    let (_, evm, ret) = executor.execute(&code, &call, &mut ext).await?;
+    let mut evm = Evm::default();
+    let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
     if !evm.reverted {
         println!("\nOK: 0x{}", hex::encode(ret));
     } else {
         println!("\nREVERTED: 0x{}", hex::encode(ret));
     }
 
-    evm.state.iter().for_each(|(addr, key, val, new)| {
-        if let Some(new) = new {
-            println!("W:{addr}[{key:0x}]={val:0x}->{new:0x}");
-        } else {
-            println!("R:{addr}[{key:0x}]={val:0x}");
-        }
-    });
     println!("GAS: {} / {}", evm.gas.used, evm.gas.limit);
+    evm.state
+        .iter()
+        .for_each(|StateChange(addr, key, val, new)| {
+            if let Some(new) = new {
+                println!("W:{addr}[{key:0x}]={val:0x}->{new:0x}");
+            } else {
+                println!("R:{addr}[{key:0x}]={val:0x}");
+            }
+        });
 
     Ok(())
 }
