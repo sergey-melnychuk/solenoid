@@ -1,9 +1,12 @@
 use primitive_types::U256;
 use solenoid::{
     common::address::Address,
+    common::call::Call,
     decoder::{Bytecode, Decoder},
     eth::EthClient,
-    executor::{Call, Evm, Executor, Ext, NoopTracer},
+    executor::{Evm, Executor},
+    ext::Ext,
+    tracer::NoopTracer,
 };
 
 static CODE: &str = include_str!("../etc/counter/Counter.bin-runtime");
@@ -25,6 +28,7 @@ async fn call(
         value,
         from,
         to,
+        gas: U256::zero(),
     };
 
     // TODO: use mock http server for hermetic tests
@@ -63,6 +67,7 @@ async fn test_deploy() -> eyre::Result<()> {
         value,
         from,
         to,
+        gas: U256::zero(),
     };
     let (_, evm, ret) = executor.execute(&code, &call, &mut ext).await?;
 

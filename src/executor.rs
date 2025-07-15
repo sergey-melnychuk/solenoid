@@ -1,13 +1,12 @@
-use std::{collections::HashMap, time::Instant};
-
 use i256::I256;
 use primitive_types::U256;
 use thiserror::Error;
 
 use crate::{
-    common::{account::Account, address::Address, hash::keccak256},
+    common::{address::Address, call::Call, hash::keccak256},
     decoder::{Bytecode, Decoder, DecoderError, Instruction},
-    eth::EthClient,
+    ext::Ext,
+    tracer::{CallType, Event, EventData, EventTracer, StateEvent},
 };
 
 #[derive(Error, Debug)]
@@ -32,7 +31,8 @@ pub enum ExecutorError {
     WrongCallRetDataSize { exp: usize, got: usize },
     #[error("Bytcode decoding error: {0}")]
     DecoderError(#[from] DecoderError),
-
+    #[error("Call run out of gas")]
+    OutOfGas(),
     #[error("{0}")]
     Eyre(#[from] eyre::ErrReport),
 }
@@ -43,12 +43,14 @@ const CALL_DEPTH_LIMIT: usize = 1024;
 
 #[derive(Debug, Default)]
 pub struct Evm {
-    pub stack: Vec<U256>,
     pub memory: Vec<u8>,
+    pub stack: Vec<U256>,
+    pub gas: Gas,
     pub pc: usize,
     pub stopped: bool,
     pub reverted: bool,
     pub state: Vec<(Address, U256, U256, Option<U256>)>,
+    // TODO: account events: address + {value, nonce, code/hash}
 }
 
 impl Evm {
@@ -65,168 +67,43 @@ impl Evm {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Call {
-    pub calldata: Vec<u8>,
-    pub value: U256,
-    pub from: Address,
-    pub to: Address,
+#[derive(Clone, Debug, Default)]
+pub struct Gas {
+    pub limit: U256,
+    pub used: U256,
 }
 
-#[derive(Default)]
-pub struct State {
-    account: Account,
-    data: HashMap<U256, U256>,
-    code: Vec<u8>,
-}
+impl Gas {
+    pub fn remaining(&self) -> U256 {
+        self.limit.saturating_sub(self.used)
+    }
 
-pub struct Ext {
-    block_hash: String,
-    state: HashMap<Address, State>,
-    eth: EthClient,
-}
-
-impl Ext {
-    pub fn new(block_hash: String, eth: EthClient) -> Self {
+    pub fn fork(&self, limit: U256) -> Self {
         Self {
-            block_hash,
-            state: Default::default(),
-            eth,
+            limit,
+            used: U256::zero(),
         }
     }
 
-    pub async fn get(&mut self, addr: &Address, key: &U256) -> eyre::Result<U256> {
-        let val = if let Some(val) = self.state.get(addr).and_then(|s| s.data.get(key)).copied() {
-            val
-        } else {
-            let now = Instant::now();
-            let hex = format!("0x{key:064x}");
-            let address = format!("0x{}", hex::encode(addr.0));
-            let val = self
-                .eth
-                .get_storage_at(&self.block_hash, &address, &hex)
-                .await?;
-            let ms = now.elapsed().as_millis();
-            let addr = hex::encode(addr.0);
-            tracing::info!("SLOAD: [{ms} ms] 0x{addr}[{key:#x}]={val:#x}");
-            val
-        };
-        Ok(val)
+    pub fn add(&mut self, gas: U256) {
+        self.used -= gas;
     }
 
-    pub async fn put(&mut self, addr: &Address, key: U256, val: U256) -> eyre::Result<()> {
-        let state = self.state.entry(*addr).or_default();
-        state.data.insert(key, val);
+    pub fn sub(&mut self, gas: U256) -> Result<(), ExecutorError> {
+        if gas > self.remaining() {
+            return Err(ExecutorError::OutOfGas());
+        }
+        self.used += gas;
         Ok(())
     }
-
-    pub async fn acc(&mut self, addr: &Address) -> eyre::Result<Account> {
-        if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
-            Ok(acc)
-        } else {
-            let address = format!("0x{}", hex::encode(addr.0));
-            let account = self.eth.get_account(&self.block_hash, &address).await?;
-
-            let state = self.state.entry(*addr).or_default();
-            state.account = account.clone();
-            Ok(account)
-        }
-    }
-
-    pub async fn code(&mut self, addr: &Address) -> eyre::Result<Vec<u8>> {
-        if let Some(code) = self.state.get(addr).map(|s| s.code.clone()) {
-            Ok(code)
-        } else {
-            let address = format!("0x{}", hex::encode(addr.0));
-            let code = self.eth.get_code(&self.block_hash, &address).await?;
-
-            let state = self.state.entry(*addr).or_default();
-            state.code = code.clone();
-            Ok(code)
-        }
-    }
-
-    pub fn acc_mut(&mut self, addr: &Address) -> Option<&mut Account> {
-        self.state.get_mut(addr).map(|s| &mut s.account)
-    }
-
-    pub fn code_mut(&mut self, addr: &Address) -> Option<&mut Vec<u8>> {
-        self.state.get_mut(addr).map(|s| &mut s.code)
-    }
 }
-
-pub enum StackEvent {
-    Push(U256),
-    Pop(U256),
-}
-
-pub enum StateEvent {
-    R(Address, U256, U256),
-    W(Address, U256, U256, U256),
-}
-
-pub enum MemoryEvent {
-    R(usize, Vec<u8>),
-    W(usize, Vec<u8>),
-}
-
-pub enum EventData {
-    Opcode {
-        pc: usize,
-        op: u8,
-        name: String,
-        data: Option<Vec<u8>>,
-    },
-    Keccak {
-        data: Vec<u8>,
-        hash: [u8; 32],
-    },
-    // TODO: Gas
-    // TODO: Created { code, addr }
-    Stack(StackEvent),
-    State(StateEvent),
-    Memory(MemoryEvent),
-    Call(Call, Option<Context>),
-    Return(Vec<u8>),
-    // Balance, Nonce (, Tx, Block): these happen on higher level then execution of call
-}
-
-pub struct Event {
-    pub data: EventData,
-    pub depth: usize,
-    pub reverted: bool,
-}
-
-#[allow(unused_variables)] // default impl ignores all arguments
-pub trait EventTracer: Default {
-    fn get(&self) -> Vec<Event> {
-        vec![]
-    }
-    fn add(&mut self, event: Event) {}
-    fn fork(&self) -> Self {
-        Self::default()
-    }
-    fn join(&mut self, other: Self, reverted: bool) {
-        for mut event in other.get() {
-            event.reverted = reverted;
-            self.add(event);
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct NoopTracer;
-
-impl EventTracer for NoopTracer {}
 
 #[derive(Clone)]
 pub struct Context {
-    // TODO: gas
+    pub gas: Gas,
     pub depth: usize,
-    pub from: Address,
     pub origin: Address,
-    pub is_static_call: bool,
-    pub is_delegate_call: bool,
+    pub call_type: CallType,
 }
 
 #[derive(Default)]
@@ -262,14 +139,13 @@ impl<T: EventTracer> Executor<T> {
         self.tracer.add(Event {
             reverted: false,
             depth: 0,
-            data: EventData::Call(call.clone(), None),
+            data: EventData::Call(call.clone(), CallType::Call),
         });
         let mut ctx = Context {
+            gas: Gas::default(),
             depth: 0,
-            from: call.from,
             origin: call.from,
-            is_delegate_call: false,
-            is_static_call: false,
+            call_type: CallType::Call,
         };
         self.execute_with_context(code, call, &mut ctx, ext).await
     }
@@ -295,6 +171,7 @@ impl<T: EventTracer> Executor<T> {
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
                     data: instruction.argument.clone(),
+                    gas: U256::zero(), // TODO
                 },
             });
 
@@ -365,6 +242,7 @@ impl<T: EventTracer> Executor<T> {
                 self.evm.stopped = true;
                 self.evm.reverted = false;
                 self.ret.clear();
+                self.evm.gas.sub(U256::zero())?; // TODO
             }
             // 0x01..0x0b: Arithmetic Operations
             0x01 => {
@@ -776,14 +654,14 @@ impl<T: EventTracer> Executor<T> {
                     value,
                     from: call.to,
                     to: address.into(),
+                    gas, // TODO
                 };
 
                 let mut nexted_ctx = Context {
+                    gas: ctx.gas.fork(U256::zero()), // TODO
                     depth: ctx.depth + 1,
-                    from: call.to,
                     origin: ctx.origin,
-                    is_static_call: false,
-                    is_delegate_call: false,
+                    call_type: CallType::Call,
                 };
 
                 let future =

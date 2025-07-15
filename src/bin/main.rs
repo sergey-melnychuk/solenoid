@@ -3,10 +3,12 @@
 async fn main() -> eyre::Result<()> {
     use primitive_types::U256;
     use solenoid::{
-        common::address::Address,
+        common::{address::Address, call::Call},
         decoder::{Bytecode, Decoder},
         eth::EthClient,
-        executor::{Call, Executor, Ext, NoopTracer},
+        executor::Executor,
+        ext::Ext,
+        tracer::NoopTracer,
     };
 
     fn dump(decoded: &Bytecode) {
@@ -56,6 +58,7 @@ async fn main() -> eyre::Result<()> {
         value,
         from,
         to,
+        gas: U256::zero(),
     };
 
     let url = std::env::var("URL")?;
@@ -82,6 +85,7 @@ async fn main() -> eyre::Result<()> {
             println!("R:{addr}[{key:0x}]={val:0x}");
         }
     });
+    println!("GAS: {} / {}", evm.gas.used, evm.gas.limit);
 
     Ok(())
 }
