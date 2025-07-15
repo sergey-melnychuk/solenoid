@@ -3,6 +3,7 @@
 async fn main() -> eyre::Result<()> {
     use primitive_types::U256;
     use solenoid::{
+        common::address::Address,
         decoder::{Bytecode, Decoder},
         eth::EthClient,
         executor::{Call, Executor, Ext, NoopTracer},
@@ -24,10 +25,11 @@ async fn main() -> eyre::Result<()> {
         }
 
         println!("\n[JUMP TABLE]");
-        println!("OFFSET -- PC");
-        println!("{}", "─".repeat(13 + 4));
+        let title = "OFFSET    PC";
+        println!("{title}");
+        println!("{}", "─".repeat(title.len()));
         for (src, dst) in &decoded.jumptable {
-            println!("{src:#06x} --- {dst:#06x}")
+            println!("{src:#06x} -> {dst:#06x}")
         }
     }
 
@@ -43,20 +45,12 @@ async fn main() -> eyre::Result<()> {
     let bytecode = hex::decode(args[1].trim_start_matches("0x"))?;
     let calldata = hex::decode(args[2].trim_start_matches("0x"))?;
 
-    let code = Decoder::decode(&bytecode)?;
+    let code = Decoder::decode(bytecode)?;
     dump(&code);
 
     let value = U256::zero();
-    let from = hex::decode("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-        .unwrap()
-        .as_slice()
-        .try_into()
-        .unwrap();
-    let to = hex::decode("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")
-        .unwrap()
-        .as_slice()
-        .try_into()
-        .unwrap();
+    let from = Address::try_from("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")?;
+    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
     let call = Call {
         calldata,
         value,
@@ -69,16 +63,25 @@ async fn main() -> eyre::Result<()> {
     let (_, block_hash) = eth.get_latest_block().await?;
 
     let mut ext = Ext::new(block_hash, eth);
+    // Provide state overrides:
+    // ext.put(&to, U256::zero(), U256::one()).await?;
 
     println!("\nEXECUTION:");
-
-    let executor = Executor::<NoopTracer>::new();
-    let (_, evm, ret) = executor.execute(&bytecode, &code, &call, &mut ext).await?;
+    let executor = Executor::<NoopTracer>::new().with_log();
+    let (_, evm, ret) = executor.execute(&code, &call, &mut ext).await?;
     if !evm.reverted {
         println!("\nOK: 0x{}", hex::encode(ret));
     } else {
-        println!("\nFAILED: reverted");
+        println!("\nREVERTED: 0x{}", hex::encode(ret));
     }
+
+    evm.state.iter().for_each(|(addr, key, val, new)| {
+        if let Some(new) = new {
+            println!("W:{addr}[{key:0x}]={val:0x}->{new:0x}");
+        } else {
+            println!("R:{addr}[{key:0x}]={val:0x}");
+        }
+    });
 
     Ok(())
 }

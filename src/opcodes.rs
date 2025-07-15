@@ -16,7 +16,7 @@ impl Opcode {
         self.name.replace('_', &self.n.to_string())
     }
 
-    pub fn push_width(&self) -> usize {
+    pub(crate) fn push_len(&self) -> usize {
         if self.name != "PUSH_" {
             0
         } else {

@@ -48,6 +48,7 @@ pub struct Evm {
     pub pc: usize,
     pub stopped: bool,
     pub reverted: bool,
+    pub state: Vec<(Address, U256, U256, Option<U256>)>,
 }
 
 impl Evm {
@@ -113,9 +114,10 @@ impl Ext {
         Ok(val)
     }
 
-    pub async fn put(&mut self, addr: &Address, key: U256, val: U256) {
-        let state = self.state.entry(addr.clone()).or_default();
+    pub async fn put(&mut self, addr: &Address, key: U256, val: U256) -> eyre::Result<()> {
+        let state = self.state.entry(*addr).or_default();
         state.data.insert(key, val);
+        Ok(())
     }
 
     pub async fn acc(&mut self, addr: &Address) -> eyre::Result<Account> {
@@ -125,7 +127,7 @@ impl Ext {
             let address = format!("0x{}", hex::encode(addr.0));
             let account = self.eth.get_account(&self.block_hash, &address).await?;
 
-            let state = self.state.entry(addr.clone()).or_default();
+            let state = self.state.entry(*addr).or_default();
             state.account = account.clone();
             Ok(account)
         }
@@ -138,10 +140,18 @@ impl Ext {
             let address = format!("0x{}", hex::encode(addr.0));
             let code = self.eth.get_code(&self.block_hash, &address).await?;
 
-            let state = self.state.entry(addr.clone()).or_default();
+            let state = self.state.entry(*addr).or_default();
             state.code = code.clone();
             Ok(code)
         }
+    }
+
+    pub fn acc_mut(&mut self, addr: &Address) -> Option<&mut Account> {
+        self.state.get_mut(addr).map(|s| &mut s.account)
+    }
+
+    pub fn code_mut(&mut self, addr: &Address) -> Option<&mut Vec<u8>> {
+        self.state.get_mut(addr).map(|s| &mut s.code)
     }
 }
 
@@ -152,7 +162,7 @@ pub enum StackEvent {
 
 pub enum StateEvent {
     R(Address, U256, U256),
-    W(Address, U256, U256),
+    W(Address, U256, U256, U256),
 }
 
 pub enum MemoryEvent {
@@ -196,7 +206,12 @@ pub trait EventTracer: Default {
     fn fork(&self) -> Self {
         Self::default()
     }
-    fn join(&mut self, other: Self, reverted: bool) {}
+    fn join(&mut self, other: Self, reverted: bool) {
+        for mut event in other.get() {
+            event.reverted = reverted;
+            self.add(event);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -207,9 +222,9 @@ impl EventTracer for NoopTracer {}
 #[derive(Clone)]
 pub struct Context {
     // TODO: gas
-    // TODO: origin?
     pub depth: usize,
-    pub target: Address,
+    pub from: Address,
+    pub origin: Address,
     pub is_static_call: bool,
     pub is_delegate_call: bool,
 }
@@ -219,11 +234,16 @@ pub struct Executor<T: EventTracer> {
     tracer: T,
     evm: Evm,
     ret: Vec<u8>,
+    log: bool,
 }
 
 impl<T: EventTracer> Executor<T> {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_log(self) -> Self {
+        Self { log: true, ..self }
     }
 
     pub fn with_tracer<G: EventTracer>(tracer: G) -> Executor<G> {
@@ -235,7 +255,6 @@ impl<T: EventTracer> Executor<T> {
 
     pub async fn execute(
         mut self,
-        bytecode: &[u8],
         code: &Bytecode,
         call: &Call,
         ext: &mut Ext,
@@ -245,22 +264,21 @@ impl<T: EventTracer> Executor<T> {
             depth: 0,
             data: EventData::Call(call.clone(), None),
         });
-        let ctx = Context {
+        let mut ctx = Context {
             depth: 0,
-            target: call.from.clone(),
+            from: call.from,
+            origin: call.from,
             is_delegate_call: false,
             is_static_call: false,
         };
-        self.execute_with_context(bytecode, code, call, &ctx, ext)
-            .await
+        self.execute_with_context(code, call, &mut ctx, ext).await
     }
 
     async fn execute_with_context(
         mut self,
-        bytecode: &[u8],
         code: &Bytecode,
         call: &Call,
-        ctx: &Context,
+        ctx: &mut Context,
         ext: &mut Ext,
     ) -> Result<(T, Evm, Vec<u8>), ExecutorError> {
         if ctx.depth > CALL_DEPTH_LIMIT {
@@ -280,46 +298,51 @@ impl<T: EventTracer> Executor<T> {
                 },
             });
 
-            let data = instruction
-                .argument
-                .as_ref()
-                .map(|data| format!("0x{}", hex::encode(data)));
-            println!(
-                "\n{:#04x}: {} {}",
-                self.evm.pc,
-                instruction.opcode.name(),
-                data.unwrap_or_default()
-            );
+            if self.log {
+                let data = instruction
+                    .argument
+                    .as_ref()
+                    .map(|data| format!("0x{}", hex::encode(data)));
+                println!(
+                    "\n{:#04x}: {} {}",
+                    self.evm.pc,
+                    instruction.opcode.name(),
+                    data.unwrap_or_default()
+                );
+            }
 
-            self.execute_instruction(bytecode, code, call, ctx, ext, instruction)
+            self.execute_instruction(code, call, ctx, ext, instruction)
                 .await?;
 
-            println!(
-                "MEMORY:{}",
-                if self.evm.memory.is_empty() {
-                    " []"
-                } else {
-                    ""
-                }
-            );
-            self.evm
-                .memory
-                .chunks(32)
-                .enumerate()
-                .for_each(|(index, word)| {
-                    let offset = index << 5;
-                    let word = hex::encode(word);
-                    println!("{offset:#04x}: {word}");
-                });
-            println!(
-                "STACK:{}",
-                if self.evm.stack.is_empty() { " []" } else { "" }
-            );
-            self.evm
-                .stack
-                .iter()
-                .rev()
-                .for_each(|word| println!("{word:#02x}"));
+            if self.log {
+                println!(
+                    "MEMORY:{}",
+                    if self.evm.memory.is_empty() {
+                        " []"
+                    } else {
+                        ""
+                    }
+                );
+                self.evm
+                    .memory
+                    .chunks(32)
+                    .enumerate()
+                    .for_each(|(index, word)| {
+                        let offset = index << 5;
+                        let word = hex::encode(word);
+                        println!("{offset:#04x}: {word}");
+                    });
+                println!(
+                    "STACK:{}",
+                    if self.evm.stack.is_empty() { " []" } else { "" }
+                );
+                self.evm
+                    .stack
+                    .iter()
+                    .rev()
+                    .enumerate()
+                    .for_each(|(i, word)| println!("{:>4}: {word:#02x}", i + 1));
+            }
         }
 
         Ok((self.tracer, self.evm, self.ret))
@@ -327,10 +350,9 @@ impl<T: EventTracer> Executor<T> {
 
     pub async fn execute_instruction(
         &mut self,
-        bytecode: &[u8],
         code: &Bytecode,
         call: &Call,
-        ctx: &Context,
+        ctx: &mut Context,
         ext: &mut Ext,
         instruction: &Instruction,
     ) -> Result<(), ExecutorError> {
@@ -349,21 +371,21 @@ impl<T: EventTracer> Executor<T> {
                 // ADD
                 let a = self.evm.pop()?;
                 let b = self.evm.pop()?;
-                let res = a.saturating_add(b);
+                let (res, _) = a.overflowing_add(b);
                 self.evm.push(res)?;
             }
             0x02 => {
                 // MUL
                 let a = self.evm.pop()?;
                 let b = self.evm.pop()?;
-                let res = a.saturating_mul(b);
+                let (res, _) = a.overflowing_mul(b);
                 self.evm.push(res)?;
             }
             0x03 => {
                 // SUB
                 let a = self.evm.pop()?;
                 let b = self.evm.pop()?;
-                let res = a.saturating_sub(b);
+                let (res, _) = a.overflowing_sub(b);
                 self.evm.push(res)?;
             }
             0x04 => {
@@ -454,7 +476,7 @@ impl<T: EventTracer> Executor<T> {
                 let b = self.evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.to_big_endian());
                 let b_signed = I256::from_be_bytes(b.to_big_endian());
-                self.evm.push(if a_signed <= b_signed {
+                self.evm.push(if a_signed < b_signed {
                     U256::one()
                 } else {
                     U256::zero()
@@ -466,7 +488,7 @@ impl<T: EventTracer> Executor<T> {
                 let b = self.evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.to_big_endian());
                 let b_signed = I256::from_be_bytes(b.to_big_endian());
-                self.evm.push(if a_signed >= b_signed {
+                self.evm.push(if a_signed > b_signed {
                     U256::one()
                 } else {
                     U256::zero()
@@ -591,7 +613,7 @@ impl<T: EventTracer> Executor<T> {
                 }
 
                 self.evm.memory[dest_offset..dest_offset + size]
-                    .copy_from_slice(&bytecode[offset..offset + size]);
+                    .copy_from_slice(&code.bytecode[offset..offset + size]);
             }
 
             // 40-4a
@@ -634,14 +656,27 @@ impl<T: EventTracer> Executor<T> {
             0x54 => {
                 // SLOAD
                 let key = self.evm.pop()?;
-                let val = ext.get(&call.from, &key).await?;
+                let val = ext.get(&call.to, &key).await?;
                 self.evm.push(val)?;
+                self.evm.state.push((call.to, key, val, None));
+                self.tracer.add(Event {
+                    data: EventData::State(StateEvent::R(call.to, key, val)),
+                    depth: ctx.depth,
+                    reverted: false,
+                });
             }
             0x55 => {
                 // SSTORE
                 let key = self.evm.pop()?;
-                let val = self.evm.pop()?;
-                ext.put(&call.from, key, val).await;
+                let val = ext.get(&call.to, &key).await?;
+                let new = self.evm.pop()?;
+                ext.put(&call.to, key, val).await?;
+                self.evm.state.push((call.to, key, val, Some(new)));
+                self.tracer.add(Event {
+                    data: EventData::State(StateEvent::W(call.to, key, val, new)),
+                    depth: ctx.depth,
+                    reverted: false,
+                });
             }
             0x56 => {
                 // JUMP
@@ -733,25 +768,26 @@ impl<T: EventTracer> Executor<T> {
                 let ret_size = self.evm.pop()?.as_usize();
 
                 let bytecode = ext.code(&address.into()).await?;
-                let code = Decoder::decode(&bytecode)?;
+                let code = Decoder::decode(bytecode)?;
                 let executor = Executor::<T>::with_tracer(self.tracer.fork());
 
                 let nested_call = Call {
                     calldata: self.evm.memory[args_offset..args_offset + args_size].to_vec(),
                     value,
-                    from: call.to.clone(),
+                    from: call.to,
                     to: address.into(),
                 };
 
-                let nexted_ctx = Context {
+                let mut nexted_ctx = Context {
                     depth: ctx.depth + 1,
-                    target: call.to.clone(),
+                    from: call.to,
+                    origin: ctx.origin,
                     is_static_call: false,
                     is_delegate_call: false,
                 };
 
                 let future =
-                    executor.execute_with_context(&bytecode, &code, &nested_call, &nexted_ctx, ext);
+                    executor.execute_with_context(&code, &nested_call, &mut nexted_ctx, ext);
                 let (tracer, evm, ret) = Box::pin(future).await?;
                 self.tracer.join(tracer, evm.reverted);
 
@@ -769,6 +805,11 @@ impl<T: EventTracer> Executor<T> {
                         self.evm.push(U256::one())?;
                     }
                 } else {
+                    for (address, key, val, _) in
+                        evm.state.iter().filter(|(_, _, _, new)| new.is_some())
+                    {
+                        ext.put(address, *key, *val).await?;
+                    }
                     self.evm.push(U256::zero())?;
                 }
             }

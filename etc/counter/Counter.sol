@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-// solc -o . --bin Counter.sol --overwrite
+// solc -o . --bin --bin-runtime Counter.sol --overwrite --optimize --optimize-runs 10000
 
 contract Counter {
     uint256 number;
