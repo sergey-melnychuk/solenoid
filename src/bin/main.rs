@@ -1,12 +1,11 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    use primitive_types::U256;
     use solenoid::{
-        common::{address::Address, call::Call},
+        common::{Word, address::Address, call::Call},
         decoder::{Bytecode, Decoder},
         eth::EthClient,
-        executor::{Evm, Executor, StateChange},
+        executor::{Evm, Executor, StateTouch},
         ext::Ext,
         tracer::NoopTracer,
     };
@@ -50,7 +49,7 @@ async fn main() -> eyre::Result<()> {
     let code = Decoder::decode(bytecode)?;
     dump(&code);
 
-    let value = U256::zero();
+    let value = Word::zero();
     let from = Address::try_from("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")?;
     let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
     let call = Call {
@@ -59,7 +58,7 @@ async fn main() -> eyre::Result<()> {
         origin: from,
         from,
         to,
-        gas: U256::from(100500),
+        gas: Word::from(100500),
     };
 
     let url = std::env::var("URL")?;
@@ -68,7 +67,7 @@ async fn main() -> eyre::Result<()> {
 
     let mut ext = Ext::new(block_hash, eth);
     // Provide state overrides:
-    // ext.put(&to, U256::zero(), U256::one()).await?;
+    // ext.put(&to, Word::zero(), Word::one()).await?;
 
     println!("\nEXECUTION:");
     let executor = Executor::<NoopTracer>::new().with_log();
@@ -83,7 +82,7 @@ async fn main() -> eyre::Result<()> {
     println!("GAS: {} / {}", evm.gas.used, evm.gas.limit);
     evm.state
         .iter()
-        .for_each(|StateChange(addr, key, val, new)| {
+        .for_each(|StateTouch(addr, key, val, new, _)| {
             if let Some(new) = new {
                 println!("W:{addr}[{key:0x}]={val:0x}->{new:0x}");
             } else {

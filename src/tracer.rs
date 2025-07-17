@@ -1,15 +1,13 @@
-use primitive_types::U256;
-
-use crate::{common::address::Address, common::call::Call};
+use crate::common::{Word, address::Address, call::Call};
 
 pub enum StackEvent {
-    Push(U256),
-    Pop(U256),
+    Push(Word),
+    Pop(Word),
 }
 
 pub enum StateEvent {
-    R(Address, U256, U256),
-    W(Address, U256, U256, U256),
+    R(Address, Word, Word),
+    W(Address, Word, Word, Word),
 }
 
 pub enum MemoryEvent {
@@ -32,7 +30,7 @@ pub enum EventData {
         op: u8,
         name: String,
         data: Option<Vec<u8>>,
-        gas: U256,
+        gas: Word,
     },
     Keccak {
         data: Vec<u8>,
@@ -41,11 +39,11 @@ pub enum EventData {
     Stack(StackEvent),
     State(StateEvent),
     Memory(MemoryEvent),
-    Create(Address, U256, Vec<u8>),
+    Create(Address, Word, Vec<u8>),
     Call(Call, CallType),
     Return(Vec<u8>),
     Revert(Vec<u8>),
-    Value(Address, U256, U256),
+    Value(Address, Word, Word),
     Nonce(Address, u64),
 }
 

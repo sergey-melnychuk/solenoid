@@ -1,7 +1,6 @@
 use eyre::OptionExt;
-use primitive_types::U256;
 
-use crate::common::account::Account;
+use crate::common::{Word, account::Account};
 
 #[derive(Clone)]
 pub struct EthClient {
@@ -46,7 +45,7 @@ impl EthClient {
         block_hash: &str,
         address: &str,
         key: &str,
-    ) -> eyre::Result<U256> {
+    ) -> eyre::Result<Word> {
         self.rpc(serde_json::json!({
             "jsonrpc": "2.0",
             "method": "eth_getStorageAt",
@@ -60,7 +59,7 @@ impl EthClient {
             "id": 0
         }))
         .await
-        .and_then(|value| hex_to_256(&value))
+        .and_then(|value| hex_to_word(&value))
     }
 
     pub async fn get_code(&self, block_hash: &str, address: &str) -> eyre::Result<Vec<u8>> {
@@ -79,8 +78,36 @@ impl EthClient {
         .and_then(|value| hex_to_vec(&value))
     }
 
-    pub async fn get_account(&self, _block_hash: &str, _address: &str) -> eyre::Result<Account> {
-        todo!("eth_getAccount"); // TODO
+    pub async fn get_balance(&self, block_hash: &str, address: &str) -> eyre::Result<Word> {
+        self.rpc(serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_getBalance",
+            "params": [
+                address,
+                {
+                    "blockHash": block_hash,
+                }
+            ],
+            "id": 0
+        }))
+        .await
+        .and_then(|value| hex_to_word(&value))
+    }
+
+    pub async fn get_account(&self, block_hash: &str, address: &str) -> eyre::Result<Account> {
+        self.rpc(serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_getAccount",
+            "params": [
+                address,
+                {
+                    "blockHash": block_hash,
+                }
+            ],
+            "id": 0
+        }))
+        .await
+        .and_then(|value| parse_account(&value))
     }
 
     pub async fn call(
@@ -130,10 +157,10 @@ impl EthClient {
     }
 }
 
-fn hex_to_256(val: &serde_json::Value) -> eyre::Result<U256> {
+fn hex_to_word(val: &serde_json::Value) -> eyre::Result<Word> {
     let hex = val.as_str().ok_or_eyre("missing hex str")?;
     let hex = hex.strip_prefix("0x").unwrap_or(hex);
-    let num = U256::from_str_radix(hex, 16)?;
+    let num = Word::from_str_radix(hex, 16)?;
     Ok(num)
 }
 
@@ -149,6 +176,27 @@ fn hex_to_vec(val: &serde_json::Value) -> eyre::Result<Vec<u8>> {
     let hex = hex.strip_prefix("0x").unwrap_or(hex);
     let vec = hex::decode(hex)?;
     Ok(vec)
+}
+
+fn parse_account(val: &serde_json::Value) -> eyre::Result<Account> {
+    Ok(Account {
+        balance: val
+            .get("balance")
+            .ok_or_eyre("account.balance missing")
+            .and_then(hex_to_word)?,
+        nonce: val
+            .get("nonce")
+            .ok_or_eyre("account.balance missing")
+            .and_then(hex_to_word)?,
+        code_hash: val
+            .get("codeHash")
+            .ok_or_eyre("account.codeHash missing")
+            .and_then(hex_to_word)?,
+        root: val
+            .get("storageRoot")
+            .ok_or_eyre("account.storageRoot missing")
+            .and_then(hex_to_word)?,
+    })
 }
 
 #[cfg(test)]

@@ -1,13 +1,11 @@
-use primitive_types::U256;
-
-use crate::common::address::Address;
+use crate::common::{Word, address::Address};
 
 #[derive(Clone, Debug)]
 pub struct Call {
     pub calldata: Vec<u8>,
-    pub value: U256,
+    pub value: Word,
     pub origin: Address,
     pub from: Address,
     pub to: Address,
-    pub gas: U256,
+    pub gas: Word,
 }

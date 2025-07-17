@@ -1,9 +1,9 @@
-use primitive_types::U256;
+use crate::common::Word;
 
 #[derive(Clone, Default, Debug)]
 pub struct Account {
-    pub balance: U256,
-    pub nonce: U256,
-    pub code_hash: U256,
-    pub root: U256,
+    pub balance: Word,
+    pub nonce: Word,
+    pub code_hash: Word,
+    pub root: Word,
 }

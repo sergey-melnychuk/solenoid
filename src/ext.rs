@@ -1,22 +1,20 @@
 use std::{collections::HashMap, time::Instant};
 
-use primitive_types::U256;
-
 use crate::{
-    common::{account::Account, address::Address},
+    common::{Word, account::Account, address::Address},
     eth::EthClient,
 };
 
 #[derive(Default)]
 pub struct State {
     account: Account,
-    data: HashMap<U256, U256>,
+    pub(crate) data: HashMap<Word, Word>,
     code: Vec<u8>,
 }
 
 pub struct Ext {
     block_hash: String,
-    state: HashMap<Address, State>,
+    pub(crate) state: HashMap<Address, State>,
     eth: EthClient,
 }
 
@@ -29,7 +27,7 @@ impl Ext {
         }
     }
 
-    pub async fn get(&mut self, addr: &Address, key: &U256) -> eyre::Result<U256> {
+    pub async fn get(&mut self, addr: &Address, key: &Word) -> eyre::Result<Word> {
         let val = if let Some(val) = self.state.get(addr).and_then(|s| s.data.get(key)).copied() {
             val
         } else {
@@ -48,12 +46,13 @@ impl Ext {
         Ok(val)
     }
 
-    pub async fn put(&mut self, addr: &Address, key: U256, val: U256) -> eyre::Result<()> {
+    pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
         let state = self.state.entry(*addr).or_default();
         state.data.insert(key, val);
         Ok(())
     }
 
+    #[cfg(feature = "account")]
     pub async fn acc(&mut self, addr: &Address) -> eyre::Result<Account> {
         if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
             Ok(acc)
@@ -77,6 +76,19 @@ impl Ext {
             let state = self.state.entry(*addr).or_default();
             state.code = code.clone();
             Ok(code)
+        }
+    }
+
+    pub async fn balance(&mut self, addr: &Address) -> eyre::Result<Word> {
+        if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
+            Ok(acc.balance)
+        } else {
+            let address = format!("0x{}", hex::encode(addr.0));
+            let balance = self.eth.get_balance(&self.block_hash, &address).await?;
+
+            let state = self.state.entry(*addr).or_default();
+            state.account.balance = balance;
+            Ok(balance)
         }
     }
 

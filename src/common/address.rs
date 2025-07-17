@@ -1,4 +1,4 @@
-use primitive_types::U256;
+use crate::common::Word;
 
 #[derive(Clone, Copy, Default, Hash, Eq, PartialEq)]
 pub struct Address(pub [u8; 20]);
@@ -21,16 +21,16 @@ impl std::fmt::Debug for Address {
     }
 }
 
-impl From<&Address> for U256 {
+impl From<&Address> for Word {
     fn from(value: &Address) -> Self {
         let mut bytes = [0u8; 32];
         bytes[12..].copy_from_slice(&value.0);
-        U256::from_big_endian(&bytes)
+        Word::from_big_endian(&bytes)
     }
 }
 
-impl From<&U256> for Address {
-    fn from(value: &U256) -> Self {
+impl From<&Word> for Address {
+    fn from(value: &Word) -> Self {
         let bytes: [u8; 32] = value.to_big_endian();
         let mut ret = Address::default();
         ret.0[..].copy_from_slice(&bytes[12..]);
