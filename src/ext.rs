@@ -13,17 +13,19 @@ pub struct State {
 }
 
 pub struct Ext {
+    eth: EthClient,
     block_hash: String,
     pub(crate) state: HashMap<Address, State>,
-    eth: EthClient,
+    pub(crate) original: HashMap<(Address, Word), Word>,
 }
 
 impl Ext {
     pub fn new(block_hash: String, eth: EthClient) -> Self {
         Self {
+            eth,
             block_hash,
             state: Default::default(),
-            eth,
+            original: HashMap::default(),
         }
     }
 
@@ -38,6 +40,7 @@ impl Ext {
                 .eth
                 .get_storage_at(&self.block_hash, &address, &hex)
                 .await?;
+            self.original.entry((*addr, *key)).or_insert(val);
             let ms = now.elapsed().as_millis();
             let addr = hex::encode(addr.0);
             tracing::info!("SLOAD: [{ms} ms] 0x{addr}[{key:#x}]={val:#x}");

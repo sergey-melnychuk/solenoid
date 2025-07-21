@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use i256::I256;
 use thiserror::Error;
 
@@ -24,6 +22,8 @@ pub enum ExecutorError {
     InvalidJump,
     #[error("Missing data")]
     MissingData,
+    #[error("Wrong returned data size: expected {exp} but got {got}")]
+    WrongReturnDataSize { exp: usize, got: usize },
     #[error("Invalid opcode: {0:#02x}")]
     InvalidOpcode(u8),
     #[error("Unknown opcode: {0:#02x}")]
@@ -63,6 +63,9 @@ pub enum AccountTouch {
     Code(Address, Word, Vec<u8>),
 }
 
+#[derive(Debug, Clone)]
+pub struct Log(pub Address, pub Vec<Word>, pub Vec<u8>);
+
 #[derive(Debug, Default)]
 pub struct Evm {
     pub memory: Vec<u8>,
@@ -73,9 +76,9 @@ pub struct Evm {
     pub reverted: bool,
 
     pub mem_cost: Word,
+    pub logs: Vec<Log>,
     pub state: Vec<StateTouch>,
     pub account: Vec<AccountTouch>,
-    pub dirty_state: HashSet<(Address, Word)>,
 }
 
 impl Evm {
@@ -261,8 +264,8 @@ impl<T: EventTracer> Executor<T> {
         evm.gas.sub(call_cost.into())?;
 
         let data_cost = {
-            let total_calldata_len = code.bytecode.len();
-            let nonzero_bytes_count = code.bytecode.iter().filter(|byte| byte == &&0).count();
+            let total_calldata_len = call.calldata.len();
+            let nonzero_bytes_count = call.calldata.iter().filter(|byte| byte != &&0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         };
         evm.gas.sub(data_cost.into())?;
@@ -477,12 +480,12 @@ impl<T: EventTracer> Executor<T> {
             0x08 => {
                 // ADDMOD
                 // gas = 8.into();
-                todo!();
+                todo!("ADDMOD");
             }
             0x09 => {
                 // MULMOD
                 // gas = 8.into();
-                todo!();
+                todo!("MULMOD");
             }
             0x0a => {
                 // EXP
@@ -500,7 +503,7 @@ impl<T: EventTracer> Executor<T> {
             0x0b => {
                 // SIGNEXTEND
                 // gas = 5.into();
-                todo!()
+                todo!("SIGNEXTEND")
             }
 
             // 0x10s: Comparison & Bitwise Logic
@@ -863,16 +866,21 @@ impl<T: EventTracer> Executor<T> {
                 // SSTORE
                 let key = evm.pop()?;
 
-                let _is_warm = ext
+                let is_warm = ext
                     .state
                     .get(&call.to)
                     .map(|s| s.data.contains_key(&key))
                     .unwrap_or_default();
-                let _is_dirty = evm.dirty_state.contains(&(call.to, key));
 
                 let val = evm.get(ext, &call.to, &key).await?;
+                let original = ext
+                    .original
+                    .get(&(call.to, key))
+                    .cloned()
+                    .unwrap_or_default();
+
                 let new = evm.pop()?;
-                evm.put(ext, &call.to, key, val).await?;
+                evm.put(ext, &call.to, key, new).await?;
 
                 self.tracer.add(Event {
                     data: EventData::State(StateEvent::W(call.to, key, val, new)),
@@ -880,13 +888,45 @@ impl<T: EventTracer> Executor<T> {
                     reverted: false,
                 });
 
-                // TODO: gas calculation is tricky
-                let gas_cost = Word::zero();
-                evm.gas.sub(gas_cost)?;
+                // https://www.evm.codes/?fork=cancun#55
+                let mut gas_cost = if val == new {
+                    100
+                } else if val == original {
+                    if original.is_zero() { 20_000 } else { 2900 }
+                } else {
+                    100
+                };
+                if !is_warm {
+                    gas_cost += 2100;
+                }
+                gas = gas_cost.into();
 
-                // TODO: gas refund calculation is even trickier!
-                // See: https://www.evm.codes/?fork=cancun#55
-                let gas_refund = Word::zero();
+                // https://www.evm.codes/?fork=cancun#55
+                let mut gas_refund = Word::zero();
+                {
+                    if val != new {
+                        if val == original {
+                            if !original.is_zero() && new.is_zero() {
+                                gas_refund += 4800.into();
+                            }
+                        } else {
+                            if !original.is_zero() {
+                                if val.is_zero() {
+                                    gas_refund = gas_refund.saturating_sub(4800.into());
+                                } else if new.is_zero() {
+                                    gas_refund += 4800.into();
+                                }
+                            }
+                            if new == original {
+                                if original.is_zero() {
+                                    gas_refund += (20_000 - 100).into();
+                                } else {
+                                    gas_refund += (5000 - 2100 - 100).into();
+                                }
+                            }
+                        }
+                    }
+                }
                 evm.state
                     .push(StateTouch(call.to, key, val, Some(new), gas_refund));
             }
@@ -1005,8 +1045,11 @@ impl<T: EventTracer> Executor<T> {
                     topics[n - 1 - i] = evm.pop()?;
                 }
 
-                let _data = evm.memory[offset..offset + size].to_vec();
-                // TODO: store logs
+                if offset + size > evm.memory.len() {
+                    evm.memory.resize(offset + size, 0);
+                }
+                let data = evm.memory[offset..offset + size].to_vec();
+                evm.logs.push(Log(call.to, topics, data));
 
                 gas = 375.into();
                 gas += (375 * n + 8 * size).into();
@@ -1020,8 +1063,10 @@ impl<T: EventTracer> Executor<T> {
                 let offset = evm.pop()?;
                 let size = evm.pop()?;
 
+                gas = 32000.into();
+                gas += evm.mem_exp_cost();
+
                 todo!("CREATE");
-                // put address of the created contract on the stack
             }
             #[allow(unused_variables)]
             0xf1 => {
@@ -1054,18 +1099,20 @@ impl<T: EventTracer> Executor<T> {
                 self.tracer.join(tracer, inner_evm.reverted);
 
                 if !inner_evm.reverted {
-                    if ret.len() == ret_size {
-                        let size = ret_offset + ret_size;
-                        if size > evm.memory.len() {
-                            evm.memory.resize(size, 0);
-                            let gas = evm.mem_exp_cost();
-                            evm.gas.sub(gas)?;
-                        }
-                        evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
-                        evm.push(Word::one())?;
-                    } else {
-                        todo!("CALL: ret size mismatch data len")
+                    if ret.len() != ret_size {
+                        evm.error(ExecutorError::WrongReturnDataSize {
+                            exp: ret_size,
+                            got: ret.len(),
+                        })?;
                     }
+                    let size = ret_offset + ret_size;
+                    if size > evm.memory.len() {
+                        evm.memory.resize(size, 0);
+                        let gas = evm.mem_exp_cost();
+                        evm.gas.sub(gas)?;
+                    }
+                    evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+                    evm.push(Word::one())?;
                 } else {
                     inner_evm.revert(ext).await?;
                     evm.push(Word::zero())?;
@@ -1092,15 +1139,14 @@ impl<T: EventTracer> Executor<T> {
                 let size = evm.pop()?.as_usize();
 
                 if size > 0 {
-                    if offset > evm.memory.len() || offset + size > evm.memory.len() {
-                        evm.stopped = true;
-                        evm.reverted = true;
-                        return Err(ExecutorError::MissingData);
+                    if offset + size > evm.memory.len() {
+                        evm.memory.resize(offset + size, 0);
                     }
                     self.ret = evm.memory[offset..offset + size].to_vec();
                 } else {
                     self.ret.clear();
                 }
+                gas = evm.mem_exp_cost();
             }
             #[allow(unused_variables)]
             0xf4 => {

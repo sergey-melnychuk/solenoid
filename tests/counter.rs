@@ -183,7 +183,7 @@ async fn test_dec_with_override() -> eyre::Result<()> {
                 Word::zero(),
                 Word::one(),
                 Some(Word::zero()),
-                Word::zero()
+                Word::from(19900),
             ),
         ]
     );
@@ -233,5 +233,6 @@ async fn test_set() -> eyre::Result<()> {
             Word::zero()
         )]
     );
+    assert_eq!(evm.gas.used, 43513.into());
     Ok(())
 }
