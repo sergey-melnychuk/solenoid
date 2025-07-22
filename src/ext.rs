@@ -7,16 +7,16 @@ use crate::{
 
 #[derive(Default)]
 pub struct State {
-    account: Account,
-    pub(crate) data: HashMap<Word, Word>,
-    code: Vec<u8>,
+    pub account: Account,
+    pub data: HashMap<Word, Word>,
+    pub code: Vec<u8>,
 }
 
 pub struct Ext {
     eth: EthClient,
     block_hash: String,
-    pub(crate) state: HashMap<Address, State>,
-    pub(crate) original: HashMap<(Address, Word), Word>,
+    pub state: HashMap<Address, State>,
+    pub original: HashMap<(Address, Word), Word>,
 }
 
 impl Ext {
@@ -27,6 +27,11 @@ impl Ext {
             state: Default::default(),
             original: HashMap::default(),
         }
+    }
+
+    pub async fn latest(eth: EthClient) -> eyre::Result<Self> {
+        let (_, block_hash) = eth.get_latest_block().await?;
+        Ok(Self::new(block_hash, eth))
     }
 
     pub async fn get(&mut self, addr: &Address, key: &Word) -> eyre::Result<Word> {
@@ -95,11 +100,11 @@ impl Ext {
         }
     }
 
-    pub fn acc_mut(&mut self, addr: &Address) -> Option<&mut Account> {
-        self.state.get_mut(addr).map(|s| &mut s.account)
+    pub fn acc_mut(&mut self, addr: &Address) -> &mut Account {
+        &mut self.state.entry(*addr).or_default().account
     }
 
-    pub fn code_mut(&mut self, addr: &Address) -> Option<&mut Vec<u8>> {
-        self.state.get_mut(addr).map(|s| &mut s.code)
+    pub fn code_mut(&mut self, addr: &Address) -> &mut Vec<u8> {
+        &mut self.state.entry(*addr).or_default().code
     }
 }

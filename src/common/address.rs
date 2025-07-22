@@ -7,6 +7,25 @@ impl Address {
     pub fn zero() -> Self {
         Self([0u8; 20])
     }
+
+    pub fn is_zero(&self) -> bool {
+        self.0.iter().all(|byte| byte == &0)
+    }
+
+    pub fn of_smart_contract(&self, nonce: Word) -> Address {
+        // https://www.evm.codes/?fork=cancun#55
+        // address = keccak256(rlp([sender_address,sender_nonce]))[12:]
+        let a: Word = self.into();
+        let a: [u8; 32] = a.to_big_endian();
+        let b: [u8; 32] = nonce.to_big_endian();
+        let mut buffer = [0u8; 64];
+        buffer[0..32].copy_from_slice(&a);
+        buffer[32..].copy_from_slice(&b);
+        let hash = super::hash::keccak256(&buffer);
+        let mut addr = [0u8; 20];
+        addr.copy_from_slice(&hash[12..32]);
+        Address(addr)
+    }
 }
 
 impl std::fmt::Display for Address {
@@ -61,7 +80,7 @@ impl TryFrom<&str> for Address {
     type Error = crate::common::error::Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        if value.len() != 40 {
+        if value.len() != 40 && value.len() != 42 {
             return Err(crate::common::error::Error::InvalidAddress);
         }
         let mut bytes = [0u8; 20];

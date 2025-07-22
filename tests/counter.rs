@@ -1,5 +1,5 @@
 use solenoid::{
-    common::{Word, address::Address, call::Call},
+    common::{Word, addr, address::Address, call::Call},
     decoder::{Bytecode, Decoder},
     eth::EthClient,
     executor::{Evm, Executor, StateTouch},
@@ -20,9 +20,9 @@ async fn call(
     overrides: Vec<(Address, Word, Word)>,
 ) -> eyre::Result<(NoopTracer, Vec<u8>, Evm)> {
     let value = Word::zero();
-    let from = Address::try_from("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")?;
+    let from = addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266");
     let call = Call {
-        calldata: hex::decode(calldata.trim_start_matches("0x"))?,
+        data: hex::decode(calldata.trim_start_matches("0x"))?,
         value,
         origin: from,
         from,
@@ -33,9 +33,8 @@ async fn call(
     // TODO: use mock http server for hermetic tests
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
-    let (_, block_hash) = eth.get_latest_block().await?;
+    let mut ext = Ext::latest(eth).await?;
 
-    let mut ext = Ext::new(block_hash, eth);
     for (to, key, val) in overrides {
         ext.put(&to, key, val).await?;
     }
@@ -59,15 +58,14 @@ async fn test_deploy() -> eyre::Result<()> {
     // TODO: extract EthClient trait and provide mock impl here?
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
-    let (_, block_hash) = eth.get_latest_block().await?;
+    let mut ext = Ext::latest(eth).await?;
 
-    let mut ext = Ext::new(block_hash, eth);
     let executor = Executor::<NoopTracer>::new();
 
     let value = Word::zero();
-    let from = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let from = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
     let call = Call {
-        calldata: vec![],
+        data: vec![],
         value,
         origin: from,
         from,
@@ -86,7 +84,7 @@ async fn test_deploy() -> eyre::Result<()> {
 #[tokio::test]
 async fn test_get() -> eyre::Result<()> {
     dotenv::dotenv()?;
-    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
     let (_, ret, evm) = call("0x6d4ce63c", to, vec![]).await?;
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 32]);
@@ -106,12 +104,12 @@ async fn test_get() -> eyre::Result<()> {
 #[tokio::test]
 async fn test_get_with_override() -> eyre::Result<()> {
     dotenv::dotenv()?;
-    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
     let (_, ret, evm) = call(
         "0x6d4ce63c",
         to,
         vec![(
-            Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?,
+            addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512"),
             Word::zero(),
             Word::one(),
         )],
@@ -138,7 +136,7 @@ async fn test_get_with_override() -> eyre::Result<()> {
 #[tokio::test]
 async fn test_dec() -> eyre::Result<()> {
     dotenv::dotenv()?;
-    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
     let (_, ret, evm) = call("0xb3bcfa82", to, vec![]).await?;
     assert!(evm.reverted);
     assert_eq!(
@@ -161,12 +159,12 @@ async fn test_dec() -> eyre::Result<()> {
 #[tokio::test]
 async fn test_dec_with_override() -> eyre::Result<()> {
     dotenv::dotenv()?;
-    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
     let (_, ret, evm) = call(
         "0xb3bcfa82",
         to,
         vec![(
-            Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?,
+            addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512"),
             Word::zero(),
             Word::one(),
         )],
@@ -193,7 +191,7 @@ async fn test_dec_with_override() -> eyre::Result<()> {
 #[tokio::test]
 async fn test_inc() -> eyre::Result<()> {
     dotenv::dotenv()?;
-    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
     let (_, ret, evm) = call("0x371303c0", to, vec![]).await?;
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 0]);
@@ -216,7 +214,7 @@ async fn test_inc() -> eyre::Result<()> {
 #[tokio::test]
 async fn test_set() -> eyre::Result<()> {
     dotenv::dotenv()?;
-    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
 
     let val = Word::from_str_radix("42", 16)?;
     let (_, ret, evm) = call(&format!("0x60fe47b1{val:064x}"), to, vec![]).await?;

@@ -2,7 +2,7 @@
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     use solenoid::{
-        common::{Word, address::Address, call::Call},
+        common::{Word, addr, address::Address, call::Call},
         decoder::{Bytecode, Decoder},
         eth::EthClient,
         executor::{Evm, Executor, StateTouch},
@@ -50,22 +50,21 @@ async fn main() -> eyre::Result<()> {
     dump(&code);
 
     let value = Word::zero();
-    let from = Address::try_from("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")?;
-    let to = Address::try_from("e7f1725E7734CE288F8367e1Bb143E90bb3F0512")?;
+    let from = addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+    // let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")?;
+    let to = Address::zero();
     let call = Call {
-        calldata,
+        data: calldata,
         value,
         origin: from,
         from,
         to,
-        gas: Word::from(100500),
+        gas: Word::from(1_000_000),
     };
 
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
-    let (_, block_hash) = eth.get_latest_block().await?;
-
-    let mut ext = Ext::new(block_hash, eth);
+    let mut ext = Ext::latest(eth).await?;
     // Provide state overrides:
     // ext.put(&to, Word::zero(), Word::one()).await?;
 
@@ -74,21 +73,45 @@ async fn main() -> eyre::Result<()> {
     let mut evm = Evm::default();
     let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
     if !evm.reverted {
-        println!("\nOK: 0x{}", hex::encode(ret));
+        println!("OK: 0x{}", hex::encode(ret));
     } else {
-        println!("\nREVERTED: 0x{}", hex::encode(ret));
+        println!("REVERTED: 0x{}", hex::encode(ret));
     }
 
-    println!("GAS: {} / {}", evm.gas.used, evm.gas.limit);
+    println!("GAS: {}", evm.gas.used);
+    println!("---");
     evm.state
         .iter()
         .for_each(|StateTouch(addr, key, val, new, _)| {
             if let Some(new) = new {
-                println!("W:{addr}[{key:0x}]={val:0x}->{new:0x}");
+                println!("W:{addr}[0x{key:0x}]=0x{val:0x}->0x{new:0x}");
             } else {
-                println!("R:{addr}[{key:0x}]={val:0x}");
+                println!("R:{addr}[0x{key:0x}]=0x{val:0x}");
             }
         });
+    println!("---");
+    evm.account.iter().for_each(|acc| {
+        use solenoid::executor::AccountTouch;
+        match acc {
+            AccountTouch::Empty => (),
+            AccountTouch::Code(addr, hash, code) => {
+                println!("CODE: [{addr}]=0x{} (0x{hash:0x})", hex::encode(code));
+            }
+            AccountTouch::Nonce(addr, val, new) => {
+                println!("NONCE: {addr} 0x{val:0x}->0x{new:0x}");
+            }
+            AccountTouch::Value(addr, val, new) => {
+                println!("VALUE: {addr} 0x{val:0x}->0x{new:0x}");
+            }
+        }
+    });
+    println!("---");
+    for (addr, state) in ext.state {
+        println!("\n{addr}:");
+        println!("{:#?}", state.account);
+        println!("DATA: {:#?}", state.data);
+        println!("CODE: ({} bytes)", state.code.len());
+    }
 
     Ok(())
 }

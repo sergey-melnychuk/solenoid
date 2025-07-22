@@ -54,7 +54,7 @@ impl StateTouch {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Eq, PartialEq)]
 pub enum AccountTouch {
     #[default]
     Empty,
@@ -161,22 +161,14 @@ impl Evm {
         for ac in self.account.iter() {
             match ac {
                 AccountTouch::Nonce(addr, val, _new) => {
-                    if let Some(acc) = ext.acc_mut(addr) {
-                        acc.nonce = (*val).into();
-                    }
+                    ext.acc_mut(addr).nonce = (*val).into();
                 }
                 AccountTouch::Value(addr, val, _new) => {
-                    if let Some(acc) = ext.acc_mut(addr) {
-                        acc.balance = *val;
-                    }
+                    ext.acc_mut(addr).balance = *val;
                 }
                 AccountTouch::Code(addr, _hash, _code) => {
-                    if let Some(acc) = ext.acc_mut(addr) {
-                        acc.code_hash = Word::zero();
-                    }
-                    if let Some(code) = ext.code_mut(addr) {
-                        code.clear();
-                    }
+                    ext.acc_mut(addr).code = Word::zero();
+                    ext.code_mut(addr).clear();
                 }
                 AccountTouch::Empty => (),
             }
@@ -223,6 +215,12 @@ impl Gas {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct Context {
+    pub depth: usize,
+    // block, gas price, etc
+}
+
 #[derive(Default)]
 pub struct Executor<T: EventTracer> {
     tracer: T,
@@ -253,7 +251,7 @@ impl<T: EventTracer> Executor<T> {
         evm: &mut Evm,
         ext: &mut Ext,
     ) -> Result<(T, Vec<u8>), ExecutorError> {
-        self.tracer.add(Event {
+        self.tracer.push(Event {
             reverted: false,
             depth: 0,
             data: EventData::Call(call.clone(), CallType::Call),
@@ -264,8 +262,8 @@ impl<T: EventTracer> Executor<T> {
         evm.gas.sub(call_cost.into())?;
 
         let data_cost = {
-            let total_calldata_len = call.calldata.len();
-            let nonzero_bytes_count = call.calldata.iter().filter(|byte| byte != &&0).count();
+            let total_calldata_len = call.data.len();
+            let nonzero_bytes_count = call.data.iter().filter(|byte| byte != &&0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         };
         evm.gas.sub(data_cost.into())?;
@@ -294,18 +292,14 @@ impl<T: EventTracer> Executor<T> {
                 });
             }
 
-            if let Some(acc) = ext.acc_mut(&call.from) {
-                acc.balance -= call.value + gas_fee;
-            }
+            ext.acc_mut(&call.from).balance -= call.value + gas_fee;
             evm.account.push(AccountTouch::Value(
                 call.from,
                 src,
                 src - call.value - gas_fee,
             ));
 
-            if let Some(acc) = ext.acc_mut(&call.to) {
-                acc.balance += call.value;
-            }
+            ext.acc_mut(&call.to).balance += call.value;
             evm.account
                 .push(AccountTouch::Value(call.to, dst, dst + call.value));
 
@@ -313,7 +307,8 @@ impl<T: EventTracer> Executor<T> {
             evm.reverted = false;
             Ok((self.tracer, vec![]))
         } else {
-            self.execute_with_depth(code, call, evm, ext, 0).await
+            let ctx = Context::default();
+            self.execute_with_depth(code, call, evm, ext, ctx).await
         }
     }
 
@@ -323,33 +318,21 @@ impl<T: EventTracer> Executor<T> {
         call: &Call,
         evm: &mut Evm,
         ext: &mut Ext,
-        depth: usize,
+        ctx: Context,
     ) -> Result<(T, Vec<u8>), ExecutorError> {
-        if depth > CALL_DEPTH_LIMIT {
+        if ctx.depth > CALL_DEPTH_LIMIT {
             return Err(ExecutorError::CallDepthLimitReached);
         }
 
         while !evm.stopped && evm.pc < code.instructions.len() {
             let instruction = &code.instructions[evm.pc];
 
-            if self.log {
-                let data = instruction
-                    .argument
-                    .as_ref()
-                    .map(|data| format!("0x{}", hex::encode(data)));
-                println!(
-                    "\n{:#04x}: {} {}",
-                    evm.pc,
-                    instruction.opcode.name(),
-                    data.unwrap_or_default()
-                );
-            }
-
             let cost = self
-                .execute_instruction(code, call, evm, ext, depth, instruction)
+                .execute_instruction(code, call, evm, ext, ctx, instruction)
                 .await?;
-            self.tracer.add(Event {
-                depth,
+
+            self.tracer.push(Event {
+                depth: ctx.depth,
                 reverted: false,
                 data: EventData::Opcode {
                     pc: evm.pc,
@@ -362,6 +345,16 @@ impl<T: EventTracer> Executor<T> {
             evm.gas(cost)?;
 
             if self.log {
+                let data = instruction
+                    .argument
+                    .as_ref()
+                    .map(|data| format!("0x{}", hex::encode(data)));
+                println!(
+                    "{:#04x}: {} {}",
+                    evm.pc,
+                    instruction.opcode.name(),
+                    data.unwrap_or_default()
+                );
                 println!("MEMORY:{}", if evm.memory.is_empty() { " []" } else { "" });
                 evm.memory.chunks(32).enumerate().for_each(|(index, word)| {
                     let offset = index << 5;
@@ -374,6 +367,7 @@ impl<T: EventTracer> Executor<T> {
                     .rev()
                     .enumerate()
                     .for_each(|(i, word)| println!("{:>4}: {word:#02x}", i + 1));
+                println!();
             }
         }
 
@@ -386,7 +380,7 @@ impl<T: EventTracer> Executor<T> {
         call: &Call,
         evm: &mut Evm,
         ext: &mut Ext,
-        depth: usize,
+        ctx: Context,
         instruction: &Instruction,
     ) -> Result<Word, ExecutorError> {
         let mut gas = Word::zero();
@@ -679,18 +673,18 @@ impl<T: EventTracer> Executor<T> {
             0x35 => {
                 // CALLDATALOAD
                 let offset = evm.pop()?.as_usize();
-                if offset > call.calldata.len() {
+                if offset > call.data.len() {
                     evm.error(ExecutorError::MissingData)?;
                 }
                 let mut data = [0u8; 32];
-                let copy = call.calldata.len().min(offset + 32) - offset;
-                data[0..copy].copy_from_slice(&call.calldata[offset..offset + copy]);
+                let copy = call.data.len().min(offset + 32) - offset;
+                data[0..copy].copy_from_slice(&call.data[offset..offset + copy]);
                 evm.push(Word::from_big_endian(&data))?;
                 gas = 3.into();
             }
             0x36 => {
                 // CALLDATASIZE
-                evm.push(Word::from(call.calldata.len()))?;
+                evm.push(Word::from(call.data.len()))?;
                 gas = 2.into();
             }
             0x37 => {
@@ -703,7 +697,7 @@ impl<T: EventTracer> Executor<T> {
                     evm.memory.resize(len, 0);
                 }
                 evm.memory[dest_offset..dest_offset + size]
-                    .copy_from_slice(&call.calldata[offset..offset + size]);
+                    .copy_from_slice(&call.data[offset..offset + size]);
                 gas = (3 + 3 * size.div_ceil(32)).into();
                 gas += evm.mem_exp_cost();
             }
@@ -851,9 +845,9 @@ impl<T: EventTracer> Executor<T> {
                 evm.push(val)?;
                 evm.state
                     .push(StateTouch(call.to, key, val, None, Word::zero()));
-                self.tracer.add(Event {
+                self.tracer.push(Event {
                     data: EventData::State(StateEvent::R(call.to, key, val)),
-                    depth,
+                    depth: ctx.depth,
                     reverted: false,
                 });
                 gas = if is_warm {
@@ -882,9 +876,9 @@ impl<T: EventTracer> Executor<T> {
                 let new = evm.pop()?;
                 evm.put(ext, &call.to, key, new).await?;
 
-                self.tracer.add(Event {
+                self.tracer.push(Event {
                     data: EventData::State(StateEvent::W(call.to, key, val, new)),
-                    depth,
+                    depth: ctx.depth,
                     reverted: false,
                 });
 
@@ -1060,18 +1054,88 @@ impl<T: EventTracer> Executor<T> {
             0xf0 => {
                 // CREATE
                 let value = evm.pop()?;
-                let offset = evm.pop()?;
-                let size = evm.pop()?;
+                let offset = evm.pop()?.as_usize();
+                let size = evm.pop()?.as_usize();
 
-                gas = 32000.into();
-                gas += evm.mem_exp_cost();
+                if offset + size > evm.memory.len() {
+                    evm.memory.resize(offset + size, 0);
+                }
+                gas = evm.mem_exp_cost() + Word::from(32000);
+                // evm.gas(gas)?;
 
-                todo!("CREATE");
+                let bytecode = evm.memory[offset..offset + size].to_vec();
+                let code = Decoder::decode(bytecode)?;
+
+                let inner_call = Call {
+                    data: vec![],
+                    value,
+                    from: call.to,
+                    origin: call.origin,
+                    to: Address::zero(),
+                    gas: evm.gas.remaining(),
+                };
+                let mut inner_evm = Evm {
+                    gas: Gas::new(evm.gas.remaining()),
+                    ..Default::default()
+                };
+                let inner_ctx = Context {
+                    depth: ctx.depth + 1,
+                };
+                let executor = Executor::<T>::with_tracer(self.tracer.fork());
+                let future =
+                    executor.execute_with_depth(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
+                let (tracer, code) = Box::pin(future).await?;
+                self.tracer.join(tracer, inner_evm.reverted);
+
+                if !inner_evm.reverted {
+                    gas += inner_evm.gas.used;
+                    let nonce = ext.acc_mut(&call.from).nonce;
+                    let address: Address = call.from.of_smart_contract(nonce);
+
+                    let hash = keccak256(&code);
+                    *ext.code_mut(&address) = code.clone();
+                    ext.acc_mut(&address).code = Word::from_big_endian(&hash);
+                    ext.acc_mut(&call.from).nonce += Word::one();
+                    evm.account.push(AccountTouch::Code(
+                        address,
+                        Word::from_big_endian(&hash),
+                        code.clone(),
+                    ));
+                    evm.account.push(AccountTouch::Nonce(
+                        call.from,
+                        nonce.as_u64(),
+                        nonce.as_u64() + 1,
+                    ));
+                    self.tracer.push(Event {
+                        data: EventData::Create(address, Word::from_big_endian(&hash), code),
+                        depth: ctx.depth,
+                        reverted: false,
+                    });
+                    self.tracer.push(Event {
+                        data: EventData::Nonce(call.from, nonce.as_u64() + 1),
+                        depth: ctx.depth,
+                        reverted: false,
+                    });
+                    for acc in inner_evm.account {
+                        evm.account.push(acc);
+                    }
+                    for mut state in inner_evm.state {
+                        if state.0.is_zero() {
+                            state.0 = address;
+                        }
+                        evm.state.push(state);
+                    }
+                    evm.push((&address).into())?;
+                } else {
+                    gas += evm.gas.used;
+                    inner_evm.revert(ext).await?;
+                    evm.push(Word::zero())?;
+                }
             }
             #[allow(unused_variables)]
             0xf1 => {
                 // CALL
-                let gas = evm.pop()?;
+                let call_gas = evm.pop()?;
                 let address = &evm.pop()?;
                 let value = evm.pop()?;
                 let args_offset = evm.pop()?.as_usize();
@@ -1079,22 +1143,31 @@ impl<T: EventTracer> Executor<T> {
                 let ret_offset = evm.pop()?.as_usize();
                 let ret_size = evm.pop()?.as_usize();
 
+                gas = evm.mem_exp_cost() + Word::from(21000);
+                // evm.gas(gas_cost)?;
+
                 let bytecode = evm.code(ext, &address.into()).await?;
                 let code = Decoder::decode(bytecode)?;
 
                 let inner_call = Call {
-                    calldata: evm.memory[args_offset..args_offset + args_size].to_vec(),
+                    data: evm.memory[args_offset..args_offset + args_size].to_vec(),
                     value,
                     from: call.to,
                     origin: call.origin,
                     to: address.into(),
-                    gas,
+                    gas: call_gas,
                 };
-                let mut inner_evm = Evm::default();
+                let mut inner_evm = Evm {
+                    gas: Gas::new(call_gas),
+                    ..Default::default()
+                };
+                let inner_ctx = Context {
+                    depth: ctx.depth + 1,
+                };
 
                 let executor = Executor::<T>::with_tracer(self.tracer.fork());
                 let future =
-                    executor.execute_with_depth(&code, &inner_call, &mut inner_evm, ext, depth + 1);
+                    executor.execute_with_depth(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
                 let (tracer, ret) = Box::pin(future).await?;
                 self.tracer.join(tracer, inner_evm.reverted);
 
@@ -1108,12 +1181,20 @@ impl<T: EventTracer> Executor<T> {
                     let size = ret_offset + ret_size;
                     if size > evm.memory.len() {
                         evm.memory.resize(size, 0);
-                        let gas = evm.mem_exp_cost();
-                        evm.gas.sub(gas)?;
+                        gas += evm.mem_exp_cost();
+                        // evm.gas(gas)?;
                     }
                     evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+                    for acc in inner_evm.account {
+                        evm.account.push(acc);
+                    }
+                    for sta in inner_evm.state {
+                        evm.state.push(sta);
+                    }
+                    gas += evm.gas.used;
                     evm.push(Word::one())?;
                 } else {
+                    gas += evm.gas.used;
                     inner_evm.revert(ext).await?;
                     evm.push(Word::zero())?;
                 }

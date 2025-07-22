@@ -1,6 +1,9 @@
 use eyre::OptionExt;
 
-use crate::common::{Word, account::Account};
+use crate::common::Word;
+
+#[cfg(feature = "account")]
+use crate::common::account::Account;
 
 #[derive(Clone)]
 pub struct EthClient {
@@ -94,6 +97,7 @@ impl EthClient {
         .and_then(|value| hex_to_word(&value))
     }
 
+    #[cfg(feature = "account")]
     pub async fn get_account(&self, block_hash: &str, address: &str) -> eyre::Result<Account> {
         self.rpc(serde_json::json!({
             "jsonrpc": "2.0",
@@ -178,6 +182,7 @@ fn hex_to_vec(val: &serde_json::Value) -> eyre::Result<Vec<u8>> {
     Ok(vec)
 }
 
+#[cfg(feature = "account")]
 fn parse_account(val: &serde_json::Value) -> eyre::Result<Account> {
     Ok(Account {
         balance: val

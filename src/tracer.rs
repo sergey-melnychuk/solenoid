@@ -1,15 +1,18 @@
 use crate::common::{Word, address::Address, call::Call};
 
+#[derive(Debug)]
 pub enum StackEvent {
     Push(Word),
     Pop(Word),
 }
 
+#[derive(Debug)]
 pub enum StateEvent {
     R(Address, Word, Word),
     W(Address, Word, Word, Word),
 }
 
+#[derive(Debug)]
 pub enum MemoryEvent {
     R(usize, Vec<u8>),
     W(usize, Vec<u8>),
@@ -24,6 +27,7 @@ pub enum CallType {
     Delegate,
 }
 
+#[derive(Debug)]
 pub enum EventData {
     Opcode {
         pc: usize,
@@ -45,8 +49,11 @@ pub enum EventData {
     Revert(Vec<u8>),
     Value(Address, Word, Word),
     Nonce(Address, u64),
+    // Syscall (precompile)
+    // Extended: Tx, Block, Init
 }
 
+#[derive(Debug)]
 pub struct Event {
     pub data: EventData,
     pub depth: usize,
@@ -55,17 +62,27 @@ pub struct Event {
 
 #[allow(unused_variables)] // default impl ignores all arguments
 pub trait EventTracer: Default {
-    fn get(&self) -> Vec<Event> {
+    fn push(&mut self, event: Event) {
+        #[cfg(feature = "tracing")]
+        println!("TRACER: {event:?}");
+    }
+
+    fn peek(&self) -> &[Event] {
+        &[]
+    }
+
+    fn take(&mut self) -> Vec<Event> {
         vec![]
     }
-    fn add(&mut self, event: Event) {}
+
     fn fork(&self) -> Self {
         Self::default()
     }
-    fn join(&mut self, other: Self, reverted: bool) {
-        for mut event in other.get() {
+
+    fn join(&mut self, mut other: Self, reverted: bool) {
+        for mut event in other.take() {
             event.reverted = reverted;
-            self.add(event);
+            self.push(event);
         }
     }
 }
