@@ -82,6 +82,10 @@ pub struct Evm {
 }
 
 impl Evm {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub(crate) fn mem_exp_cost(&mut self) -> Word {
         let memory_byte_size = self.memory.len();
         let memory_size_word = memory_byte_size.div_ceil(32);
@@ -217,6 +221,8 @@ impl Gas {
 
 #[derive(Clone, Copy, Default)]
 pub struct Context {
+    pub created: Address,
+    pub origin: Address,
     pub depth: usize,
     // block, gas price, etc
 }
@@ -268,7 +274,7 @@ impl<T: EventTracer> Executor<T> {
         };
         evm.gas.sub(data_cost.into())?;
 
-        if code.bytecode.is_empty() {
+        if code.bytecode.is_empty() || (call.data.is_empty() && !call.to.is_zero()) {
             // TODO: check hash & signature first
             let src = ext.balance(&call.from).await?;
             let dst = ext.balance(&call.to).await?;
@@ -282,7 +288,7 @@ impl<T: EventTracer> Executor<T> {
 
             // TODO: handle EIP-1559 here?
             // See: https://www.blocknative.com/blog/eip-1559-fees
-            let gas_price = Word::one();
+            let gas_price = Word::one() * 1_000_000; // 100 Gwei
             let gas_fee = evm.gas.used * gas_price;
 
             if src < call.value + gas_fee {
@@ -291,6 +297,14 @@ impl<T: EventTracer> Executor<T> {
                     need: call.value + gas_fee,
                 });
             }
+
+            let nonce = ext.acc_mut(&call.from).nonce;
+            ext.acc_mut(&call.from).nonce = nonce + Word::one();
+            evm.account.push(AccountTouch::Nonce(
+                call.from,
+                nonce.as_u64(),
+                nonce.as_u64() + 1,
+            ));
 
             ext.acc_mut(&call.from).balance -= call.value + gas_fee;
             evm.account.push(AccountTouch::Value(
@@ -307,12 +321,17 @@ impl<T: EventTracer> Executor<T> {
             evm.reverted = false;
             Ok((self.tracer, vec![]))
         } else {
-            let ctx = Context::default();
-            self.execute_with_depth(code, call, evm, ext, ctx).await
+            let nonce = ext.acc_mut(&call.from).nonce;
+            let address = call.from.of_smart_contract(nonce);
+            let ctx = Context {
+                created: address,
+                ..Context::default()
+            };
+            self.execute_with_context(code, call, evm, ext, ctx).await
         }
     }
 
-    async fn execute_with_depth(
+    pub async fn execute_with_context(
         mut self,
         code: &Bytecode,
         call: &Call,
@@ -374,7 +393,7 @@ impl<T: EventTracer> Executor<T> {
         Ok((self.tracer, self.ret))
     }
 
-    pub async fn execute_instruction(
+    async fn execute_instruction(
         &mut self,
         code: &Bytecode,
         call: &Call,
@@ -385,6 +404,12 @@ impl<T: EventTracer> Executor<T> {
     ) -> Result<Word, ExecutorError> {
         let mut gas = Word::zero();
         let mut pc_increment = true;
+
+        let this = if call.to.is_zero() {
+            ctx.created
+        } else {
+            call.to
+        };
 
         let opcode = instruction.opcode.code;
         match opcode {
@@ -640,7 +665,7 @@ impl<T: EventTracer> Executor<T> {
             // 30-3f
             0x30 => {
                 // ADDRESS
-                evm.push((&call.to).into())?;
+                evm.push((&this).into())?;
                 gas = 2.into();
             }
             0x31 => {
@@ -657,7 +682,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x32 => {
                 // ORIGIN
-                evm.push((&call.origin).into())?;
+                evm.push((&ctx.origin).into())?;
                 gas = 2.into();
             }
             0x33 => {
@@ -838,15 +863,15 @@ impl<T: EventTracer> Executor<T> {
                 let key = evm.pop()?;
                 let is_warm = ext
                     .state
-                    .get(&call.to)
+                    .get(&this)
                     .map(|s| s.data.contains_key(&key))
                     .unwrap_or_default();
-                let val = evm.get(ext, &call.to, &key).await?;
+                let val = evm.get(ext, &this, &key).await?;
                 evm.push(val)?;
                 evm.state
-                    .push(StateTouch(call.to, key, val, None, Word::zero()));
+                    .push(StateTouch(this, key, val, None, Word::zero()));
                 self.tracer.push(Event {
-                    data: EventData::State(StateEvent::R(call.to, key, val)),
+                    data: EventData::State(StateEvent::R(this, key, val)),
                     depth: ctx.depth,
                     reverted: false,
                 });
@@ -862,22 +887,18 @@ impl<T: EventTracer> Executor<T> {
 
                 let is_warm = ext
                     .state
-                    .get(&call.to)
+                    .get(&this)
                     .map(|s| s.data.contains_key(&key))
                     .unwrap_or_default();
 
-                let val = evm.get(ext, &call.to, &key).await?;
-                let original = ext
-                    .original
-                    .get(&(call.to, key))
-                    .cloned()
-                    .unwrap_or_default();
+                let val = evm.get(ext, &this, &key).await?;
+                let original = ext.original.get(&(this, key)).cloned().unwrap_or_default();
 
                 let new = evm.pop()?;
-                evm.put(ext, &call.to, key, new).await?;
+                evm.put(ext, &this, key, new).await?;
 
                 self.tracer.push(Event {
-                    data: EventData::State(StateEvent::W(call.to, key, val, new)),
+                    data: EventData::State(StateEvent::W(this, key, val, new)),
                     depth: ctx.depth,
                     reverted: false,
                 });
@@ -922,7 +943,7 @@ impl<T: EventTracer> Executor<T> {
                     }
                 }
                 evm.state
-                    .push(StateTouch(call.to, key, val, Some(new), gas_refund));
+                    .push(StateTouch(this, key, val, Some(new), gas_refund));
             }
             0x56 => {
                 // JUMP
@@ -957,6 +978,11 @@ impl<T: EventTracer> Executor<T> {
             0x59 => {
                 // MSIZE
                 evm.push(Word::from(evm.memory.len()))?;
+                gas = 2.into();
+            }
+            0x5a => {
+                // GAS
+                evm.push(evm.gas.remaining())?;
                 gas = 2.into();
             }
             0x5b => {
@@ -1043,7 +1069,7 @@ impl<T: EventTracer> Executor<T> {
                     evm.memory.resize(offset + size, 0);
                 }
                 let data = evm.memory[offset..offset + size].to_vec();
-                evm.logs.push(Log(call.to, topics, data));
+                evm.logs.push(Log(this, topics, data));
 
                 gas = 375.into();
                 gas += (375 * n + 8 * size).into();
@@ -1061,16 +1087,18 @@ impl<T: EventTracer> Executor<T> {
                     evm.memory.resize(offset + size, 0);
                 }
                 gas = evm.mem_exp_cost() + Word::from(32000);
-                // evm.gas(gas)?;
+                evm.gas(gas)?;
 
                 let bytecode = evm.memory[offset..offset + size].to_vec();
                 let code = Decoder::decode(bytecode)?;
 
+                let nonce = ext.acc_mut(&this).nonce;
+                let address: Address = this.of_smart_contract(nonce);
+
                 let inner_call = Call {
                     data: vec![],
                     value,
-                    from: call.to,
-                    origin: call.origin,
+                    from: this,
                     to: Address::zero(),
                     gas: evm.gas.remaining(),
                 };
@@ -1079,18 +1107,23 @@ impl<T: EventTracer> Executor<T> {
                     ..Default::default()
                 };
                 let inner_ctx = Context {
+                    created: address,
+                    origin: ctx.origin,
                     depth: ctx.depth + 1,
                 };
                 let executor = Executor::<T>::with_tracer(self.tracer.fork());
-                let future =
-                    executor.execute_with_depth(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
+                let future = executor.execute_with_context(
+                    &code,
+                    &inner_call,
+                    &mut inner_evm,
+                    ext,
+                    inner_ctx,
+                );
                 let (tracer, code) = Box::pin(future).await?;
                 self.tracer.join(tracer, inner_evm.reverted);
 
                 if !inner_evm.reverted {
                     gas += inner_evm.gas.used;
-                    let nonce = ext.acc_mut(&call.from).nonce;
-                    let address: Address = call.from.of_smart_contract(nonce);
 
                     let hash = keccak256(&code);
                     *ext.code_mut(&address) = code.clone();
@@ -1119,10 +1152,7 @@ impl<T: EventTracer> Executor<T> {
                     for acc in inner_evm.account {
                         evm.account.push(acc);
                     }
-                    for mut state in inner_evm.state {
-                        if state.0.is_zero() {
-                            state.0 = address;
-                        }
+                    for state in inner_evm.state {
                         evm.state.push(state);
                     }
                     evm.push((&address).into())?;
@@ -1132,7 +1162,6 @@ impl<T: EventTracer> Executor<T> {
                     evm.push(Word::zero())?;
                 }
             }
-            #[allow(unused_variables)]
             0xf1 => {
                 // CALL
                 let call_gas = evm.pop()?;
@@ -1144,7 +1173,6 @@ impl<T: EventTracer> Executor<T> {
                 let ret_size = evm.pop()?.as_usize();
 
                 gas = evm.mem_exp_cost() + Word::from(21000);
-                // evm.gas(gas_cost)?;
 
                 let bytecode = evm.code(ext, &address.into()).await?;
                 let code = Decoder::decode(bytecode)?;
@@ -1152,8 +1180,7 @@ impl<T: EventTracer> Executor<T> {
                 let inner_call = Call {
                     data: evm.memory[args_offset..args_offset + args_size].to_vec(),
                     value,
-                    from: call.to,
-                    origin: call.origin,
+                    from: this,
                     to: address.into(),
                     gas: call_gas,
                 };
@@ -1162,12 +1189,19 @@ impl<T: EventTracer> Executor<T> {
                     ..Default::default()
                 };
                 let inner_ctx = Context {
+                    created: Address::zero(),
+                    origin: ctx.origin,
                     depth: ctx.depth + 1,
                 };
 
                 let executor = Executor::<T>::with_tracer(self.tracer.fork());
-                let future =
-                    executor.execute_with_depth(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
+                let future = executor.execute_with_context(
+                    &code,
+                    &inner_call,
+                    &mut inner_evm,
+                    ext,
+                    inner_ctx,
+                );
                 let (tracer, ret) = Box::pin(future).await?;
                 self.tracer.join(tracer, inner_evm.reverted);
 
@@ -1182,7 +1216,6 @@ impl<T: EventTracer> Executor<T> {
                     if size > evm.memory.len() {
                         evm.memory.resize(size, 0);
                         gas += evm.mem_exp_cost();
-                        // evm.gas(gas)?;
                     }
                     evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
                     for acc in inner_evm.account {
@@ -1232,7 +1265,7 @@ impl<T: EventTracer> Executor<T> {
             #[allow(unused_variables)]
             0xf4 => {
                 // DELEGATECALL
-                let gas = evm.pop()?;
+                let call_gas = evm.pop()?;
                 let address = evm.pop()?;
                 let args_offset = evm.pop()?;
                 let args_size = evm.pop()?;
@@ -1259,10 +1292,10 @@ impl<T: EventTracer> Executor<T> {
                 // STATICCALL
                 let gas = evm.pop()?;
                 let address = evm.pop()?;
-                let args_offset = evm.pop()?;
-                let args_size = evm.pop()?;
-                let ret_offset = evm.pop()?;
-                let ret_size = evm.pop()?;
+                let args_offset = evm.pop()?.as_usize();
+                let args_size = evm.pop()?.as_usize();
+                let ret_offset = evm.pop()?.as_usize();
+                let ret_size = evm.pop()?.as_usize();
 
                 todo!("STATICCALL");
             }
