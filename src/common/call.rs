@@ -1,10 +1,9 @@
 use crate::common::{Word, address::Address};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Call {
     pub data: Vec<u8>,
     pub value: Word,
-    pub origin: Address,
     pub from: Address,
     pub to: Address,
     pub gas: Word,

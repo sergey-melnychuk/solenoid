@@ -56,7 +56,6 @@ async fn main() -> eyre::Result<()> {
     let call = Call {
         data: calldata,
         value,
-        origin: from,
         from,
         to,
         gas: Word::from(1_000_000),

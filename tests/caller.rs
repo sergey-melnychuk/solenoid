@@ -31,7 +31,6 @@ async fn test_deploy() -> eyre::Result<()> {
     let call = Call {
         data: vec![],
         value,
-        origin: from,
         from,
         to,
         gas: Word::from(110_000),

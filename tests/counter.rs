@@ -24,7 +24,6 @@ async fn call(
     let call = Call {
         data: hex::decode(calldata.trim_start_matches("0x"))?,
         value,
-        origin: from,
         from,
         to,
         gas: Word::max_value(),
@@ -67,7 +66,6 @@ async fn test_deploy() -> eyre::Result<()> {
     let call = Call {
         data: vec![],
         value,
-        origin: from,
         from,
         to,
         gas: Word::from(100500),
