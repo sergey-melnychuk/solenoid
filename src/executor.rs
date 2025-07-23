@@ -28,14 +28,14 @@ pub enum ExecutorError {
     InvalidOpcode(u8),
     #[error("Unknown opcode: {0:#02x}")]
     UnknownOpcode(u8),
-    #[error("Wrong returned data size: expected {exp} but got {got}")]
-    WrongCallRetDataSize { exp: usize, got: usize },
     #[error("Bytcode decoding error: {0}")]
     DecoderError(#[from] DecoderError),
     #[error("Call run out of gas")]
     OutOfGas(),
     #[error("Insufficient funds: have {have}, need {need}")]
     InsufficientFunds { have: Word, need: Word },
+    #[error("Unallowed opcode from static call: {0}")]
+    StaticCallViolation(u8),
     #[error("{0}")]
     Eyre(#[from] eyre::ErrReport),
 }
@@ -224,6 +224,10 @@ pub struct Context {
     pub created: Address,
     pub origin: Address,
     pub depth: usize,
+
+    pub is_static: bool,
+    pub is_delegate: bool,
+    pub is_create2: bool,
     // block, gas price, etc
 }
 
@@ -346,10 +350,6 @@ impl<T: EventTracer> Executor<T> {
         while !evm.stopped && evm.pc < code.instructions.len() {
             let instruction = &code.instructions[evm.pc];
 
-            let cost = self
-                .execute_instruction(code, call, evm, ext, ctx, instruction)
-                .await?;
-
             self.tracer.push(Event {
                 depth: ctx.depth,
                 reverted: false,
@@ -358,9 +358,24 @@ impl<T: EventTracer> Executor<T> {
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
                     data: instruction.argument.clone(),
+                },
+            });
+
+            let cost = self
+                .execute_instruction(code, call, evm, ext, ctx, instruction)
+                .await?;
+
+            self.tracer.push(Event {
+                depth: ctx.depth,
+                reverted: false,
+                data: EventData::Gas {
+                    pc: evm.pc,
+                    op: instruction.opcode.code,
+                    name: instruction.opcode.name(),
                     gas: cost,
                 },
             });
+
             evm.gas(cost)?;
 
             if self.log {
@@ -759,7 +774,8 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3d => {
                 // RETURNDATASIZE
-                todo!("RETURNDATASIZE")
+                gas = 2.into();
+                evm.push(self.ret.len().into())?;
             }
             0x3e => {
                 // RETURNDATACOPY
@@ -883,6 +899,9 @@ impl<T: EventTracer> Executor<T> {
             }
             0x55 => {
                 // SSTORE
+                if ctx.is_static {
+                    return Err(ExecutorError::StaticCallViolation(opcode));
+                }
                 let key = evm.pop()?;
 
                 let is_warm = ext
@@ -982,7 +1001,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x5a => {
                 // GAS
-                evm.push(evm.gas.remaining())?;
+                evm.push(evm.gas.remaining() - Word::from(2))?;
                 gas = 2.into();
             }
             0x5b => {
@@ -1056,6 +1075,9 @@ impl<T: EventTracer> Executor<T> {
 
             0xa0..0xa4 => {
                 // LOG0..LOG4
+                if ctx.is_static {
+                    return Err(ExecutorError::StaticCallViolation(opcode));
+                }
                 let n = instruction.opcode.n as usize;
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
@@ -1079,170 +1101,35 @@ impl<T: EventTracer> Executor<T> {
             #[allow(unused_variables)]
             0xf0 => {
                 // CREATE
-                let value = evm.pop()?;
-                let offset = evm.pop()?.as_usize();
-                let size = evm.pop()?.as_usize();
-
-                if offset + size > evm.memory.len() {
-                    evm.memory.resize(offset + size, 0);
+                if ctx.is_static {
+                    return Err(ExecutorError::StaticCallViolation(opcode));
                 }
-                gas = evm.mem_exp_cost() + Word::from(32000);
-                evm.gas(gas)?;
-
-                let bytecode = evm.memory[offset..offset + size].to_vec();
-                let code = Decoder::decode(bytecode)?;
-
-                let nonce = ext.acc_mut(&this).nonce;
-                let address: Address = this.of_smart_contract(nonce);
-
-                let inner_call = Call {
-                    data: vec![],
-                    value,
-                    from: this,
-                    to: Address::zero(),
-                    gas: evm.gas.remaining(),
-                };
-                let mut inner_evm = Evm {
-                    gas: Gas::new(evm.gas.remaining()),
-                    ..Default::default()
-                };
-                let inner_ctx = Context {
-                    created: address,
-                    origin: ctx.origin,
-                    depth: ctx.depth + 1,
-                };
-                let executor = Executor::<T>::with_tracer(self.tracer.fork());
-                let future = executor.execute_with_context(
-                    &code,
-                    &inner_call,
-                    &mut inner_evm,
-                    ext,
-                    inner_ctx,
-                );
-                let (tracer, code) = Box::pin(future).await?;
-                self.tracer.join(tracer, inner_evm.reverted);
-
-                if !inner_evm.reverted {
-                    gas += inner_evm.gas.used;
-
-                    let hash = keccak256(&code);
-                    *ext.code_mut(&address) = code.clone();
-                    ext.acc_mut(&address).code = Word::from_big_endian(&hash);
-                    ext.acc_mut(&call.from).nonce += Word::one();
-                    evm.account.push(AccountTouch::Code(
-                        address,
-                        Word::from_big_endian(&hash),
-                        code.clone(),
-                    ));
-                    evm.account.push(AccountTouch::Nonce(
-                        call.from,
-                        nonce.as_u64(),
-                        nonce.as_u64() + 1,
-                    ));
-                    self.tracer.push(Event {
-                        data: EventData::Create(address, Word::from_big_endian(&hash), code),
-                        depth: ctx.depth,
-                        reverted: false,
-                    });
-                    self.tracer.push(Event {
-                        data: EventData::Nonce(call.from, nonce.as_u64() + 1),
-                        depth: ctx.depth,
-                        reverted: false,
-                    });
-                    for acc in inner_evm.account {
-                        evm.account.push(acc);
-                    }
-                    for state in inner_evm.state {
-                        evm.state.push(state);
-                    }
-                    evm.push((&address).into())?;
-                } else {
-                    gas += evm.gas.used;
-                    inner_evm.revert(ext).await?;
-                    evm.push(Word::zero())?;
-                }
+                self.create(this, call.from, &mut gas, evm, ext, ctx)
+                    .await?;
             }
             0xf1 => {
                 // CALL
-                let call_gas = evm.pop()?;
-                let address = &evm.pop()?;
-                let value = evm.pop()?;
-                let args_offset = evm.pop()?.as_usize();
-                let args_size = evm.pop()?.as_usize();
-                let ret_offset = evm.pop()?.as_usize();
-                let ret_size = evm.pop()?.as_usize();
-
-                gas = evm.mem_exp_cost() + Word::from(21000);
-
-                let bytecode = evm.code(ext, &address.into()).await?;
-                let code = Decoder::decode(bytecode)?;
-
-                let inner_call = Call {
-                    data: evm.memory[args_offset..args_offset + args_size].to_vec(),
-                    value,
-                    from: this,
-                    to: address.into(),
-                    gas: call_gas,
-                };
-                let mut inner_evm = Evm {
-                    gas: Gas::new(call_gas),
-                    ..Default::default()
-                };
-                let inner_ctx = Context {
-                    created: Address::zero(),
-                    origin: ctx.origin,
-                    depth: ctx.depth + 1,
-                };
-
-                let executor = Executor::<T>::with_tracer(self.tracer.fork());
-                let future = executor.execute_with_context(
-                    &code,
-                    &inner_call,
-                    &mut inner_evm,
-                    ext,
-                    inner_ctx,
-                );
-                let (tracer, ret) = Box::pin(future).await?;
-                self.tracer.join(tracer, inner_evm.reverted);
-
-                if !inner_evm.reverted {
-                    if ret.len() != ret_size {
-                        evm.error(ExecutorError::WrongReturnDataSize {
-                            exp: ret_size,
-                            got: ret.len(),
-                        })?;
+                if ctx.is_static {
+                    let value = evm
+                        .stack
+                        .iter()
+                        .rev()
+                        .nth(3)
+                        .ok_or(ExecutorError::StackUnderflow)?;
+                    if !value.is_zero() {
+                        return Err(ExecutorError::StaticCallViolation(opcode));
                     }
-                    let size = ret_offset + ret_size;
-                    if size > evm.memory.len() {
-                        evm.memory.resize(size, 0);
-                        gas += evm.mem_exp_cost();
-                    }
-                    evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
-                    for acc in inner_evm.account {
-                        evm.account.push(acc);
-                    }
-                    for sta in inner_evm.state {
-                        evm.state.push(sta);
-                    }
-                    gas += evm.gas.used;
-                    evm.push(Word::one())?;
-                } else {
-                    gas += evm.gas.used;
-                    inner_evm.revert(ext).await?;
-                    evm.push(Word::zero())?;
                 }
+                self.call(this, &mut gas, evm, ext, ctx).await?;
             }
             #[allow(unused_variables)]
             0xf2 => {
                 // CALLCODE
+
+                // Creates a new sub context as if calling itself, but with the code of the given account.
+                // In particular the storage [, the current sender and the current value] remain the same.
+                // DELEGATECALL difference:  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                 unimplemented!("CALLCODE");
-                // let gas = self.state.pop()?;
-                // let address = self.state.pop()?;
-                // let value = self.state.pop()?;
-                // let args_offset = self.state.pop()?;
-                // let args_size = self.state.pop()?;
-                // let ret_offset = self.state.pop()?;
-                // let ret_size = self.state.pop()?;
             }
             0xf3 | 0xfd => {
                 // RETURN | REVERT
@@ -1262,42 +1149,33 @@ impl<T: EventTracer> Executor<T> {
                 }
                 gas = evm.mem_exp_cost();
             }
-            #[allow(unused_variables)]
             0xf4 => {
                 // DELEGATECALL
-                let call_gas = evm.pop()?;
-                let address = evm.pop()?;
-                let args_offset = evm.pop()?;
-                let args_size = evm.pop()?;
-                let ret_offset = evm.pop()?;
-                let ret_size = evm.pop()?;
-
-                todo!("DELEGATECALL");
+                let ctx = Context {
+                    is_delegate: true,
+                    ..ctx
+                };
+                self.call(this, &mut gas, evm, ext, ctx).await?;
             }
-            #[allow(unused_variables)]
             0xf5 => {
                 // CREATE2
-                let value = evm.pop()?;
-                let offset = evm.pop()?;
-                let size = evm.pop()?;
-                let salt = evm.pop()?;
-
-                // gas = 32000.into();
-
-                todo!("CREATE2");
-                // put address of the created contract on the stack
+                if ctx.is_static {
+                    return Err(ExecutorError::StaticCallViolation(opcode));
+                }
+                let ctx = Context {
+                    is_create2: true,
+                    ..ctx
+                };
+                self.create(this, call.from, &mut gas, evm, ext, ctx)
+                    .await?;
             }
-            #[allow(unused_variables)]
             0xfa => {
                 // STATICCALL
-                let gas = evm.pop()?;
-                let address = evm.pop()?;
-                let args_offset = evm.pop()?.as_usize();
-                let args_size = evm.pop()?.as_usize();
-                let ret_offset = evm.pop()?.as_usize();
-                let ret_size = evm.pop()?.as_usize();
-
-                todo!("STATICCALL");
+                let ctx = Context {
+                    is_static: true,
+                    ..ctx
+                };
+                self.call(this, &mut gas, evm, ext, ctx).await?;
             }
             0xfe => {
                 // INVALID
@@ -1306,6 +1184,9 @@ impl<T: EventTracer> Executor<T> {
             }
             0xff => {
                 // SELFDESTRUCT
+                if ctx.is_static {
+                    return Err(ExecutorError::StaticCallViolation(opcode));
+                }
                 todo!("SELFDESTRUCT");
             }
             _ => {
@@ -1318,5 +1199,200 @@ impl<T: EventTracer> Executor<T> {
         }
 
         Ok(gas)
+    }
+
+    async fn call(
+        &mut self,
+        this: Address,
+        gas: &mut Word,
+        evm: &mut Evm,
+        ext: &mut Ext,
+        ctx: Context,
+    ) -> eyre::Result<()> {
+        let call_gas = evm.pop()?;
+        let address = &evm.pop()?;
+        let value = if !ctx.is_static && !ctx.is_delegate {
+            evm.pop()?
+        } else {
+            Word::zero()
+        };
+        let args_offset = evm.pop()?.as_usize();
+        let args_size = evm.pop()?.as_usize();
+        let ret_offset = evm.pop()?.as_usize();
+        let ret_size = evm.pop()?.as_usize();
+
+        *gas = evm.mem_exp_cost() + Word::from(21000);
+
+        let bytecode = evm.code(ext, &address.into()).await?;
+        let code = Decoder::decode(bytecode)?;
+
+        let inner_call = Call {
+            data: evm.memory[args_offset..args_offset + args_size].to_vec(),
+            value,
+            from: this,
+            to: if !ctx.is_delegate {
+                address.into()
+            } else {
+                this
+            },
+            gas: call_gas,
+        };
+        let mut inner_evm = Evm {
+            gas: Gas::new(call_gas),
+            ..Default::default()
+        };
+        let inner_ctx = Context {
+            created: Address::zero(),
+            origin: ctx.origin,
+            depth: ctx.depth + 1,
+            ..ctx
+        };
+
+        let executor = Executor::<T>::with_tracer(self.tracer.fork());
+        let future =
+            executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
+        let (tracer, ret) = Box::pin(future).await?;
+        self.tracer.join(tracer, inner_evm.reverted);
+
+        if !inner_evm.reverted {
+            if ret.len() != ret_size {
+                evm.error(ExecutorError::WrongReturnDataSize {
+                    exp: ret_size,
+                    got: ret.len(),
+                })?;
+            }
+            let size = ret_offset + ret_size;
+            if size > evm.memory.len() {
+                evm.memory.resize(size, 0);
+                *gas += evm.mem_exp_cost();
+            }
+            evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+            self.ret = ret;
+            for acc in inner_evm.account {
+                evm.account.push(acc);
+            }
+            for sta in inner_evm.state {
+                evm.state.push(sta);
+            }
+            *gas += evm.gas.used;
+            evm.push(Word::one())?;
+        } else {
+            *gas += evm.gas.used;
+            inner_evm.revert(ext).await?;
+            evm.push(Word::zero())?;
+        }
+
+        Ok(())
+    }
+
+    async fn create(
+        &mut self,
+        this: Address,
+        from: Address,
+        gas: &mut Word,
+        evm: &mut Evm,
+        ext: &mut Ext,
+        ctx: Context,
+    ) -> eyre::Result<()> {
+        let value = evm.pop()?;
+        let offset = evm.pop()?.as_usize();
+        let size = evm.pop()?.as_usize();
+        // TODO: CREATE2
+        let salt = if ctx.is_create2 {
+            evm.pop()?
+        } else {
+            Word::zero()
+        };
+
+        if offset + size > evm.memory.len() {
+            evm.memory.resize(offset + size, 0);
+        }
+        *gas = evm.mem_exp_cost() + Word::from(32000);
+        evm.gas(*gas)?;
+
+        let bytecode = evm.memory[offset..offset + size].to_vec();
+        let code = Decoder::decode(bytecode)?;
+
+        let nonce = ext.acc_mut(&this).nonce;
+        let address = if !ctx.is_create2 {
+            this.of_smart_contract(nonce)
+        } else {
+            // (See: https://www.evm.codes/?fork=cancun#f5)
+            // initialisation_code = memory[offset:offset+size]
+            // address = keccak256(0xff + sender_address + salt + keccak256(initialisation_code))[12:]
+            let mut buffer = Vec::with_capacity(1 + 20 + 32 + 32);
+            buffer.push(0xffu8);
+            buffer.extend_from_slice(&from.0);
+            buffer.extend_from_slice(&salt.to_big_endian());
+            buffer.extend_from_slice(&keccak256(&code.bytecode));
+            let mut hash = keccak256(&buffer);
+            hash[0..12].copy_from_slice(&[0u8; 12]);
+            Address::from(&Word::from_big_endian(&hash))
+        };
+
+        let inner_call = Call {
+            data: vec![],
+            value,
+            from: this,
+            to: Address::zero(),
+            gas: evm.gas.remaining(),
+        };
+        let mut inner_evm = Evm {
+            gas: Gas::new(evm.gas.remaining()),
+            ..Default::default()
+        };
+        let inner_ctx = Context {
+            created: address,
+            origin: ctx.origin,
+            depth: ctx.depth + 1,
+            ..ctx
+        };
+        let executor = Executor::<T>::with_tracer(self.tracer.fork());
+        let future =
+            executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
+        let (tracer, code) = Box::pin(future).await?;
+        self.tracer.join(tracer, inner_evm.reverted);
+
+        if !inner_evm.reverted {
+            *gas += inner_evm.gas.used;
+
+            let hash = keccak256(&code);
+            *ext.code_mut(&address) = code.clone();
+            ext.acc_mut(&address).code = Word::from_big_endian(&hash);
+            ext.acc_mut(&from).nonce += Word::one();
+            evm.account.push(AccountTouch::Code(
+                address,
+                Word::from_big_endian(&hash),
+                code.clone(),
+            ));
+            evm.account.push(AccountTouch::Nonce(
+                from,
+                nonce.as_u64(),
+                nonce.as_u64() + 1,
+            ));
+            self.tracer.push(Event {
+                data: EventData::Create(address, Word::from_big_endian(&hash), code),
+                depth: ctx.depth,
+                reverted: false,
+            });
+            self.tracer.push(Event {
+                data: EventData::Nonce(from, nonce.as_u64() + 1),
+                depth: ctx.depth,
+                reverted: false,
+            });
+            for acc in inner_evm.account {
+                evm.account.push(acc);
+            }
+            for state in inner_evm.state {
+                evm.state.push(state);
+            }
+            evm.push((&address).into())?;
+        } else {
+            *gas += evm.gas.used;
+            inner_evm.revert(ext).await?;
+            evm.push(Word::zero())?;
+        }
+
+        Ok(())
     }
 }

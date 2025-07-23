@@ -4,6 +4,22 @@ solenoid
 WIP opinionated, lightweight, async-ready, WASM-friendly EVM impl in Rust.
 
 ```
+$ cargo run --release --example solenoid
+...
+... SLOAD*: [136 ms] 0xc80a141ce8a5b73371043cba5cee40437975bb37[0x0]=0x0
+... SSTORE: [local!] 0x0xc80a141ce8a5b73371043cba5cee40437975bb37[0x0]=0xe7f1725e7734ce288f8367e1bb143e90bb3f0512
+... SLOAD*: [134 ms] 0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552[0x0]=0x0
+... SSTORE: [local!] 0x0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552[0x0]=0x42
+... SLOAD*: [128 ms] 0xc80a141ce8a5b73371043cba5cee40437975bb37[0x1]=0x0
+... SSTORE: [local!] 0x0xc80a141ce8a5b73371043cba5cee40437975bb37[0x1]=0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552
+
+Contract deployed at: 0xc80a141ce8a5b73371043cba5cee40437975bb37
+Owner: 000000000000000000000000e7f1725e7734ce288f8367e1bb143e90bb3f0512
+get(): 0000000000000000000000000000000000000000000000000000000000000042
+TX OK: true
+```
+
+```
 ## Counter.get()
 cargo run --release -- 0x$(cat etc/counter/Counter.bin-runtime) 0x6d4ce63c
 ...

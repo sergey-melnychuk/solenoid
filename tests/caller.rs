@@ -33,7 +33,7 @@ async fn test_deploy() -> eyre::Result<()> {
         value,
         from,
         to,
-        gas: Word::from(110_000),
+        gas: Word::from(1_000_000),
     };
     let mut evm = Evm::default();
     let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
@@ -46,49 +46,49 @@ async fn test_deploy() -> eyre::Result<()> {
         evm.account,
         vec![
             AccountTouch::Code(
-                addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"),
+                addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"),
                 Word::from_big_endian(&keccak256(&code)),
                 code
             ),
             AccountTouch::Nonce(addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512"), 0, 1)
         ]
     );
-    assert_eq!(
+    pretty_assertions::assert_eq!(
         evm.state,
         vec![
             StateTouch(
-                Address::zero(),
+                addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"),
                 Word::zero(),
                 Word::zero(),
                 None,
                 Word::zero()
             ),
             StateTouch(
-                Address::zero(),
+                addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"),
                 Word::zero(),
                 Word::zero(),
                 Some(word("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
                 Word::zero()
             ),
             StateTouch(
-                addr("c80a141ce8a5b73371043cba5cee40437975bb37"),
+                addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"),
                 Word::zero(),
-                word("e7f1725e7734ce288f8367e1bb143e90bb3f0512"),
+                Word::zero(),
                 Some(Word::from(66)),
                 Word::zero()
             ),
             StateTouch(
-                Address::zero(),
+                addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"),
                 Word::one(),
                 Word::zero(),
                 None,
                 Word::zero()
             ),
             StateTouch(
-                Address::zero(),
+                addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"),
                 Word::one(),
                 Word::zero(),
-                Some(word("c80a141ce8a5b73371043cba5cee40437975bb37")),
+                Some(word("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552")),
                 Word::zero()
             ),
         ]

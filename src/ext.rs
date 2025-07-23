@@ -50,10 +50,13 @@ impl Ext {
             let hex = format!("0x{key:064x}");
             let address = format!("0x{}", hex::encode(addr.0));
             let val = eth.get_storage_at(block_hash, &address, &hex).await?;
-            self.original.entry((*addr, *key)).or_insert(val);
             let ms = now.elapsed().as_millis();
+
+            self.state.entry(*addr).or_default().data.insert(*key, val);
+            self.original.entry((*addr, *key)).or_insert(val);
+
             let addr = hex::encode(addr.0);
-            tracing::info!("SLOAD: [{ms} ms] 0x{addr}[{key:#x}]={val:#x}");
+            tracing::info!("SLOAD*: [{ms} ms] 0x{addr}[{key:#x}]={val:#x}");
             Ok(val)
         } else {
             Ok(Word::zero())
@@ -63,6 +66,7 @@ impl Ext {
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
         let state = self.state.entry(*addr).or_default();
         state.data.insert(key, val);
+        tracing::info!("SSTORE: [local!] 0x{addr}[{key:#x}]={val:#x}");
         Ok(())
     }
 

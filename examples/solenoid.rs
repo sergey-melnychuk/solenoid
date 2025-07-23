@@ -47,16 +47,15 @@ async fn main() -> eyre::Result<()> {
         .context("execute")?;
     println!("Owner: {}", hex::encode(res.ret));
 
-    // TODO: STATICCALL
-    // let res = sole
-    //     .execute(address, "get()", &[])
-    //     .with_sender(from)
-    //     .with_gas(Word::from(1_000_000))
-    //     .ready()
-    //     .apply(&mut ext)
-    //     .await
-    //     .context("execute")?;
-    // println!("get(): {}", hex::encode(res.ret));
+    let res = sole
+        .execute(address, "get()", &[])
+        .with_sender(from)
+        .with_gas(Word::from(1_000_000))
+        .ready()
+        .apply(&mut ext)
+        .await
+        .context("execute")?;
+    println!("get(): {}", hex::encode(res.ret));
 
     let res = sole
         .transfer(address, Word::from(42))

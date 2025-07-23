@@ -31,3 +31,6 @@ getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] 
 default = []
 account = []
 tracing = []
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"

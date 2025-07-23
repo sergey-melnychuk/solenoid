@@ -21,7 +21,14 @@ const fn decode<const N: usize>(s: &str) -> [u8; N] {
     let mut n = s.len();
     let parity = s.len() % 2;
 
-    let min = if s[0] == b'0' && s[1] == b'x' { 2 } else { 0 };
+    if s.is_empty() {
+        return b;
+    }
+    let min = if s[0] == b'0' && s.len() > 1 && s[1] == b'x' {
+        2
+    } else {
+        0
+    };
 
     let mut i = N;
     while n > min {

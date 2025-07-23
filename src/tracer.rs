@@ -34,6 +34,11 @@ pub enum EventData {
         op: u8,
         name: String,
         data: Option<Vec<u8>>,
+    },
+    Gas {
+        pc: usize,
+        op: u8,
+        name: String,
         gas: Word,
     },
     Keccak {

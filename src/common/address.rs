@@ -89,3 +89,22 @@ impl TryFrom<&str> for Address {
         Ok(Address(bytes))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::common::addr;
+
+    use super::*;
+
+    #[test]
+    fn test_create_address() {
+        assert_eq!(
+            addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512").of_smart_contract(Word::zero()),
+            addr("0xc80a141ce8a5b73371043cba5cee40437975bb37")
+        );
+        assert_eq!(
+            addr("0xc80a141ce8a5b73371043cba5cee40437975bb37").of_smart_contract(Word::zero()),
+            addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552")
+        );
+    }
+}
