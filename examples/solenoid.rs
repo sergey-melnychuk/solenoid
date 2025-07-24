@@ -15,6 +15,13 @@ async fn main() -> eyre::Result<()> {
     let eth = eth::EthClient::new(&url);
     let mut ext = Ext::latest(eth).await?;
 
+    ext.data_mut(&addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"))
+        .insert(Word::zero(), Word::zero()); // Call.owner
+    ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
+        .insert(Word::zero(), Word::zero()); // Call.target
+    ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
+        .insert(Word::one(), Word::zero()); // Cell.value
+
     let code = include_str!("../etc/call/Call.bin");
     let code = hex::decode(code.trim_start_matches("0x"))?;
 
@@ -35,7 +42,7 @@ async fn main() -> eyre::Result<()> {
     let address = res
         .created
         .ok_or_else(|| eyre::eyre!("No address returned"))?;
-    println!("Contract deployed at: {address}");
+    println!("Call address: {address}");
 
     let res = sole
         .execute(address, "get_owner()", &[])
@@ -45,7 +52,7 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("execute")?;
-    println!("Owner: {}", hex::encode(res.ret));
+    println!("Call.get_owner(): {}", hex::encode(res.ret));
 
     let res = sole
         .execute(address, "get()", &[])
@@ -55,7 +62,70 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("execute")?;
-    println!("get(): {}", hex::encode(res.ret));
+    println!("Call.get(): {}", hex::encode(res.ret));
+
+    let res = sole
+        .execute(address, "set(uint256)", &Word::one().to_big_endian())
+        .with_sender(from)
+        .with_gas(Word::from(1_000_000))
+        .ready()
+        .apply(&mut ext)
+        .await
+        .context("execute")?;
+    println!("Call.set(0x01): {}", hex::encode(res.ret));
+
+    let res = sole
+        .execute(address, "get()", &[])
+        .with_sender(from)
+        .with_gas(Word::from(1_000_000))
+        .ready()
+        .apply(&mut ext)
+        .await
+        .context("execute")?;
+    println!("Call.get(): {}", hex::encode(res.ret));
+
+    let cell = address.of_smart_contract(Word::zero());
+    println!("Cell address: {cell}");
+
+    let res = sole
+        .execute(cell, "get()", &[])
+        .with_sender(from)
+        .with_gas(Word::from(1_000_000))
+        .ready()
+        .apply(&mut ext)
+        .await
+        .context("execute")?;
+    println!("Cell.get(): {}", hex::encode(res.ret));
+
+    let res = sole
+        .execute(cell, "set(uint256)", &Word::from(0xff).to_big_endian())
+        .with_sender(from)
+        .with_gas(Word::from(1_000_000))
+        .ready()
+        .apply(&mut ext)
+        .await
+        .context("execute")?;
+    println!("Cell.set(0xff): {}", hex::encode(res.ret));
+
+    let res = sole
+        .execute(cell, "get()", &[])
+        .with_sender(from)
+        .with_gas(Word::from(1_000_000))
+        .ready()
+        .apply(&mut ext)
+        .await
+        .context("execute")?;
+    println!("Cell.get(): {}", hex::encode(res.ret));
+
+    let res = sole
+        .execute(address, "get()", &[])
+        .with_sender(from)
+        .with_gas(Word::from(1_000_000))
+        .ready()
+        .apply(&mut ext)
+        .await
+        .context("execute")?;
+    println!("Call.get(): {}", hex::encode(res.ret));
 
     let res = sole
         .transfer(address, Word::from(42))
