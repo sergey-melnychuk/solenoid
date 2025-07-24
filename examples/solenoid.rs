@@ -14,13 +14,13 @@ async fn main() -> eyre::Result<()> {
     let url = std::env::var("URL")?;
     let eth = eth::EthClient::new(&url);
     let mut ext = Ext::latest(eth).await?;
-
-    ext.data_mut(&addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"))
-        .insert(Word::zero(), Word::zero()); // Call.owner
-    ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
-        .insert(Word::zero(), Word::zero()); // Call.target
-    ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
-        .insert(Word::one(), Word::zero()); // Cell.value
+    /* Uncomment lines below to avoid JSON-RPC requests */
+    // ext.data_mut(&addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"))
+    //     .insert(Word::zero(), Word::zero()); // Call.owner
+    // ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
+    //     .insert(Word::zero(), Word::zero()); // Call.target
+    // ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
+    //     .insert(Word::one(), Word::zero()); // Cell.value
 
     let code = include_str!("../etc/call/Call.bin");
     let code = hex::decode(code.trim_start_matches("0x"))?;

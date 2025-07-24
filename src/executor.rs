@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use i256::I256;
 use thiserror::Error;
 
@@ -10,7 +12,7 @@ use crate::{
     },
     decoder::{Bytecode, Decoder, DecoderError, Instruction},
     ext::Ext,
-    tracer::{CallType, Event, EventData, EventTracer, StateEvent},
+    tracer::{AccountEvent, CallType, Event, EventData, EventTracer, StateEvent},
 };
 
 #[derive(Error, Debug)]
@@ -239,9 +241,7 @@ pub struct Context {
     pub origin: Address,
     pub depth: usize,
 
-    pub is_static: bool,
-    pub is_delegate: bool,
-    pub is_create2: bool,
+    pub call_type: CallType,
     // block, gas price, etc
 }
 
@@ -254,7 +254,17 @@ pub struct Executor<T: EventTracer> {
 
 impl<T: EventTracer> Executor<T> {
     pub fn new() -> Self {
-        Self::default()
+        let mut this = Self::default();
+        let timestamp = SystemTime::UNIX_EPOCH
+            .elapsed()
+            .unwrap()
+            .as_secs();
+        this.tracer.push(Event {
+            data: EventData::Init(format!("{{\"timestamp\":{timestamp}}}")),
+            depth: 0,
+            reverted: false,
+        });
+        this
     }
 
     pub fn with_log(self) -> Self {
@@ -269,17 +279,12 @@ impl<T: EventTracer> Executor<T> {
     }
 
     pub async fn execute(
-        mut self,
+        self,
         code: &Bytecode,
         call: &Call,
         evm: &mut Evm,
         ext: &mut Ext,
     ) -> Result<(T, Vec<u8>), ExecutorError> {
-        self.tracer.push(Event {
-            reverted: false,
-            depth: 0,
-            data: EventData::Call(call.clone(), CallType::Call),
-        });
         evm.gas = Gas::new(call.gas);
 
         let call_cost = 21000;
@@ -358,6 +363,15 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
         ctx: Context,
     ) -> Result<(T, Vec<u8>), ExecutorError> {
+        self.tracer.push(Event {
+            data: EventData::Call {
+                call: call.clone(),
+                r#type: ctx.call_type,
+            },
+            depth: ctx.depth,
+            reverted: false,
+        });
+
         if ctx.depth > CALL_DEPTH_LIMIT {
             return Err(ExecutorError::CallDepthLimitReached);
         }
@@ -368,7 +382,7 @@ impl<T: EventTracer> Executor<T> {
             self.tracer.push(Event {
                 depth: ctx.depth,
                 reverted: false,
-                data: EventData::Opcode {
+                data: EventData::OpCode {
                     pc: evm.pc,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
@@ -383,8 +397,8 @@ impl<T: EventTracer> Executor<T> {
             self.tracer.push(Event {
                 depth: ctx.depth,
                 reverted: false,
-                data: EventData::Gas {
-                    pc: evm.pc,
+                data: EventData::GasSub {
+                    pc: evm.pc - 1,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
                     gas: cost,
@@ -941,7 +955,11 @@ impl<T: EventTracer> Executor<T> {
                 evm.state
                     .push(StateTouch(this, key, val, None, Word::zero()));
                 self.tracer.push(Event {
-                    data: EventData::State(StateEvent::R(this, key, val)),
+                    data: EventData::State(StateEvent::Get {
+                        address: this,
+                        key,
+                        val,
+                    }),
                     depth: ctx.depth,
                     reverted: false,
                 });
@@ -953,7 +971,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x55 => {
                 // SSTORE
-                if ctx.is_static {
+                if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode));
                 }
                 let key = evm.pop()?;
@@ -969,12 +987,6 @@ impl<T: EventTracer> Executor<T> {
 
                 let new = evm.pop()?;
                 evm.put(ext, &this, key, new).await?;
-
-                self.tracer.push(Event {
-                    data: EventData::State(StateEvent::W(this, key, val, new)),
-                    depth: ctx.depth,
-                    reverted: false,
-                });
 
                 // https://www.evm.codes/?fork=cancun#55
                 let mut gas_cost = if val == new {
@@ -1015,6 +1027,17 @@ impl<T: EventTracer> Executor<T> {
                         }
                     }
                 }
+                self.tracer.push(Event {
+                    data: EventData::State(StateEvent::Put {
+                        address: this,
+                        key,
+                        val,
+                        new,
+                        gas_refund,
+                    }),
+                    depth: ctx.depth,
+                    reverted: false,
+                });
                 evm.state
                     .push(StateTouch(this, key, val, Some(new), gas_refund));
             }
@@ -1129,7 +1152,7 @@ impl<T: EventTracer> Executor<T> {
 
             0xa0..0xa4 => {
                 // LOG0..LOG4
-                if ctx.is_static {
+                if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode));
                 }
                 let n = instruction.opcode.n as usize;
@@ -1152,18 +1175,16 @@ impl<T: EventTracer> Executor<T> {
                 gas += evm.memory_expansion_cost();
             }
 
-            #[allow(unused_variables)]
             0xf0 => {
                 // CREATE
-                if ctx.is_static {
+                if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode));
                 }
-                self.create(this, call.from, &mut gas, evm, ext, ctx)
-                    .await?;
+                self.create(this, call, &mut gas, evm, ext, ctx).await?;
             }
             0xf1 => {
                 // CALL
-                if ctx.is_static {
+                if matches!(ctx.call_type, CallType::Static) {
                     let value = evm
                         .stack
                         .iter()
@@ -1176,14 +1197,16 @@ impl<T: EventTracer> Executor<T> {
                 }
                 self.call(this, &mut gas, evm, ext, ctx).await?;
             }
-            #[allow(unused_variables)]
             0xf2 => {
                 // CALLCODE
-
+                let ctx = Context {
+                    call_type: CallType::Callcode,
+                    ..ctx
+                };
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage [, the current sender and the current value] remain the same.
                 // DELEGATECALL difference:  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                unimplemented!("CALLCODE");
+                self.call(this, &mut gas, evm, ext, ctx).await?;
             }
             0xf3 | 0xfd => {
                 // RETURN | REVERT
@@ -1202,31 +1225,41 @@ impl<T: EventTracer> Executor<T> {
                     self.ret.clear();
                 }
                 gas = evm.memory_expansion_cost();
+
+                self.tracer.push(Event {
+                    data: EventData::Return {
+                        data: self.ret.clone(),
+                        gas_used: evm.gas.used,
+                    },
+                    depth: ctx.depth,
+                    reverted: evm.reverted,
+                });
             }
             0xf4 => {
                 // DELEGATECALL
                 let ctx = Context {
-                    is_delegate: true,
+                    call_type: CallType::Delegate,
                     ..ctx
                 };
+                // Creates a new sub context as if calling itself, but with the code of the given account.
+                // In particular the storage, the current sender and the current value remain the same.
                 self.call(this, &mut gas, evm, ext, ctx).await?;
             }
             0xf5 => {
                 // CREATE2
-                if ctx.is_static {
+                if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode));
                 }
                 let ctx = Context {
-                    is_create2: true,
+                    call_type: CallType::Create2,
                     ..ctx
                 };
-                self.create(this, call.from, &mut gas, evm, ext, ctx)
-                    .await?;
+                self.create(this, call, &mut gas, evm, ext, ctx).await?;
             }
             0xfa => {
                 // STATICCALL
                 let ctx = Context {
-                    is_static: true,
+                    call_type: CallType::Static,
                     ..ctx
                 };
                 self.call(this, &mut gas, evm, ext, ctx).await?;
@@ -1238,7 +1271,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0xff => {
                 // SELFDESTRUCT
-                if ctx.is_static {
+                if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode));
                 }
                 todo!("SELFDESTRUCT");
@@ -1265,7 +1298,7 @@ impl<T: EventTracer> Executor<T> {
     ) -> eyre::Result<()> {
         let call_gas = evm.pop()?;
         let address = &evm.pop()?;
-        let value = if !ctx.is_static && !ctx.is_delegate {
+        let value = if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             evm.pop()?
         } else {
             Word::zero()
@@ -1284,10 +1317,10 @@ impl<T: EventTracer> Executor<T> {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
             value,
             from: this,
-            to: if !ctx.is_delegate {
-                address.into()
-            } else {
+            to: if matches!(ctx.call_type, CallType::Delegate | CallType::Callcode) {
                 this
+            } else {
+                address.into()
             },
             gas: call_gas,
         };
@@ -1342,7 +1375,7 @@ impl<T: EventTracer> Executor<T> {
     async fn create(
         &mut self,
         this: Address,
-        from: Address,
+        call: &Call,
         gas: &mut Word,
         evm: &mut Evm,
         ext: &mut Ext,
@@ -1351,7 +1384,7 @@ impl<T: EventTracer> Executor<T> {
         let value = evm.pop()?;
         let offset = evm.pop()?.as_usize();
         let size = evm.pop()?.as_usize();
-        let salt = if ctx.is_create2 {
+        let salt = if matches!(ctx.call_type, CallType::Create2) {
             evm.pop()?
         } else {
             Word::zero()
@@ -1367,7 +1400,7 @@ impl<T: EventTracer> Executor<T> {
         let code = Decoder::decode(bytecode)?;
 
         let nonce = ext.acc_mut(&this).nonce;
-        let address = if !ctx.is_create2 {
+        let address = if !matches!(ctx.call_type, CallType::Create2) {
             this.of_smart_contract(nonce)
         } else {
             // (See: https://www.evm.codes/?fork=cancun#f5)
@@ -1375,7 +1408,7 @@ impl<T: EventTracer> Executor<T> {
             // address = keccak256(0xff + sender_address + salt + keccak256(initialisation_code))[12:]
             let mut buffer = Vec::with_capacity(1 + 20 + 32 + 32);
             buffer.push(0xffu8);
-            buffer.extend_from_slice(&from.0);
+            buffer.extend_from_slice(&call.from.0);
             buffer.extend_from_slice(&salt.to_big_endian());
             buffer.extend_from_slice(&keccak256(&code.bytecode));
             let mut hash = keccak256(&buffer);
@@ -1412,24 +1445,31 @@ impl<T: EventTracer> Executor<T> {
             let hash = keccak256(&code);
             *ext.code_mut(&address) = code.clone();
             ext.acc_mut(&address).code = Word::from_big_endian(&hash);
-            ext.acc_mut(&from).nonce += Word::one();
+            ext.acc_mut(&call.from).nonce += Word::one();
             evm.account.push(AccountTouch::Code(
                 address,
                 Word::from_big_endian(&hash),
                 code.clone(),
             ));
             evm.account.push(AccountTouch::Nonce(
-                from,
+                call.from,
                 nonce.as_u64(),
                 nonce.as_u64() + 1,
             ));
             self.tracer.push(Event {
-                data: EventData::Create(address, Word::from_big_endian(&hash), code),
+                data: EventData::Account(AccountEvent::Deploy {
+                    address,
+                    code_hash: Word::from_big_endian(&hash),
+                    byte_code: code,
+                }),
                 depth: ctx.depth,
                 reverted: false,
             });
             self.tracer.push(Event {
-                data: EventData::Nonce(from, nonce.as_u64() + 1),
+                data: EventData::Account(AccountEvent::Nonce {
+                    address: call.from,
+                    new: nonce.as_u64() + 1,
+                }),
                 depth: ctx.depth,
                 reverted: false,
             });

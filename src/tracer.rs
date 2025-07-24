@@ -1,61 +1,138 @@
 use crate::common::{Word, address::Address, call::Call};
 
 #[derive(Debug)]
-pub enum StackEvent {
-    Push(Word),
-    Pop(Word),
-}
-
-#[derive(Debug)]
 pub enum StateEvent {
-    R(Address, Word, Word),
-    W(Address, Word, Word, Word),
+    Get {
+        address: Address,
+        key: Word,
+        val: Word,
+    },
+    Put {
+        address: Address,
+        key: Word,
+        val: Word,
+        new: Word,
+        gas_refund: Word,
+    },
 }
 
 #[derive(Debug)]
-pub enum MemoryEvent {
-    R(usize, Vec<u8>),
-    W(usize, Vec<u8>),
+pub enum AccountEvent {
+    Deploy {
+        address: Address,
+        code_hash: Word,
+        byte_code: Vec<u8>,
+    },
+    Nonce {
+        address: Address,
+        new: u64,
+    },
+    Value {
+        address: Address,
+        val: Word,
+        new: Word,
+    },
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum CallType {
     #[default]
     Call,
-    Code,
+    Create,
+    Create2,
     Static,
     Delegate,
+    Callcode,
+    Precompile(Address),
 }
 
 #[derive(Debug)]
 pub enum EventData {
-    Opcode {
+    Init(String),
+
+    OpCode {
         pc: usize,
         op: u8,
         name: String,
         data: Option<Vec<u8>>,
     },
-    Gas {
+    GasSub {
         pc: usize,
         op: u8,
         name: String,
         gas: Word,
     },
+    GasAdd {
+        pc: usize,
+        op: u8,
+        name: String,
+        gas: Word,
+    },
+
     Keccak {
         data: Vec<u8>,
         hash: [u8; 32],
     },
-    Stack(StackEvent),
+
     State(StateEvent),
-    Memory(MemoryEvent),
-    Create(Address, Word, Vec<u8>),
-    Call(Call, CallType),
-    Return(Vec<u8>),
-    Revert(Vec<u8>),
-    Value(Address, Word, Word),
-    Nonce(Address, u64),
-    // Syscall (precompile)
-    // Extended: Tx, Block, Init
+    Account(AccountEvent),
+
+    Call {
+        call: Call, 
+        r#type: CallType,
+    },
+
+    Return {
+        data: Vec<u8>,
+        gas_used: Word,
+    },
+
+    SelfDestruct {
+        address: Address,
+        beneficiary: Address,
+        balance: Word,
+    },
+
+    Log {
+        address: Address,
+        topics: Vec<Word>,
+        data: Vec<u8>,
+    },
+
+    // BlockHead {
+    //     number: u64,
+    //     hash: Word,
+    //     // extra: gas_cost, etc
+    // },
+    // BlockDone {
+    //     number: u64,
+    //     hash: Word,
+    //     execution_millis: u64,
+    // },
+    // TxHead {
+    //     index: u64,
+    //     hash: Word,
+    //     call: Call,
+    //     gas_limit: Word,
+    //     // extra?
+    // },
+    // TxDone {
+    //     index: u64,
+    //     hash: Word,
+    //     status: Word,
+    //     gas_used: Word,
+    //     execution_millis: u64,
+    //     // more?
+    // },
+    // Init {
+    //     chain_id: u64,
+    //     spec: u64,
+    //     // extra?
+    // },
+    // Reorg(/* TODO */),
+    // Fork(/* TODO */),
+
+    Error(String),
 }
 
 #[derive(Debug)]
@@ -69,7 +146,7 @@ pub struct Event {
 pub trait EventTracer: Default {
     fn push(&mut self, event: Event) {
         #[cfg(feature = "tracing")]
-        println!("TRACER: {event:?}");
+        eprintln!("TRACER: {event:?}");
     }
 
     fn peek(&self) -> &[Event] {

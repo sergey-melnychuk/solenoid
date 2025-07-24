@@ -3,7 +3,7 @@ use crate::{
     decoder::Decoder,
     executor::{Context, Evm, Executor, Gas},
     ext::Ext,
-    tracer::{EventTracer, NoopTracer},
+    tracer::{CallType, EventTracer, NoopTracer},
 };
 
 #[derive(Default)]
@@ -197,6 +197,7 @@ impl Runner {
 
         let ctx = Context {
             created: address,
+            call_type: CallType::Create,
             ..Default::default()
         };
         evm.gas = Gas::new(self.call.gas);
