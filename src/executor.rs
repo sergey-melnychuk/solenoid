@@ -2,7 +2,12 @@ use i256::I256;
 use thiserror::Error;
 
 use crate::{
-    common::{Word, address::Address, call::Call, hash::keccak256},
+    common::{
+        Word,
+        address::Address,
+        call::Call,
+        hash::{self, keccak256},
+    },
     decoder::{Bytecode, Decoder, DecoderError, Instruction},
     ext::Ext,
     tracer::{CallType, Event, EventData, EventTracer, StateEvent},
@@ -86,13 +91,22 @@ impl Evm {
         Self::default()
     }
 
-    pub(crate) fn mem_exp_cost(&mut self) -> Word {
+    pub(crate) fn memory_expansion_cost(&mut self) -> Word {
         let memory_byte_size = self.memory.len();
         let memory_size_word = memory_byte_size.div_ceil(32);
         let mem_cost = (memory_size_word * memory_size_word) / 512 + (3 * memory_size_word);
         let exp_cost = Word::from(mem_cost) - self.mem_cost;
         self.mem_cost = exp_cost;
         exp_cost
+    }
+
+    pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &Ext) -> Word {
+        let is_warm = ext.state.contains_key(address);
+        if is_warm {
+            Word::from(100)
+        } else {
+            Word::from(2600)
+        }
     }
 
     pub(crate) fn error(&mut self, e: ExecutorError) -> Result<(), ExecutorError> {
@@ -278,8 +292,9 @@ impl<T: EventTracer> Executor<T> {
         };
         evm.gas.sub(data_cost.into())?;
 
-        if code.bytecode.is_empty() || (call.data.is_empty() && !call.to.is_zero()) {
-            // TODO: check hash & signature first
+        let is_create = call.to.is_zero();
+        let is_transfer = code.bytecode.is_empty() || call.data.is_empty() && !is_create;
+        if is_transfer {
             let src = ext.balance(&call.from).await?;
             let dst = ext.balance(&call.to).await?;
 
@@ -739,7 +754,7 @@ impl<T: EventTracer> Executor<T> {
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&call.data[offset..offset + size]);
                 gas = (3 + 3 * size.div_ceil(32)).into();
-                gas += evm.mem_exp_cost();
+                gas += evm.memory_expansion_cost();
             }
             0x38 => {
                 // CODESIZE
@@ -758,7 +773,7 @@ impl<T: EventTracer> Executor<T> {
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&code.bytecode[offset..offset + size]);
                 gas = (3 + 3 * size.div_ceil(32)).into();
-                gas += evm.mem_exp_cost();
+                gas += evm.memory_expansion_cost();
             }
             0x3a => {
                 // GASPRICE
@@ -766,11 +781,27 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3b => {
                 // EXTCODESIZE
-                todo!("EXTCODESIZE")
+                let address: Address = (&evm.pop()?).into();
+                let code_size = ext.code(&address).await?.len();
+                evm.push(Word::from(code_size))?;
+                gas = evm.address_access_cost(&address, ext);
             }
             0x3c => {
                 // EXTCODECOPY
-                todo!("EXTCODECOPY")
+                let address: Address = (&evm.pop()?).into();
+                let dest_offset = evm.pop()?.as_usize();
+                let offset = evm.pop()?.as_usize();
+                let size = evm.pop()?.as_usize();
+
+                let code = ext.code(&address).await?;
+                if evm.memory.len() < dest_offset + size {
+                    evm.memory.resize(dest_offset + size, 0);
+                }
+                evm.memory[dest_offset..dest_offset + size]
+                    .copy_from_slice(&code[offset..offset + size]);
+                gas = (3 * size.div_ceil(32)).into();
+                gas += evm.memory_expansion_cost();
+                gas += evm.address_access_cost(&address, ext);
             }
             0x3d => {
                 // RETURNDATASIZE
@@ -779,11 +810,34 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3e => {
                 // RETURNDATACOPY
-                todo!("RETURNDATACOPY")
+                let dest_offset = evm.pop()?.as_usize();
+                let offset = evm.pop()?.as_usize();
+                let size = evm.pop()?.as_usize();
+                if evm.memory.len() < dest_offset + size {
+                    evm.memory.resize(dest_offset + size, 0);
+                }
+                if self.ret.len() < offset + size {
+                    self.ret.resize(offset + size, 0);
+                }
+                evm.memory[dest_offset..dest_offset + size]
+                    .copy_from_slice(&self.ret[offset..offset + size]);
+                gas = (3 + 3 * size.div_ceil(32)).into();
+                gas += evm.memory_expansion_cost();
             }
             0x3f => {
                 // EXTCODEHASH
-                todo!("EXTCODEHASH")
+                let address: Address = (&evm.pop()?).into();
+                let exists = ext.state.contains_key(&address);
+                if !exists {
+                    evm.push(Word::zero())?;
+                }
+                let code = ext.code(&address).await?;
+                if code.is_empty() {
+                    evm.push(Word::from_big_endian(&hash::empty()))?;
+                }
+                evm.push(ext.acc_mut(&address).code)?;
+
+                gas += evm.address_access_cost(&address, ext);
             }
 
             // 40-4a
@@ -848,7 +902,7 @@ impl<T: EventTracer> Executor<T> {
                 let value = Word::from_big_endian(&evm.memory[offset..end]);
                 evm.push(value)?;
                 gas = 3.into();
-                gas += evm.mem_exp_cost();
+                gas += evm.memory_expansion_cost();
             }
             0x52 => {
                 // MSTORE
@@ -861,7 +915,7 @@ impl<T: EventTracer> Executor<T> {
                 let bytes = &value.to_big_endian();
                 evm.memory[offset..end].copy_from_slice(bytes);
                 gas = 3.into();
-                gas += evm.mem_exp_cost();
+                gas += evm.memory_expansion_cost();
             }
             0x53 => {
                 // MSTORE8
@@ -872,7 +926,7 @@ impl<T: EventTracer> Executor<T> {
                 }
                 evm.memory[offset] = value.to_little_endian()[0];
                 gas = 3.into();
-                gas += evm.mem_exp_cost();
+                gas += evm.memory_expansion_cost();
             }
             0x54 => {
                 // SLOAD
@@ -1033,7 +1087,7 @@ impl<T: EventTracer> Executor<T> {
 
                 let words = size.div_ceil(32);
                 gas = (3 + 3 * words).into();
-                gas += evm.mem_exp_cost();
+                gas += evm.memory_expansion_cost();
             }
             0x5f => {
                 // PUSH0
@@ -1095,7 +1149,7 @@ impl<T: EventTracer> Executor<T> {
 
                 gas = 375.into();
                 gas += (375 * n + 8 * size).into();
-                gas += evm.mem_exp_cost();
+                gas += evm.memory_expansion_cost();
             }
 
             #[allow(unused_variables)]
@@ -1147,7 +1201,7 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     self.ret.clear();
                 }
-                gas = evm.mem_exp_cost();
+                gas = evm.memory_expansion_cost();
             }
             0xf4 => {
                 // DELEGATECALL
@@ -1221,7 +1275,7 @@ impl<T: EventTracer> Executor<T> {
         let ret_offset = evm.pop()?.as_usize();
         let ret_size = evm.pop()?.as_usize();
 
-        *gas = evm.mem_exp_cost() + Word::from(21000);
+        *gas = evm.memory_expansion_cost() + Word::from(21000);
 
         let bytecode = evm.code(ext, &address.into()).await?;
         let code = Decoder::decode(bytecode)?;
@@ -1264,7 +1318,7 @@ impl<T: EventTracer> Executor<T> {
             let size = ret_offset + ret_size;
             if size > evm.memory.len() {
                 evm.memory.resize(size, 0);
-                *gas += evm.mem_exp_cost();
+                *gas += evm.memory_expansion_cost();
             }
             evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
             self.ret = ret;
@@ -1297,7 +1351,6 @@ impl<T: EventTracer> Executor<T> {
         let value = evm.pop()?;
         let offset = evm.pop()?.as_usize();
         let size = evm.pop()?.as_usize();
-        // TODO: CREATE2
         let salt = if ctx.is_create2 {
             evm.pop()?
         } else {
@@ -1307,7 +1360,7 @@ impl<T: EventTracer> Executor<T> {
         if offset + size > evm.memory.len() {
             evm.memory.resize(offset + size, 0);
         }
-        *gas = evm.mem_exp_cost() + Word::from(32000);
+        *gas = evm.memory_expansion_cost() + Word::from(32000);
         evm.gas(*gas)?;
 
         let bytecode = evm.memory[offset..offset + size].to_vec();
