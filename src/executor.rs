@@ -276,12 +276,13 @@ impl<T: EventTracer> Executor<T> {
     }
 
     pub async fn execute(
-        self,
+        mut self,
         code: &Bytecode,
         call: &Call,
         evm: &mut Evm,
         ext: &mut Ext,
     ) -> Result<(T, Vec<u8>), ExecutorError> {
+        ext.transient.clear();
         evm.gas = Gas::new(call.gas);
 
         let call_cost = 21000;
@@ -296,10 +297,9 @@ impl<T: EventTracer> Executor<T> {
 
         let is_create = call.to.is_zero();
         let is_transfer = code.bytecode.is_empty() || call.data.is_empty() && !is_create;
-        if is_transfer {
+        if is_transfer && !call.value.is_zero() {
             let src = ext.balance(&call.from).await?;
             let dst = ext.balance(&call.to).await?;
-
             if src < call.value {
                 return Err(ExecutorError::InsufficientFunds {
                     have: src,
@@ -311,7 +311,6 @@ impl<T: EventTracer> Executor<T> {
             // See: https://www.blocknative.com/blog/eip-1559-fees
             let gas_price = Word::one() * 1_000_000.into(); // 100 Gwei
             let gas_fee = evm.gas.used * gas_price;
-
             if src < call.value + gas_fee {
                 return Err(ExecutorError::InsufficientFunds {
                     have: src,
@@ -348,7 +347,13 @@ impl<T: EventTracer> Executor<T> {
                 created: address,
                 ..Context::default()
             };
-            self.execute_with_context(code, call, evm, ext, ctx).await
+            let tracer = self.tracer.fork();
+            let executor = Executor::<T>::with_tracer(tracer);
+            let (tracer, ret) = executor
+                .execute_with_context(code, call, evm, ext, ctx)
+                .await?;
+            self.tracer.join(tracer, evm.reverted);
+            Ok((self.tracer, ret))
         }
     }
 
@@ -380,17 +385,6 @@ impl<T: EventTracer> Executor<T> {
         while !evm.stopped && evm.pc < code.instructions.len() {
             let instruction = &code.instructions[evm.pc];
 
-            self.tracer.push(Event {
-                depth: ctx.depth,
-                reverted: false,
-                data: EventData::OpCode {
-                    pc: evm.pc,
-                    op: instruction.opcode.code,
-                    name: instruction.opcode.name(),
-                    data: instruction.argument.clone().map(|vec| vec.into()),
-                },
-            });
-
             let cost = self
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
                 .await?;
@@ -398,10 +392,11 @@ impl<T: EventTracer> Executor<T> {
             self.tracer.push(Event {
                 depth: ctx.depth,
                 reverted: false,
-                data: EventData::GasSub {
+                data: EventData::OpCode {
                     pc: evm.pc - 1,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
+                    data: instruction.argument.clone().unwrap_or_default().into(),
                     gas: cost,
                 },
             });
@@ -1110,13 +1105,18 @@ impl<T: EventTracer> Executor<T> {
             }
             0x5c => {
                 // TLOAD
-                // gas = 100.into();
-                todo!("TLOAD");
+                let key = evm.pop()?;
+                let val = ext.transient.get(&key).copied().unwrap_or_default();
+                evm.push(val)?;
+                gas = 100.into();
             }
             0x5d => {
                 // TSTORE
-                // gas = 100.into();
-                todo!("TSTORE");
+                let key = evm.pop()?;
+                let new = evm.pop()?;
+                // let val = ext.transient.remove(&key).unwrap_or_default();
+                ext.transient.insert(key, new);
+                gas = 100.into();
             }
             0x5e => {
                 // MCOPY

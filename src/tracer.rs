@@ -56,18 +56,7 @@ pub enum EventData {
         pc: usize,
         op: u8,
         name: String,
-        data: Option<Hex>,
-    },
-    GasSub {
-        pc: usize,
-        op: u8,
-        name: String,
-        gas: Word,
-    },
-    GasAdd {
-        pc: usize,
-        op: u8,
-        name: String,
+        data: Hex,
         gas: Word,
     },
 
@@ -147,21 +136,8 @@ pub struct Event {
     pub reverted: bool,
 }
 
-#[allow(unused_variables)] // default impl ignores all arguments
 pub trait EventTracer: Default {
-    fn push(&mut self, event: Event) {
-        #[cfg(feature = "tracing")]
-        {
-            if matches!(event.data, EventData::Init(_)) {
-                eprintln!();
-            }
-            if let Ok(json) = serde_json::to_string_pretty(&event) {
-                eprintln!("{json}");
-            } else {
-                eprintln!("TRACER: {event:?}");
-            }
-        }
-    }
+    fn push(&mut self, _event: Event) {}
 
     fn peek(&self) -> &[Event] {
         &[]
@@ -187,3 +163,22 @@ pub trait EventTracer: Default {
 pub struct NoopTracer;
 
 impl EventTracer for NoopTracer {}
+
+#[derive(Default)]
+pub struct LogingTracer(Vec<Event>);
+
+impl EventTracer for LogingTracer {
+    fn push(&mut self, event: Event) {
+        self.0.push(event);
+    }
+
+    fn peek(&self) -> &[Event] {
+        &self.0
+    }
+
+    fn take(&mut self) -> Vec<Event> {
+        let mut vec = Vec::new();
+        std::mem::swap(&mut self.0, &mut vec);
+        vec
+    }
+}

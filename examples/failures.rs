@@ -3,6 +3,7 @@ use solenoid::{
     common::{address::addr, word::Word},
     ext::Ext,
     solenoid::{Builder, Solenoid},
+    tracer::EventTracer,
 };
 
 #[tokio::main]
@@ -20,7 +21,7 @@ async fn main() -> eyre::Result<()> {
     let code = hex::decode(code.trim_start_matches("0x"))?;
 
     let sole = Solenoid::new();
-    let res = sole
+    let mut res = sole
         .create(code)
         .with_sender(from)
         .with_gas(Word::from(1_000_000))
@@ -29,6 +30,9 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("create")?;
+    for e in res.tracer.take() {
+        println!("{}", serde_json::to_string(&e).unwrap());
+    }
     let address = res
         .created
         .ok_or_else(|| eyre::eyre!("No address returned"))?;
@@ -36,7 +40,7 @@ async fn main() -> eyre::Result<()> {
     println!("Deploy: {address}");
     assert_eq!(address, from.of_smart_contract(Word::zero()));
 
-    let res = sole
+    let mut res = sole
         .execute(address, "is_owner()", &[])
         .with_sender(from)
         .with_gas(Word::from(1_000_000))
@@ -44,6 +48,9 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("execute")?;
+    for e in res.tracer.take() {
+        println!("{}", serde_json::to_string(&e).unwrap());
+    }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))
     } else {
@@ -52,7 +59,7 @@ async fn main() -> eyre::Result<()> {
     println!("Fail.is_owner({from}): {ret}");
 
     let user = from.of_smart_contract(Word::one());
-    let res = sole
+    let mut res = sole
         .execute(address, "is_owner()", &[])
         .with_sender(user)
         .with_gas(Word::from(1_000_000))
@@ -60,6 +67,9 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("execute")?;
+    for e in res.tracer.take() {
+        println!("{}", serde_json::to_string(&e).unwrap());
+    }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))
     } else {
@@ -70,7 +80,7 @@ async fn main() -> eyre::Result<()> {
     let number = 0xffu8 - 1;
     let mut arg = [0u8; 32];
     arg[31] = number;
-    let res = sole
+    let mut res = sole
         .execute(address, "even_only(uint8)", &arg)
         .with_sender(from)
         .with_gas(Word::from(1_000_000))
@@ -78,6 +88,9 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("execute")?;
+    for e in res.tracer.take() {
+        println!("{}", serde_json::to_string(&e).unwrap());
+    }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))
     } else {
@@ -88,7 +101,7 @@ async fn main() -> eyre::Result<()> {
     let number = 0xffu8;
     let mut arg = [0u8; 32];
     arg[31] = number;
-    let res = sole
+    let mut res = sole
         .execute(address, "even_only(uint8)", &arg)
         .with_sender(from)
         .with_gas(Word::from(1_000_000))
@@ -96,6 +109,9 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("execute")?;
+    for e in res.tracer.take() {
+        println!("{}", serde_json::to_string(&e).unwrap());
+    }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))
     } else {

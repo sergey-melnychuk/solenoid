@@ -22,6 +22,7 @@ pub struct Ext {
     remote: Option<Remote>,
     pub state: HashMap<Address, State>,
     pub original: HashMap<(Address, Word), Word>,
+    pub transient: HashMap<Word, Word>,
 }
 
 impl Ext {
@@ -34,6 +35,7 @@ impl Ext {
             remote: Some(Remote { eth, block_hash }),
             state: Default::default(),
             original: HashMap::default(),
+            transient: HashMap::default(),
         }
     }
 

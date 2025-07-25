@@ -3,7 +3,7 @@ use crate::{
     decoder::Decoder,
     executor::{Context, Evm, Executor, Gas},
     ext::Ext,
-    tracer::{CallType, EventTracer, NoopTracer},
+    tracer::{CallType, EventTracer, LogingTracer},
 };
 
 #[derive(Default)]
@@ -170,8 +170,8 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub async fn apply(self, ext: &mut Ext) -> eyre::Result<CallResult> {
-        let exe = Executor::<NoopTracer>::new();
+    pub async fn apply(self, ext: &mut Ext) -> eyre::Result<CallResult<LogingTracer>> {
+        let exe = Executor::<LogingTracer>::with_tracer(LogingTracer::default());
 
         let code = if self.call.to.is_zero() {
             Decoder::decode(self.code)?
@@ -219,7 +219,7 @@ impl Runner {
 }
 
 #[derive(Debug, Default)]
-pub struct CallResult<T: EventTracer = NoopTracer> {
+pub struct CallResult<T: EventTracer> {
     pub evm: Evm,
     pub ret: Vec<u8>,
     pub tracer: T,
