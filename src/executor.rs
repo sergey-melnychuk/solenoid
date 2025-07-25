@@ -577,15 +577,11 @@ impl<T: EventTracer> Executor<T> {
                 let b = evm.pop()?;
                 let x = evm.pop()?.as_usize();
 
-                let bit = (x + 1) << 3 - 1;
+                let bit = ((x + 1) << 3) - 1;
                 let neg = b.bit(bit);
 
                 let mask = Word::max() << (bit + 1);
-                let y = if neg {
-                    b | mask
-                } else {
-                    b & !mask
-                };
+                let y = if neg { b | mask } else { b & !mask };
                 evm.push(y)?;
                 gas = 5.into();
             }
