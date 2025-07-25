@@ -68,8 +68,7 @@ async fn main() -> eyre::Result<()> {
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
     let mut ext = Ext::latest(eth).await?;
-    // Provide state overrides:
-    // ext.put(&to, Word::zero(), Word::one()).await?;
+    ext.acc_mut(&from).balance = Word::from(1_000_000_000_000_000_000u64);
 
     println!("\nEXECUTION:");
     let executor = Executor::<NoopTracer>::new().with_log();

@@ -367,7 +367,7 @@ impl<T: EventTracer> Executor<T> {
                 value: call.value,
                 from: call.from,
                 to: call.to,
-                gas: call.gas.as_u64(),
+                gas: call.gas,
             },
             depth: ctx.depth,
             reverted: false,
@@ -402,7 +402,7 @@ impl<T: EventTracer> Executor<T> {
                     pc: evm.pc - 1,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
-                    gas: cost.as_u64(),
+                    gas: cost,
                 },
             });
 
@@ -1252,7 +1252,7 @@ impl<T: EventTracer> Executor<T> {
                 self.tracer.push(Event {
                     data: EventData::Return {
                         data: self.ret.clone().into(),
-                        gas_used: evm.gas.used.as_u64(),
+                        gas_used: evm.gas.used,
                     },
                     depth: ctx.depth,
                     reverted: evm.reverted,

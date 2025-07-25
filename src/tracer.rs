@@ -62,13 +62,13 @@ pub enum EventData {
         pc: usize,
         op: u8,
         name: String,
-        gas: u64,
+        gas: Word,
     },
     GasAdd {
         pc: usize,
         op: u8,
         name: String,
-        gas: u64,
+        gas: Word,
     },
 
     Keccak {
@@ -84,13 +84,13 @@ pub enum EventData {
         value: Word,
         from: Address,
         to: Address,
-        gas: u64,
+        gas: Word,
         r#type: CallType,
     },
 
     Return {
         data: Hex,
-        gas_used: u64,
+        gas_used: Word,
     },
 
     SelfDestruct {
