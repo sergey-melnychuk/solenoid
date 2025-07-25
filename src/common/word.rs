@@ -53,6 +53,10 @@ impl Word {
         Self(primitive_types::U256::max_value())
     }
 
+    pub fn bit(&self, index: usize) -> bool {
+        self.0.bit(index)
+    }
+
     pub fn pow(&self, exp: Self) -> Self {
         Self(self.0.pow(exp.0))
     }

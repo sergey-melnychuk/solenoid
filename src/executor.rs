@@ -543,13 +543,21 @@ impl<T: EventTracer> Executor<T> {
             }
             0x08 => {
                 // ADDMOD
-                // gas = 8.into();
-                todo!("ADDMOD");
+                let a = evm.pop()?;
+                let b = evm.pop()?;
+                let m = evm.pop()?;
+                let res = ((a % m) + (b % m)) % m;
+                evm.push(res)?;
+                gas = 8.into();
             }
             0x09 => {
                 // MULMOD
-                // gas = 8.into();
-                todo!("MULMOD");
+                let a = evm.pop()?;
+                let b = evm.pop()?;
+                let m = evm.pop()?;
+                let res = ((a % m) * (b % m)) % m;
+                evm.push(res)?;
+                gas = 8.into();
             }
             0x0a => {
                 // EXP
@@ -566,8 +574,20 @@ impl<T: EventTracer> Executor<T> {
             }
             0x0b => {
                 // SIGNEXTEND
-                // gas = 5.into();
-                todo!("SIGNEXTEND")
+                let b = evm.pop()?;
+                let x = evm.pop()?.as_usize();
+
+                let bit = (x + 1) << 3 - 1;
+                let neg = b.bit(bit);
+
+                let mask = Word::max() << (bit + 1);
+                let y = if neg {
+                    b | mask
+                } else {
+                    b & !mask
+                };
+                evm.push(y)?;
+                gas = 5.into();
             }
 
             // 0x10s: Comparison & Bitwise Logic
