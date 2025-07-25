@@ -1,5 +1,9 @@
 use solenoid::{
-    common::{Word, addr, address::Address, call::Call},
+    common::{
+        address::{Address, addr},
+        call::Call,
+        word::Word,
+    },
     decoder::{Bytecode, Decoder},
     eth::EthClient,
     executor::{Evm, Executor, StateTouch},
@@ -26,7 +30,7 @@ async fn call(
         value,
         from,
         to,
-        gas: Word::max_value(),
+        gas: Word::max(),
     };
 
     // TODO: use mock http server for hermetic tests
@@ -214,7 +218,7 @@ async fn test_set() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512");
 
-    let val = Word::from_str_radix("42", 16)?;
+    let val = Word::from_hex("42")?;
     let (_, ret, evm) = call(&format!("0x60fe47b1{val:064x}"), to, vec![]).await?;
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 0]);

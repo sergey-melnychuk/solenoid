@@ -1,4 +1,4 @@
-use crate::common::Word;
+use crate::common::word::Word;
 
 #[derive(Clone, Debug, Default)]
 pub struct Account {

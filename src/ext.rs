@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Instant};
 
 use crate::{
-    common::{Word, account::Account, address::Address},
+    common::{account::Account, address::Address, word::Word},
     eth::EthClient,
 };
 

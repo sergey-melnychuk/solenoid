@@ -2,7 +2,11 @@
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     use solenoid::{
-        common::{Word, addr, address::Address, call::Call},
+        common::{
+            address::{Address, addr},
+            call::Call,
+            word::Word,
+        },
         decoder::{Bytecode, Decoder},
         eth::EthClient,
         executor::{Evm, Executor, StateTouch},

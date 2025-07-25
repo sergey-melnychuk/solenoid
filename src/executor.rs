@@ -5,10 +5,10 @@ use thiserror::Error;
 
 use crate::{
     common::{
-        Word,
         address::Address,
         call::Call,
         hash::{self, keccak256},
+        word::Word,
     },
     decoder::{Bytecode, Decoder, DecoderError, Instruction},
     ext::Ext,
@@ -39,7 +39,7 @@ pub enum ExecutorError {
     DecoderError(#[from] DecoderError),
     #[error("Call run out of gas")]
     OutOfGas(),
-    #[error("Insufficient funds: have {have}, need {need}")]
+    #[error("Insufficient funds: have {have:?}, need {need:?}")]
     InsufficientFunds { have: Word, need: Word },
     #[error("Unallowed opcode from static call: {0}")]
     StaticCallViolation(u8),
@@ -255,10 +255,7 @@ pub struct Executor<T: EventTracer> {
 impl<T: EventTracer> Executor<T> {
     pub fn new() -> Self {
         let mut this = Self::default();
-        let timestamp = SystemTime::UNIX_EPOCH
-            .elapsed()
-            .unwrap()
-            .as_secs();
+        let timestamp = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_secs();
         this.tracer.push(Event {
             data: EventData::Init(format!("{{\"timestamp\":{timestamp}}}")),
             depth: 0,
@@ -312,7 +309,7 @@ impl<T: EventTracer> Executor<T> {
 
             // TODO: handle EIP-1559 here?
             // See: https://www.blocknative.com/blog/eip-1559-fees
-            let gas_price = Word::one() * 1_000_000; // 100 Gwei
+            let gas_price = Word::one() * 1_000_000.into(); // 100 Gwei
             let gas_fee = evm.gas.used * gas_price;
 
             if src < call.value + gas_fee {
@@ -365,8 +362,12 @@ impl<T: EventTracer> Executor<T> {
     ) -> Result<(T, Vec<u8>), ExecutorError> {
         self.tracer.push(Event {
             data: EventData::Call {
-                call: call.clone(),
                 r#type: ctx.call_type,
+                data: call.data.clone().into(),
+                value: call.value,
+                from: call.from,
+                to: call.to,
+                gas: call.gas.as_u64(),
             },
             depth: ctx.depth,
             reverted: false,
@@ -386,7 +387,7 @@ impl<T: EventTracer> Executor<T> {
                     pc: evm.pc,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
-                    data: instruction.argument.clone(),
+                    data: instruction.argument.clone().map(|vec| vec.into()),
                 },
             });
 
@@ -401,7 +402,7 @@ impl<T: EventTracer> Executor<T> {
                     pc: evm.pc - 1,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
-                    gas: cost,
+                    gas: cost.as_u64(),
                 },
             });
 
@@ -503,8 +504,8 @@ impl<T: EventTracer> Executor<T> {
                 // SDIV
                 let a = evm.pop()?;
                 let b = evm.pop()?;
-                let a_signed = I256::from_be_bytes(a.to_big_endian());
-                let b_signed = I256::from_be_bytes(b.to_big_endian());
+                let a_signed = I256::from_be_bytes(a.into_bytes());
+                let b_signed = I256::from_be_bytes(b.into_bytes());
                 let res = if b.is_zero() {
                     I256::from(0)
                 } else if a_signed == I256::MIN && b_signed == I256::from(-1) {
@@ -512,7 +513,7 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     a_signed / b_signed
                 };
-                evm.push(Word::from_big_endian(&res.to_be_bytes()))?;
+                evm.push(Word::from_bytes(&res.to_be_bytes()))?;
                 gas = 5.into();
             }
             0x06 => {
@@ -530,14 +531,14 @@ impl<T: EventTracer> Executor<T> {
                 // SMOD
                 let a = evm.pop()?;
                 let b = evm.pop()?;
-                let a_signed = I256::from_be_bytes(a.to_big_endian());
-                let b_signed = I256::from_be_bytes(b.to_big_endian());
+                let a_signed = I256::from_be_bytes(a.into_bytes());
+                let b_signed = I256::from_be_bytes(b.into_bytes());
                 let res = if b.is_zero() {
                     I256::from(0)
                 } else {
                     a_signed % b_signed
                 };
-                evm.push(Word::from_big_endian(&res.to_be_bytes()))?;
+                evm.push(Word::from_bytes(&res.to_be_bytes()))?;
                 gas = 5.into();
             }
             0x08 => {
@@ -557,7 +558,7 @@ impl<T: EventTracer> Executor<T> {
                 evm.push(base.pow(exponent))?;
 
                 let exp_bytes = exponent
-                    .to_big_endian()
+                    .into_bytes()
                     .into_iter()
                     .skip_while(|byte| byte == &0)
                     .count();
@@ -588,8 +589,8 @@ impl<T: EventTracer> Executor<T> {
                 // SLT
                 let a = evm.pop()?;
                 let b = evm.pop()?;
-                let a_signed = I256::from_be_bytes(a.to_big_endian());
-                let b_signed = I256::from_be_bytes(b.to_big_endian());
+                let a_signed = I256::from_be_bytes(a.into_bytes());
+                let b_signed = I256::from_be_bytes(b.into_bytes());
                 evm.push(if a_signed < b_signed {
                     Word::one()
                 } else {
@@ -601,8 +602,8 @@ impl<T: EventTracer> Executor<T> {
                 // SGT
                 let a = evm.pop()?;
                 let b = evm.pop()?;
-                let a_signed = I256::from_be_bytes(a.to_big_endian());
-                let b_signed = I256::from_be_bytes(b.to_big_endian());
+                let a_signed = I256::from_be_bytes(a.into_bytes());
+                let b_signed = I256::from_be_bytes(b.into_bytes());
                 evm.push(if a_signed > b_signed {
                     Word::one()
                 } else {
@@ -660,7 +661,7 @@ impl<T: EventTracer> Executor<T> {
                 let value: Word = evm.pop()?;
                 if index < Word::from(32) {
                     let byte_index = 31 - index.as_usize();
-                    evm.push(Word::from(value.byte(byte_index)))?;
+                    evm.push(Word::from(value.into_bytes()[byte_index]))?;
                 } else {
                     evm.push(Word::zero())?;
                 }
@@ -686,9 +687,9 @@ impl<T: EventTracer> Executor<T> {
                 // SAR
                 let shift = evm.pop()?.as_usize();
                 let value = evm.pop()?;
-                let value = I256::from_be_bytes(value.to_big_endian());
+                let value = I256::from_be_bytes(value.into_bytes());
                 let ret = value >> shift;
-                let ret = Word::from_big_endian(&ret.to_be_bytes());
+                let ret = Word::from_bytes(&ret.to_be_bytes());
                 evm.push(ret)?;
                 gas = 3.into();
             }
@@ -701,7 +702,7 @@ impl<T: EventTracer> Executor<T> {
                     return Err(ExecutorError::MissingData);
                 }
                 let data = &evm.memory[offset..offset + size];
-                let hash = Word::from_big_endian(&keccak256(data));
+                let hash = Word::from_bytes(&keccak256(data));
                 evm.push(hash)?;
                 gas = (30 + 6 * size.div_ceil(32)).into();
             }
@@ -748,7 +749,7 @@ impl<T: EventTracer> Executor<T> {
                 let mut data = [0u8; 32];
                 let copy = call.data.len().min(offset + 32) - offset;
                 data[0..copy].copy_from_slice(&call.data[offset..offset + copy]);
-                evm.push(Word::from_big_endian(&data))?;
+                evm.push(Word::from_bytes(&data))?;
                 gas = 3.into();
             }
             0x36 => {
@@ -847,7 +848,7 @@ impl<T: EventTracer> Executor<T> {
                 }
                 let code = ext.code(&address).await?;
                 if code.is_empty() {
-                    evm.push(Word::from_big_endian(&hash::empty()))?;
+                    evm.push(Word::from_bytes(&hash::empty()))?;
                 }
                 evm.push(ext.acc_mut(&address).code)?;
 
@@ -913,7 +914,7 @@ impl<T: EventTracer> Executor<T> {
                 if end > evm.memory.len() {
                     evm.memory.resize(end, 0);
                 }
-                let value = Word::from_big_endian(&evm.memory[offset..end]);
+                let value = Word::from_bytes(&evm.memory[offset..end]);
                 evm.push(value)?;
                 gas = 3.into();
                 gas += evm.memory_expansion_cost();
@@ -926,7 +927,7 @@ impl<T: EventTracer> Executor<T> {
                 if end > evm.memory.len() {
                     evm.memory.resize(end, 0);
                 }
-                let bytes = &value.to_big_endian();
+                let bytes = &value.into_bytes();
                 evm.memory[offset..end].copy_from_slice(bytes);
                 gas = 3.into();
                 gas += evm.memory_expansion_cost();
@@ -938,7 +939,13 @@ impl<T: EventTracer> Executor<T> {
                 if offset >= evm.memory.len() {
                     evm.memory.resize(offset + 1, 0);
                 }
-                evm.memory[offset] = value.to_little_endian()[0];
+                evm.memory[offset] = value
+                    .into_bytes()
+                    .iter()
+                    .rev()
+                    .nth(0)
+                    .copied()
+                    .unwrap_or_default();
                 gas = 3.into();
                 gas += evm.memory_expansion_cost();
             }
@@ -1124,7 +1131,7 @@ impl<T: EventTracer> Executor<T> {
                     .argument
                     .as_ref()
                     .ok_or(ExecutorError::MissingData)?;
-                evm.push(Word::from_big_endian(arg))?;
+                evm.push(Word::from_bytes(arg))?;
                 gas = 3.into();
             }
 
@@ -1228,8 +1235,8 @@ impl<T: EventTracer> Executor<T> {
 
                 self.tracer.push(Event {
                     data: EventData::Return {
-                        data: self.ret.clone(),
-                        gas_used: evm.gas.used,
+                        data: self.ret.clone().into(),
+                        gas_used: evm.gas.used.as_u64(),
                     },
                     depth: ctx.depth,
                     reverted: evm.reverted,
@@ -1409,11 +1416,11 @@ impl<T: EventTracer> Executor<T> {
             let mut buffer = Vec::with_capacity(1 + 20 + 32 + 32);
             buffer.push(0xffu8);
             buffer.extend_from_slice(&call.from.0);
-            buffer.extend_from_slice(&salt.to_big_endian());
+            buffer.extend_from_slice(&salt.into_bytes());
             buffer.extend_from_slice(&keccak256(&code.bytecode));
             let mut hash = keccak256(&buffer);
             hash[0..12].copy_from_slice(&[0u8; 12]);
-            Address::from(&Word::from_big_endian(&hash))
+            Address::from(&Word::from_bytes(&hash))
         };
 
         let inner_call = Call {
@@ -1444,11 +1451,11 @@ impl<T: EventTracer> Executor<T> {
 
             let hash = keccak256(&code);
             *ext.code_mut(&address) = code.clone();
-            ext.acc_mut(&address).code = Word::from_big_endian(&hash);
+            ext.acc_mut(&address).code = Word::from_bytes(&hash);
             ext.acc_mut(&call.from).nonce += Word::one();
             evm.account.push(AccountTouch::Code(
                 address,
-                Word::from_big_endian(&hash),
+                Word::from_bytes(&hash),
                 code.clone(),
             ));
             evm.account.push(AccountTouch::Nonce(
@@ -1459,7 +1466,7 @@ impl<T: EventTracer> Executor<T> {
             self.tracer.push(Event {
                 data: EventData::Account(AccountEvent::Deploy {
                     address,
-                    code_hash: Word::from_big_endian(&hash),
+                    code_hash: Word::from_bytes(&hash),
                     byte_code: code,
                 }),
                 depth: ctx.depth,

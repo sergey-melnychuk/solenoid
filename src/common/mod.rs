@@ -1,18 +1,61 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 pub mod account;
 pub mod address;
 pub mod call;
 pub mod error;
 pub mod hash;
+pub mod word;
 
-pub type Word = primitive_types::U256;
+#[derive(Clone)]
+pub struct Hex(Vec<u8>);
 
-pub fn word(s: &str) -> Word {
-    let b = decode::<32>(s);
-    Word::from_big_endian(&b)
+impl From<Vec<u8>> for Hex {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
 }
 
-pub const fn addr(s: &str) -> address::Address {
-    address::Address(decode(s))
+impl<const N: usize> From<[u8; N]> for Hex {
+    fn from(value: [u8; N]) -> Self {
+        Self(value.to_vec())
+    }
+}
+
+impl std::fmt::Debug for Hex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let hex = hex::encode(&self.0);
+        f.debug_tuple("Hex").field(&hex).finish()
+    }
+}
+
+impl Serialize for Hex {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let hex: String = hex::encode(&self.0)
+            .chars()
+            .skip_while(|c| c == &'0')
+            .collect();
+        let hex = format!("0x{hex}");
+        serializer.serialize_str(&hex)
+    }
+}
+
+impl<'de> Deserialize<'de> for Hex {
+    fn deserialize<D>(deserializer: D) -> Result<Hex, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let hex: &str = Deserialize::deserialize(deserializer)?;
+        let bin = hex::decode(hex.trim_start_matches("0x")).map_err(|_| {
+            D::Error::invalid_value(serde::de::Unexpected::Str(hex), &"Invalid hex string")
+        })?;
+        Ok(Hex(bin))
+    }
 }
 
 const fn decode<const N: usize>(s: &str) -> [u8; N] {

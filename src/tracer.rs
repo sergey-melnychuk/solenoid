@@ -1,6 +1,8 @@
-use crate::common::{Word, address::Address, call::Call};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+use crate::common::{Hex, address::Address, word::Word};
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum StateEvent {
     Get {
         address: Address,
@@ -16,7 +18,7 @@ pub enum StateEvent {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum AccountEvent {
     Deploy {
         address: Address,
@@ -34,7 +36,7 @@ pub enum AccountEvent {
     },
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub enum CallType {
     #[default]
     Call,
@@ -46,7 +48,7 @@ pub enum CallType {
     Precompile(Address),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum EventData {
     Init(String),
 
@@ -54,37 +56,41 @@ pub enum EventData {
         pc: usize,
         op: u8,
         name: String,
-        data: Option<Vec<u8>>,
+        data: Option<Hex>,
     },
     GasSub {
         pc: usize,
         op: u8,
         name: String,
-        gas: Word,
+        gas: u64,
     },
     GasAdd {
         pc: usize,
         op: u8,
         name: String,
-        gas: Word,
+        gas: u64,
     },
 
     Keccak {
-        data: Vec<u8>,
-        hash: [u8; 32],
+        data: Hex,
+        hash: Hex,
     },
 
     State(StateEvent),
     Account(AccountEvent),
 
     Call {
-        call: Call, 
+        data: Hex,
+        value: Word,
+        from: Address,
+        to: Address,
+        gas: u64,
         r#type: CallType,
     },
 
     Return {
-        data: Vec<u8>,
-        gas_used: Word,
+        data: Hex,
+        gas_used: u64,
     },
 
     SelfDestruct {
@@ -96,7 +102,7 @@ pub enum EventData {
     Log {
         address: Address,
         topics: Vec<Word>,
-        data: Vec<u8>,
+        data: Hex,
     },
 
     // BlockHead {
@@ -131,11 +137,10 @@ pub enum EventData {
     // },
     // Reorg(/* TODO */),
     // Fork(/* TODO */),
-
     Error(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Event {
     pub data: EventData,
     pub depth: usize,
@@ -146,7 +151,16 @@ pub struct Event {
 pub trait EventTracer: Default {
     fn push(&mut self, event: Event) {
         #[cfg(feature = "tracing")]
-        eprintln!("TRACER: {event:?}");
+        {
+            if matches!(event.data, EventData::Init(_)) {
+                eprintln!();
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&event) {
+                eprintln!("{json}");
+            } else {
+                eprintln!("TRACER: {event:?}");
+            }
+        }
     }
 
     fn peek(&self) -> &[Event] {

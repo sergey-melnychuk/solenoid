@@ -1,5 +1,10 @@
 use solenoid::{
-    common::{Word, addr, address::Address, call::Call, hash::keccak256, word},
+    common::{
+        address::{Address, addr},
+        call::Call,
+        hash::keccak256,
+        word::{Word, word},
+    },
     decoder::Decoder,
     eth::EthClient,
     executor::{AccountTouch, Evm, Executor, StateTouch},
@@ -47,7 +52,7 @@ async fn test_deploy() -> eyre::Result<()> {
         vec![
             AccountTouch::Code(
                 addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"),
-                Word::from_big_endian(&keccak256(&code)),
+                Word::from_bytes(&keccak256(&code)),
                 code
             ),
             AccountTouch::Nonce(addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512"), 0, 1)

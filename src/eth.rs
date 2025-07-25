@@ -1,6 +1,6 @@
 use eyre::OptionExt;
 
-use crate::common::Word;
+use crate::common::word::Word;
 
 #[cfg(feature = "account")]
 use crate::common::account::Account;
@@ -164,7 +164,7 @@ impl EthClient {
 fn hex_to_word(val: &serde_json::Value) -> eyre::Result<Word> {
     let hex = val.as_str().ok_or_eyre("missing hex str")?;
     let hex = hex.strip_prefix("0x").unwrap_or(hex);
-    let num = Word::from_str_radix(hex, 16)?;
+    let num = Word::from_hex(hex)?;
     Ok(num)
 }
 

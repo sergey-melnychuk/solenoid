@@ -1,6 +1,8 @@
-use crate::common::{Word, address::Address};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default)]
+use crate::common::{address::Address, word::Word};
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Call {
     pub data: Vec<u8>,
     pub value: Word,

@@ -1,4 +1,6 @@
-use crate::common::Word;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::common::{decode, word::Word};
 
 #[derive(Clone, Copy, Default, Hash, Eq, PartialEq)]
 pub struct Address(pub [u8; 20]);
@@ -16,8 +18,8 @@ impl Address {
         // https://www.evm.codes/?fork=cancun#55
         // address = keccak256(rlp([sender_address,sender_nonce]))[12:]
         let a: Word = self.into();
-        let a: [u8; 32] = a.to_big_endian();
-        let b: [u8; 32] = nonce.to_big_endian();
+        let a: [u8; 32] = a.into_bytes();
+        let b: [u8; 32] = nonce.into_bytes();
         let mut buffer = [0u8; 64];
         buffer[0..32].copy_from_slice(&a);
         buffer[32..].copy_from_slice(&b);
@@ -44,13 +46,13 @@ impl From<&Address> for Word {
     fn from(value: &Address) -> Self {
         let mut bytes = [0u8; 32];
         bytes[12..].copy_from_slice(&value.0);
-        Word::from_big_endian(&bytes)
+        Word::from_bytes(&bytes)
     }
 }
 
 impl From<&Word> for Address {
     fn from(value: &Word) -> Self {
-        let bytes: [u8; 32] = value.to_big_endian();
+        let bytes: [u8; 32] = value.into_bytes();
         let mut ret = Address::default();
         ret.0[..].copy_from_slice(&bytes[12..]);
         ret
@@ -90,10 +92,42 @@ impl TryFrom<&str> for Address {
     }
 }
 
+impl Serialize for Address {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let hex = hex::encode(self.0);
+        let hex = format!("0x{hex}");
+        serializer.serialize_str(&hex)
+    }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Address, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let hex: &str = Deserialize::deserialize(deserializer)?;
+        let hex = hex.trim_start_matches("0x");
+        if hex.len() != 40 {
+            return Err(D::Error::invalid_value(
+                serde::de::Unexpected::Str(hex),
+                &"Invalid hex length",
+            ));
+        }
+        Ok(addr(hex))
+    }
+}
+
+pub const fn addr(s: &str) -> Address {
+    Address(decode(s))
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::common::addr;
-
     use super::*;
 
     #[test]

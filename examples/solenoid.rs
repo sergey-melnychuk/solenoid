@@ -1,6 +1,6 @@
 use eyre::Context;
 use solenoid::{
-    common::{Word, addr},
+    common::{address::addr, word::Word},
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},
@@ -65,7 +65,7 @@ async fn main() -> eyre::Result<()> {
     println!("Call.get(): {}", hex::encode(res.ret));
 
     let res = sole
-        .execute(address, "set(uint256)", &Word::one().to_big_endian())
+        .execute(address, "set(uint256)", &Word::one().into_bytes())
         .with_sender(from)
         .with_gas(Word::from(1_000_000))
         .ready()
@@ -98,7 +98,7 @@ async fn main() -> eyre::Result<()> {
     println!("Cell.get(): {}", hex::encode(res.ret));
 
     let res = sole
-        .execute(cell, "set(uint256)", &Word::from(0xff).to_big_endian())
+        .execute(cell, "set(uint256)", &Word::from(0xff).into_bytes())
         .with_sender(from)
         .with_gas(Word::from(1_000_000))
         .ready()

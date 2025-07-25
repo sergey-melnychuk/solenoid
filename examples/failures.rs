@@ -1,6 +1,6 @@
 use eyre::Context;
 use solenoid::{
-    common::{Word, addr},
+    common::{address::addr, word::Word},
     ext::Ext,
     solenoid::{Builder, Solenoid},
 };
@@ -108,8 +108,8 @@ async fn main() -> eyre::Result<()> {
 
 fn decode_error_string(ret: &[u8]) -> String {
     let _selector = &ret[0..4];
-    let offset = 4 + 32 + Word::from_big_endian(&ret[4..4 + 32]).as_usize();
-    let size = Word::from_big_endian(&ret[4 + 32..4 + 32 + 32]).as_usize();
+    let offset = 4 + 32 + Word::from_bytes(&ret[4..4 + 32]).as_usize();
+    let size = Word::from_bytes(&ret[4 + 32..4 + 32 + 32]).as_usize();
 
     let data = &ret[offset..offset + size];
     String::from_utf8_lossy(data).to_string()

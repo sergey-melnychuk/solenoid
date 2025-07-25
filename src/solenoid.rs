@@ -1,5 +1,5 @@
 use crate::{
-    common::{Word, address::Address, call::Call, hash::keccak256},
+    common::{address::Address, call::Call, hash::keccak256, word::Word},
     decoder::Decoder,
     executor::{Context, Evm, Executor, Gas},
     ext::Ext,
@@ -206,7 +206,7 @@ impl Runner {
             .await?;
 
         *ext.code_mut(&address) = ret.clone();
-        ext.acc_mut(&address).code = Word::from_big_endian(&keccak256(&ret));
+        ext.acc_mut(&address).code = Word::from_bytes(&keccak256(&ret));
         ext.acc_mut(&self.call.from).nonce += Word::one();
 
         Ok(CallResult {
