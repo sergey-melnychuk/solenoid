@@ -31,7 +31,7 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("create")?;
     for e in res.tracer.take() {
-        println!("{}", serde_json::to_string(&e).unwrap());
+        println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let address = res
         .created
@@ -49,7 +49,7 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("execute")?;
     for e in res.tracer.take() {
-        println!("{}", serde_json::to_string(&e).unwrap());
+        println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))
@@ -68,7 +68,7 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("execute")?;
     for e in res.tracer.take() {
-        println!("{}", serde_json::to_string(&e).unwrap());
+        println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))
@@ -89,7 +89,7 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("execute")?;
     for e in res.tracer.take() {
-        println!("{}", serde_json::to_string(&e).unwrap());
+        println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))
@@ -110,7 +110,7 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("execute")?;
     for e in res.tracer.take() {
-        println!("{}", serde_json::to_string(&e).unwrap());
+        println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
         format!("FAILURE: '{}'", decode_error_string(&res.ret))

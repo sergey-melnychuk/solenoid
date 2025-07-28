@@ -11,7 +11,7 @@ async fn main() -> eyre::Result<()> {
         eth::EthClient,
         executor::{Evm, Executor, StateTouch},
         ext::Ext,
-        tracer::NoopTracer,
+        tracer::{EventTracer, LogingTracer},
     };
 
     fn dump(decoded: &Bytecode) {
@@ -71,9 +71,9 @@ async fn main() -> eyre::Result<()> {
     ext.acc_mut(&from).balance = Word::from(1_000_000_000_000_000_000u64);
 
     println!("\nEXECUTION:");
-    let executor = Executor::<NoopTracer>::new().with_log();
+    let executor = Executor::<LogingTracer>::new().with_log();
     let mut evm = Evm::default();
-    let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
+    let (mut tracer, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
     if !evm.reverted {
         println!("OK: 0x{}", hex::encode(ret));
     } else {
@@ -107,12 +107,17 @@ async fn main() -> eyre::Result<()> {
             }
         }
     });
-    println!("---");
     for (addr, state) in ext.state {
-        println!("\n{addr}:");
+        println!("{addr}:");
         println!("{:#?}", state.account);
         println!("DATA: {:#?}", state.data);
         println!("CODE: ({} bytes)", state.code.len());
+    }
+    println!("---");
+    let events = tracer.take();
+    for event in events {
+        let json = serde_json::to_string_pretty(&event).unwrap();
+        println!("{json}");
     }
 
     Ok(())
