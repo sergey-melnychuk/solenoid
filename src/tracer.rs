@@ -52,14 +52,14 @@ pub enum CallType {
 pub enum EventData {
     Init(String),
 
-    OpCode {
-        pc: usize,
-        op: u8,
-        name: String,
-        data: Hex,
-        gas: Word,
-    },
-
+    /* TODO: opcode-level traces are pretty much useless */
+    // OpCode {
+    //     pc: usize,
+    //     op: u8,
+    //     name: String,
+    //     data: Hex,
+    //     gas: Word,
+    // },
     Keccak {
         data: Hex,
         hash: Hex,
@@ -177,8 +177,6 @@ impl EventTracer for LogingTracer {
     }
 
     fn take(&mut self) -> Vec<Event> {
-        let mut vec = Vec::new();
-        std::mem::swap(&mut self.0, &mut vec);
-        vec
+        std::mem::take(&mut self.0)
     }
 }

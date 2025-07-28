@@ -268,6 +268,10 @@ impl<T: EventTracer> Executor<T> {
         Self { log: true, ..self }
     }
 
+    pub fn set_log(&mut self, log: bool) {
+        self.log = log;
+    }
+
     pub fn with_tracer<G: EventTracer>(tracer: G) -> Executor<G> {
         Executor {
             tracer,
@@ -348,7 +352,8 @@ impl<T: EventTracer> Executor<T> {
                 ..Context::default()
             };
             let tracer = self.tracer.fork();
-            let executor = Executor::<T>::with_tracer(tracer);
+            let mut executor = Executor::<T>::with_tracer(tracer);
+            executor.set_log(self.log);
             let (tracer, ret) = executor
                 .execute_with_context(code, call, evm, ext, ctx)
                 .await?;
@@ -389,17 +394,18 @@ impl<T: EventTracer> Executor<T> {
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
                 .await?;
 
-            self.tracer.push(Event {
-                depth: ctx.depth,
-                reverted: false,
-                data: EventData::OpCode {
-                    pc: evm.pc - 1,
-                    op: instruction.opcode.code,
-                    name: instruction.opcode.name(),
-                    data: instruction.argument.clone().unwrap_or_default().into(),
-                    gas: cost,
-                },
-            });
+            /* TODO: opcode-level traces are pretty much useless */
+            // self.tracer.push(Event {
+            //     depth: ctx.depth,
+            //     reverted: false,
+            //     data: EventData::OpCode {
+            //         pc: evm.pc - 1,
+            //         op: instruction.opcode.code,
+            //         name: instruction.opcode.name(),
+            //         data: instruction.argument.clone().unwrap_or_default().into(),
+            //         gas: cost,
+            //     },
+            // });
 
             evm.gas(cost)?;
 
@@ -1358,7 +1364,8 @@ impl<T: EventTracer> Executor<T> {
             ..ctx
         };
 
-        let executor = Executor::<T>::with_tracer(self.tracer.fork());
+        let mut executor = Executor::<T>::with_tracer(self.tracer.fork());
+        executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, ret) = Box::pin(future).await?;
@@ -1456,7 +1463,8 @@ impl<T: EventTracer> Executor<T> {
             depth: ctx.depth + 1,
             ..ctx
         };
-        let executor = Executor::<T>::with_tracer(self.tracer.fork());
+        let mut executor = Executor::<T>::with_tracer(self.tracer.fork());
+        executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, code) = Box::pin(future).await?;
