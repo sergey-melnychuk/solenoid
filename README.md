@@ -74,5 +74,5 @@ R:0xe7f1725e7734ce288f8367e1bb143e90bb3f0512[0]=0
 ```
 
 ```
-cargo check --target wasm32-unknown-unknown
+cargo check --tests --target wasm32-unknown-unknown
 ```
