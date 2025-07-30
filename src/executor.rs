@@ -42,8 +42,6 @@ pub enum ExecutorError {
     InsufficientFunds { have: Word, need: Word },
     #[error("Unallowed opcode from static call: {0}")]
     StaticCallViolation(u8),
-    #[error("{0}")]
-    Eyre(#[from] eyre::ErrReport),
 }
 
 const STACK_LIMIT: usize = 1024;
@@ -110,45 +108,40 @@ impl Evm {
         }
     }
 
-    pub(crate) fn error(&mut self, e: ExecutorError) -> Result<(), ExecutorError> {
+    pub(crate) fn error(&mut self, e: eyre::Report) -> eyre::Result<()> {
         self.stopped = true;
         self.reverted = true;
         Err(e)
     }
 
-    pub fn push(&mut self, value: Word) -> Result<(), ExecutorError> {
+    pub fn push(&mut self, value: Word) -> eyre::Result<()> {
         if self.stack.len() >= STACK_LIMIT {
-            self.error(ExecutorError::StackOverflow)?;
+            self.error(ExecutorError::StackOverflow.into())?;
         }
         self.stack.push(value);
         Ok(())
     }
 
-    pub fn pop(&mut self) -> Result<Word, ExecutorError> {
+    pub fn pop(&mut self) -> eyre::Result<Word> {
         if let Some(word) = self.stack.pop() {
             Ok(word)
         } else {
-            self.error(ExecutorError::StackUnderflow)
+            self.error(ExecutorError::StackUnderflow.into())
                 .map(|_| Word::zero())
         }
     }
 
-    pub fn gas(&mut self, cost: Word) -> Result<(), ExecutorError> {
+    pub fn gas(&mut self, cost: Word) -> eyre::Result<()> {
         match self.gas.sub(cost) {
             Ok(_) => Ok(()),
-            Err(e) => self.error(e),
+            Err(e) => self.error(e.into()),
         }
     }
 
-    pub async fn get(
-        &mut self,
-        ext: &mut Ext,
-        addr: &Address,
-        key: &Word,
-    ) -> Result<Word, ExecutorError> {
+    pub async fn get(&mut self, ext: &mut Ext, addr: &Address, key: &Word) -> eyre::Result<Word> {
         match ext.get(addr, key).await {
             Ok(word) => Ok(word),
-            Err(e) => self.error(e.into()).map(|_| Word::zero()),
+            Err(e) => self.error(e).map(|_| Word::zero()),
         }
     }
 
@@ -158,17 +151,17 @@ impl Evm {
         addr: &Address,
         key: Word,
         val: Word,
-    ) -> Result<(), ExecutorError> {
+    ) -> eyre::Result<()> {
         match ext.put(addr, key, val).await {
             Ok(_) => Ok(()),
-            Err(e) => self.error(e.into()),
+            Err(e) => self.error(e),
         }
     }
 
-    pub async fn code(&mut self, ext: &mut Ext, addr: &Address) -> Result<Vec<u8>, ExecutorError> {
+    pub async fn code(&mut self, ext: &mut Ext, addr: &Address) -> eyre::Result<Vec<u8>> {
         match ext.code(addr).await {
             Ok(code) => Ok(code),
-            Err(e) => self.error(e.into()).map(|_| Default::default()),
+            Err(e) => self.error(e).map(|_| Default::default()),
         }
     }
 
@@ -284,7 +277,7 @@ impl<T: EventTracer> Executor<T> {
         call: &Call,
         evm: &mut Evm,
         ext: &mut Ext,
-    ) -> Result<(T, Vec<u8>), ExecutorError> {
+    ) -> eyre::Result<(T, Vec<u8>)> {
         ext.transient.clear();
         evm.gas = Gas::new(call.gas);
 
@@ -307,7 +300,8 @@ impl<T: EventTracer> Executor<T> {
                 return Err(ExecutorError::InsufficientFunds {
                     have: src,
                     need: call.value,
-                });
+                }
+                .into());
             }
 
             // TODO: handle EIP-1559 here?
@@ -318,7 +312,8 @@ impl<T: EventTracer> Executor<T> {
                 return Err(ExecutorError::InsufficientFunds {
                     have: src,
                     need: call.value + gas_fee,
-                });
+                }
+                .into());
             }
 
             let nonce = ext.acc_mut(&call.from).nonce;
@@ -396,7 +391,7 @@ impl<T: EventTracer> Executor<T> {
         evm: &mut Evm,
         ext: &mut Ext,
         ctx: Context,
-    ) -> Result<(T, Vec<u8>), ExecutorError> {
+    ) -> eyre::Result<(T, Vec<u8>)> {
         self.tracer.push(Event {
             data: EventData::Call {
                 r#type: ctx.call_type,
@@ -411,7 +406,7 @@ impl<T: EventTracer> Executor<T> {
         });
 
         if ctx.depth > CALL_DEPTH_LIMIT {
-            return Err(ExecutorError::CallDepthLimitReached);
+            return Err(ExecutorError::CallDepthLimitReached.into());
         }
 
         while !evm.stopped && evm.pc < code.instructions.len() {
@@ -476,7 +471,7 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
         ctx: Context,
         instruction: &Instruction,
-    ) -> Result<Word, ExecutorError> {
+    ) -> eyre::Result<Word> {
         let mut gas = Word::zero();
         let mut pc_increment = true;
 
@@ -745,7 +740,7 @@ impl<T: EventTracer> Executor<T> {
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
                 if offset + size > evm.memory.len() {
-                    return Err(ExecutorError::MissingData);
+                    return Err(ExecutorError::MissingData.into());
                 }
                 let data = &evm.memory[offset..offset + size];
                 let sha3 = keccak256(data);
@@ -799,7 +794,7 @@ impl<T: EventTracer> Executor<T> {
                 // CALLDATALOAD
                 let offset = evm.pop()?.as_usize();
                 if offset > call.data.len() {
-                    evm.error(ExecutorError::MissingData)?;
+                    evm.error(ExecutorError::MissingData.into())?;
                 }
                 let mut data = [0u8; 32];
                 let copy = call.data.len().min(offset + 32) - offset;
@@ -1037,7 +1032,7 @@ impl<T: EventTracer> Executor<T> {
             0x55 => {
                 // SSTORE
                 if matches!(ctx.call_type, CallType::Static) {
-                    return Err(ExecutorError::StaticCallViolation(opcode));
+                    return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
                 let key = evm.pop()?;
 
@@ -1111,7 +1106,7 @@ impl<T: EventTracer> Executor<T> {
                 let dest = evm.pop()?.as_usize();
                 let dest = code.resolve_jump(dest).ok_or(ExecutorError::InvalidJump)?;
                 if code.instructions[dest].opcode.code != 0x5b {
-                    evm.error(ExecutorError::InvalidJump)?;
+                    evm.error(ExecutorError::InvalidJump.into())?;
                 }
                 evm.pc = dest;
                 pc_increment = false;
@@ -1124,7 +1119,7 @@ impl<T: EventTracer> Executor<T> {
                 let cond = evm.pop()?;
                 if !cond.is_zero() {
                     if code.instructions[dest].opcode.code != 0x5b {
-                        evm.error(ExecutorError::InvalidJump)?;
+                        evm.error(ExecutorError::InvalidJump.into())?;
                     }
                     evm.pc = dest;
                     pc_increment = false;
@@ -1202,7 +1197,7 @@ impl<T: EventTracer> Executor<T> {
                 // DUP1..DUP16
                 let n = instruction.opcode.n as usize;
                 if evm.stack.len() < n {
-                    evm.error(ExecutorError::StackUnderflow)?;
+                    evm.error(ExecutorError::StackUnderflow.into())?;
                 }
                 let val = evm.stack[evm.stack.len() - n];
                 evm.push(val)?;
@@ -1213,7 +1208,7 @@ impl<T: EventTracer> Executor<T> {
                 // SWAP1..SWAP16
                 let n = instruction.opcode.n as usize;
                 if evm.stack.len() <= n {
-                    evm.error(ExecutorError::StackUnderflow)?;
+                    evm.error(ExecutorError::StackUnderflow.into())?;
                 }
                 let stack_len = evm.stack.len();
                 evm.stack.swap(stack_len - 1, stack_len - 1 - n);
@@ -1223,7 +1218,7 @@ impl<T: EventTracer> Executor<T> {
             0xa0..0xa4 => {
                 // LOG0..LOG4
                 if matches!(ctx.call_type, CallType::Static) {
-                    return Err(ExecutorError::StaticCallViolation(opcode));
+                    return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
                 let n = instruction.opcode.n as usize;
                 let offset = evm.pop()?.as_usize();
@@ -1249,7 +1244,7 @@ impl<T: EventTracer> Executor<T> {
             0xf0 => {
                 // CREATE
                 if matches!(ctx.call_type, CallType::Static) {
-                    return Err(ExecutorError::StaticCallViolation(opcode));
+                    return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
                 self.create(this, call, &mut gas, evm, ext, ctx).await?;
             }
@@ -1263,7 +1258,7 @@ impl<T: EventTracer> Executor<T> {
                         .nth(3)
                         .ok_or(ExecutorError::StackUnderflow)?;
                     if !value.is_zero() {
-                        return Err(ExecutorError::StaticCallViolation(opcode));
+                        return Err(ExecutorError::StaticCallViolation(opcode).into());
                     }
                 }
                 self.call(this, &mut gas, evm, ext, ctx)
@@ -1321,7 +1316,7 @@ impl<T: EventTracer> Executor<T> {
             0xf5 => {
                 // CREATE2
                 if matches!(ctx.call_type, CallType::Static) {
-                    return Err(ExecutorError::StaticCallViolation(opcode));
+                    return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
                 let ctx = Context {
                     call_type: CallType::Create2,
@@ -1340,17 +1335,17 @@ impl<T: EventTracer> Executor<T> {
             0xfe => {
                 // INVALID
                 evm.gas.sub(evm.gas.remaining())?;
-                evm.error(ExecutorError::InvalidOpcode(0xfe))?;
+                evm.error(ExecutorError::InvalidOpcode(0xfe).into())?;
             }
             0xff => {
                 // SELFDESTRUCT
                 if matches!(ctx.call_type, CallType::Static) {
-                    return Err(ExecutorError::StaticCallViolation(opcode));
+                    return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
                 todo!("SELFDESTRUCT");
             }
             _ => {
-                return Err(ExecutorError::UnknownOpcode(opcode));
+                return Err(ExecutorError::UnknownOpcode(opcode).into());
             }
         }
 
@@ -1432,10 +1427,13 @@ impl<T: EventTracer> Executor<T> {
 
         if !inner_evm.reverted {
             if ret.len() != ret_size {
-                evm.error(ExecutorError::WrongReturnDataSize {
-                    exp: ret_size,
-                    got: ret.len(),
-                })?;
+                evm.error(
+                    ExecutorError::WrongReturnDataSize {
+                        exp: ret_size,
+                        got: ret.len(),
+                    }
+                    .into(),
+                )?;
             }
             let size = ret_offset + ret_size;
             if size > evm.memory.len() {
