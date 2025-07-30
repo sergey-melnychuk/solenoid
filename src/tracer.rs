@@ -20,20 +20,33 @@ pub enum StateEvent {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum AccountEvent {
-    Deploy {
+    SetCode {
         address: Address,
-        code_hash: Word,
-        byte_code: Vec<u8>,
+        codehash: Word,
+        bytecode: Vec<u8>,
     },
-    Nonce {
+    GetCode {
         address: Address,
+        bytecode: Vec<u8>,
+    },
+    SetNonce {
+        address: Address,
+        val: u64,
         new: u64,
     },
-    Value {
+    // GetNonce {
+    //     address: Address,
+    //     val: u64,
+    // },
+    SetValue {
         address: Address,
         val: Word,
         new: Word,
     },
+    // GetValue {
+    //     address: Address,
+    //     val: Word,
+    // },
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
@@ -52,14 +65,13 @@ pub enum CallType {
 pub enum EventData {
     Init(String),
 
-    /* TODO: opcode-level traces are pretty much useless */
-    // OpCode {
-    //     pc: usize,
-    //     op: u8,
-    //     name: String,
-    //     data: Hex,
-    //     gas: Word,
-    // },
+    OpCode {
+        pc: usize,
+        op: u8,
+        name: String,
+        data: Hex,
+        gas: Word,
+    },
     Keccak {
         data: Hex,
         hash: Hex,
@@ -165,9 +177,9 @@ pub struct NoopTracer;
 impl EventTracer for NoopTracer {}
 
 #[derive(Default)]
-pub struct LogingTracer(Vec<Event>);
+pub struct LoggingTracer(Vec<Event>);
 
-impl EventTracer for LogingTracer {
+impl EventTracer for LoggingTracer {
     fn push(&mut self, event: Event) {
         self.0.push(event);
     }

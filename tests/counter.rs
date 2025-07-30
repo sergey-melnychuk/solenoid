@@ -15,7 +15,7 @@ static CODE: &str = include_str!("../etc/counter/Counter.bin-runtime");
 
 fn code() -> eyre::Result<Bytecode> {
     let code = hex::decode(CODE.trim_start_matches("0x"))?;
-    Ok(Decoder::decode(code)?)
+    Ok(Decoder::decode(code))
 }
 
 async fn call(
@@ -55,7 +55,7 @@ async fn test_deploy() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let code = include_str!("../etc/counter/Counter.bin");
     let code = hex::decode(code)?;
-    let code = Decoder::decode(code)?;
+    let code = Decoder::decode(code);
     let to = Address::zero();
 
     // TODO: extract EthClient trait and provide mock impl here?

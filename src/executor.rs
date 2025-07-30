@@ -1,5 +1,6 @@
 use std::time::SystemTime;
 
+use eyre::Context as _;
 use i256::I256;
 use thiserror::Error;
 
@@ -10,7 +11,7 @@ use crate::{
         hash::{self, keccak256},
         word::Word,
     },
-    decoder::{Bytecode, Decoder, DecoderError, Instruction},
+    decoder::{Bytecode, Decoder, Instruction},
     ext::Ext,
     tracer::{AccountEvent, CallType, Event, EventData, EventTracer, StateEvent},
 };
@@ -35,8 +36,6 @@ pub enum ExecutorError {
     InvalidOpcode(u8),
     #[error("Unknown opcode: {0:#02x}")]
     UnknownOpcode(u8),
-    #[error("Bytcode decoding error: {0}")]
-    DecoderError(#[from] DecoderError),
     #[error("Call run out of gas")]
     OutOfGas(),
     #[error("Insufficient funds: have {have:?}, need {need:?}")]
@@ -329,6 +328,15 @@ impl<T: EventTracer> Executor<T> {
                 nonce.as_u64(),
                 nonce.as_u64() + 1,
             ));
+            self.tracer.push(Event {
+                data: EventData::Account(AccountEvent::SetNonce {
+                    address: call.from,
+                    val: nonce.as_u64(),
+                    new: nonce.as_u64() + 1,
+                }),
+                depth: 0,
+                reverted: false,
+            });
 
             ext.acc_mut(&call.from).balance -= call.value + gas_fee;
             evm.account.push(AccountTouch::Value(
@@ -336,10 +344,28 @@ impl<T: EventTracer> Executor<T> {
                 src,
                 src - call.value - gas_fee,
             ));
+            self.tracer.push(Event {
+                data: EventData::Account(AccountEvent::SetValue {
+                    address: call.from,
+                    val: src,
+                    new: src - call.value - gas_fee,
+                }),
+                depth: 0,
+                reverted: false,
+            });
 
             ext.acc_mut(&call.to).balance += call.value;
             evm.account
                 .push(AccountTouch::Value(call.to, dst, dst + call.value));
+            self.tracer.push(Event {
+                data: EventData::Account(AccountEvent::SetValue {
+                    address: call.to,
+                    val: src,
+                    new: src + call.value,
+                }),
+                depth: 0,
+                reverted: false,
+            });
 
             evm.stopped = true;
             evm.reverted = false;
@@ -356,7 +382,8 @@ impl<T: EventTracer> Executor<T> {
             executor.set_log(self.log);
             let (tracer, ret) = executor
                 .execute_with_context(code, call, evm, ext, ctx)
-                .await?;
+                .await
+                .with_context(|| "execute")?;
             self.tracer.join(tracer, evm.reverted);
             Ok((self.tracer, ret))
         }
@@ -392,20 +419,22 @@ impl<T: EventTracer> Executor<T> {
 
             let cost = self
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
-                .await?;
+                .await
+                .with_context(|| {
+                    format!("{:#06x}: {}", instruction.offset, instruction.opcode.name())
+                })?;
 
-            /* TODO: opcode-level traces are pretty much useless */
-            // self.tracer.push(Event {
-            //     depth: ctx.depth,
-            //     reverted: false,
-            //     data: EventData::OpCode {
-            //         pc: evm.pc - 1,
-            //         op: instruction.opcode.code,
-            //         name: instruction.opcode.name(),
-            //         data: instruction.argument.clone().unwrap_or_default().into(),
-            //         gas: cost,
-            //     },
-            // });
+            self.tracer.push(Event {
+                depth: ctx.depth,
+                reverted: false,
+                data: EventData::OpCode {
+                    pc: evm.pc - 1,
+                    op: instruction.opcode.code,
+                    name: instruction.opcode.name(),
+                    data: instruction.argument.clone().unwrap_or_default().into(),
+                    gas: cost,
+                },
+            });
 
             evm.gas(cost)?;
 
@@ -415,7 +444,7 @@ impl<T: EventTracer> Executor<T> {
                     .as_ref()
                     .map(|data| format!("0x{}", hex::encode(data)));
                 println!(
-                    "{:#04x}: {} {}",
+                    "{:#06x}: {} {}",
                     evm.pc,
                     instruction.opcode.name(),
                     data.unwrap_or_default()
@@ -719,7 +748,16 @@ impl<T: EventTracer> Executor<T> {
                     return Err(ExecutorError::MissingData);
                 }
                 let data = &evm.memory[offset..offset + size];
-                let hash = Word::from_bytes(&keccak256(data));
+                let sha3 = keccak256(data);
+                let hash = Word::from_bytes(&sha3);
+                self.tracer.push(Event {
+                    data: EventData::Keccak {
+                        data: data.to_vec().into(),
+                        hash: sha3.to_vec().into(),
+                    },
+                    depth: ctx.depth,
+                    reverted: false,
+                });
                 evm.push(hash)?;
                 gas = (30 + 6 * size.div_ceil(32)).into();
             }
@@ -903,7 +941,10 @@ impl<T: EventTracer> Executor<T> {
             }
             0x47 => {
                 // SELFBALANCE
-                todo!("SELFBALANCE")
+                let balance = ext.balance(&this).await?;
+                // TODO: touch account
+                evm.push(balance)?;
+                gas = 5.into();
             }
             0x48 => {
                 // BASEFEE
@@ -1189,9 +1230,10 @@ impl<T: EventTracer> Executor<T> {
                 let size = evm.pop()?.as_usize();
 
                 let mut topics = Vec::with_capacity(n);
-                for i in 0..n {
-                    topics[n - 1 - i] = evm.pop()?;
+                for _ in 0..n {
+                    topics.push(evm.pop()?);
                 }
+                topics.reverse();
 
                 if offset + size > evm.memory.len() {
                     evm.memory.resize(offset + size, 0);
@@ -1224,7 +1266,9 @@ impl<T: EventTracer> Executor<T> {
                         return Err(ExecutorError::StaticCallViolation(opcode));
                     }
                 }
-                self.call(this, &mut gas, evm, ext, ctx).await?;
+                self.call(this, &mut gas, evm, ext, ctx)
+                    .await
+                    .with_context(|| "opcode: CALL")?;
             }
             0xf2 => {
                 // CALLCODE
@@ -1326,7 +1370,7 @@ impl<T: EventTracer> Executor<T> {
         ctx: Context,
     ) -> eyre::Result<()> {
         let call_gas = evm.pop()?;
-        let address = &evm.pop()?;
+        let address: Address = (&evm.pop()?).into();
         let value = if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             evm.pop()?
         } else {
@@ -1339,8 +1383,21 @@ impl<T: EventTracer> Executor<T> {
 
         *gas = evm.memory_expansion_cost() + Word::from(21000);
 
-        let bytecode = evm.code(ext, &address.into()).await?;
-        let code = Decoder::decode(bytecode)?;
+        let bytecode = evm.code(ext, &address).await?;
+        let code = Decoder::decode(bytecode);
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::GetCode {
+                address,
+                bytecode: code.bytecode.clone(),
+            }),
+            depth: ctx.depth,
+            reverted: false,
+        });
+
+        if args_offset + args_size > evm.memory.len() {
+            evm.memory.resize(args_offset + args_size, 0);
+        }
+        *gas += evm.memory_expansion_cost();
 
         let inner_call = Call {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
@@ -1349,7 +1406,7 @@ impl<T: EventTracer> Executor<T> {
             to: if matches!(ctx.call_type, CallType::Delegate | CallType::Callcode) {
                 this
             } else {
-                address.into()
+                address
             },
             gas: call_gas,
         };
@@ -1368,7 +1425,9 @@ impl<T: EventTracer> Executor<T> {
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
-        let (tracer, ret) = Box::pin(future).await?;
+        let (tracer, ret) = Box::pin(future)
+            .await
+            .with_context(|| format!("calltype: {:?}", ctx.call_type))?;
         self.tracer.join(tracer, inner_evm.reverted);
 
         if !inner_evm.reverted {
@@ -1427,7 +1486,7 @@ impl<T: EventTracer> Executor<T> {
         evm.gas(*gas)?;
 
         let bytecode = evm.memory[offset..offset + size].to_vec();
-        let code = Decoder::decode(bytecode)?;
+        let code = Decoder::decode(bytecode);
 
         let nonce = ext.acc_mut(&this).nonce;
         let address = if !matches!(ctx.call_type, CallType::Create2) {
@@ -1467,7 +1526,7 @@ impl<T: EventTracer> Executor<T> {
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
-        let (tracer, code) = Box::pin(future).await?;
+        let (tracer, code) = Box::pin(future).await.with_context(|| "create")?;
         self.tracer.join(tracer, inner_evm.reverted);
 
         if !inner_evm.reverted {
@@ -1488,17 +1547,18 @@ impl<T: EventTracer> Executor<T> {
                 nonce.as_u64() + 1,
             ));
             self.tracer.push(Event {
-                data: EventData::Account(AccountEvent::Deploy {
+                data: EventData::Account(AccountEvent::SetCode {
                     address,
-                    code_hash: Word::from_bytes(&hash),
-                    byte_code: code,
+                    codehash: Word::from_bytes(&hash),
+                    bytecode: code,
                 }),
                 depth: ctx.depth,
                 reverted: false,
             });
             self.tracer.push(Event {
-                data: EventData::Account(AccountEvent::Nonce {
+                data: EventData::Account(AccountEvent::SetNonce {
                     address: call.from,
+                    val: nonce.as_u64(),
                     new: nonce.as_u64() + 1,
                 }),
                 depth: ctx.depth,

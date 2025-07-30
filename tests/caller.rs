@@ -21,7 +21,7 @@ async fn test_deploy() -> eyre::Result<()> {
     dotenv::dotenv()?;
     let code = include_str!("../etc/call/Call.bin");
     let code = hex::decode(code)?;
-    let code = Decoder::decode(code)?;
+    let code = Decoder::decode(code);
     let to = Address::zero();
 
     // TODO: extract EthClient trait and provide mock impl here?

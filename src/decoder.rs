@@ -1,14 +1,4 @@
-use thiserror::Error;
-
 use crate::opcodes::{Opcode, get_opcode};
-
-#[derive(Error, Debug)]
-pub enum DecoderError {
-    #[error("Invalid opcode 0x{0:02x} found at position {1}")]
-    InvalidOpcode(u8, usize),
-    #[error("Unexpected end of bytecode at offset {1}:{0}")]
-    BufferUnderflow(String, usize),
-}
 
 #[derive(Debug)]
 pub struct Instruction {
@@ -49,7 +39,7 @@ impl Bytecode {
 pub struct Decoder;
 
 impl Decoder {
-    pub fn decode(bytecode: Vec<u8>) -> Result<Bytecode, DecoderError> {
+    pub fn decode(bytecode: Vec<u8>) -> Bytecode {
         let mut instructions = Vec::new();
         let mut jumptable = Vec::new();
 
@@ -72,23 +62,22 @@ impl Decoder {
             let len = opcode.push_len();
             if len > 0 {
                 let from = pos;
-                let till = pos + len;
+                let till = (pos + len).min(bytecode.len());
 
-                if till > bytecode.len() {
-                    return Err(DecoderError::BufferUnderflow(opcode.name(), pos));
-                }
+                let mut arg = vec![0u8; len];
+                arg[..(till - from)].copy_from_slice(&bytecode[from..till]);
 
-                instruction.argument = Some(bytecode[from..till].to_vec());
+                instruction.argument = Some(arg);
                 pos = till;
             }
 
             instructions.push(instruction);
         }
 
-        Ok(Bytecode {
+        Bytecode {
             bytecode,
             instructions,
             jumptable,
-        })
+        }
     }
 }

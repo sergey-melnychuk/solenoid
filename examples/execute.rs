@@ -1,16 +1,12 @@
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     use solenoid::{
-        common::{
-            address::{Address, addr},
-            call::Call,
-            word::Word,
-        },
+        common::{address::addr, call::Call, word::Word},
         decoder::{Bytecode, Decoder},
         eth::EthClient,
         executor::{Evm, Executor, StateTouch},
         ext::Ext,
-        tracer::{EventTracer, LogingTracer},
+        tracer::{EventTracer, LoggingTracer},
     };
 
     fn dump(decoded: &Bytecode) {
@@ -49,19 +45,22 @@ async fn main() -> eyre::Result<()> {
     let bytecode = hex::decode(args[1].trim_start_matches("0x"))?;
     let calldata = hex::decode(args[2].trim_start_matches("0x"))?;
 
-    let code = Decoder::decode(bytecode)?;
+    let code = Decoder::decode(bytecode);
     dump(&code);
 
     let value = Word::zero();
-    let from = addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266");
+    // let from = addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266");
     // let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")?;
-    let to = Address::zero();
+
+    let from = addr("0xb6b1581b3d267044761156d55717b719ab0565b1");
+    let to = addr("0x5c2e112783a6854653b4bc7dc22248d3e592559c");
+
     let call = Call {
         data: calldata,
         value,
         from,
         to,
-        gas: Word::from(1_000_000),
+        gas: Word::from(1_000_0000u64),
     };
 
     let url = std::env::var("URL")?;
@@ -70,7 +69,7 @@ async fn main() -> eyre::Result<()> {
     ext.acc_mut(&from).balance = Word::from(1_000_000_000_000_000_000u64);
 
     println!("\nEXECUTION:");
-    let executor = Executor::<LogingTracer>::new().with_log();
+    let executor = Executor::<LoggingTracer>::new().with_log();
     let mut evm = Evm::default();
     let (mut tracer, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
     if !evm.reverted {

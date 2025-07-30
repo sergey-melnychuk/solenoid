@@ -3,7 +3,7 @@ use crate::{
     decoder::Decoder,
     executor::{Context, Evm, Executor, Gas},
     ext::Ext,
-    tracer::{CallType, EventTracer, LogingTracer},
+    tracer::{CallType, EventTracer, LoggingTracer},
 };
 
 #[derive(Default)]
@@ -23,8 +23,10 @@ impl Solenoid {
 
     pub fn execute(&self, to: Address, method: &str, args: &[u8]) -> ExecuteBuilder {
         let mut data = Vec::with_capacity(args.len() + 4);
-        let hash = keccak256(method.as_bytes());
-        data.extend_from_slice(&hash[..4]);
+        if !method.is_empty() {
+            let hash = keccak256(method.as_bytes());
+            data.extend_from_slice(&hash[..4]);
+        }
         data.extend_from_slice(args);
         ExecuteBuilder {
             to,
@@ -170,14 +172,14 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub async fn apply(self, ext: &mut Ext) -> eyre::Result<CallResult<LogingTracer>> {
-        let exe = Executor::<LogingTracer>::with_tracer(LogingTracer::default());
+    pub async fn apply(self, ext: &mut Ext) -> eyre::Result<CallResult<LoggingTracer>> {
+        let exe = Executor::<LoggingTracer>::with_tracer(LoggingTracer::default());
 
         let code = if self.call.to.is_zero() {
-            Decoder::decode(self.code)?
+            Decoder::decode(self.code)
         } else {
             let code = ext.code(&self.call.to).await?;
-            Decoder::decode(code)?
+            Decoder::decode(code)
         };
 
         let mut evm = Evm::new();
