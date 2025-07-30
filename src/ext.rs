@@ -68,7 +68,7 @@ impl Ext {
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
         let state = self.state.entry(*addr).or_default();
         state.data.insert(key, val);
-        tracing::info!("SSTORE: [local!] 0x{addr}[{key:#x}]={val:#x}");
+        tracing::info!("SSTORE: [local!] {addr}[{key:#x}]={val:#x}");
         Ok(())
     }
 
