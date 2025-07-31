@@ -1,7 +1,12 @@
 use std::{collections::HashMap, time::Instant};
 
 use crate::{
-    common::{account::Account, address::Address, word::Word},
+    common::{
+        account::Account,
+        address::Address,
+        hash::{self, keccak256},
+        word::Word,
+    },
     eth::EthClient,
 };
 
@@ -9,7 +14,7 @@ use crate::{
 pub struct State {
     pub account: Account,
     pub data: HashMap<Word, Word>,
-    pub code: Vec<u8>,
+    pub code: (Vec<u8>, Word),
 }
 
 struct Remote {
@@ -85,28 +90,29 @@ impl Ext {
         }
     }
 
-    pub async fn code(&mut self, addr: &Address) -> eyre::Result<Vec<u8>> {
+    pub async fn code(&mut self, addr: &Address) -> eyre::Result<(Vec<u8>, Word)> {
         if let Some(code) = self.state.get(addr).map(|s| s.code.clone()) {
             Ok(code)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));
             let code = eth.get_code(block_hash, &address).await?;
             let state = self.state.entry(*addr).or_default();
-            state.code = code.clone();
-            Ok(code)
+            let hash = Word::from_bytes(&keccak256(&code));
+            state.code = (code.clone(), hash);
+            Ok((code, hash))
         } else {
-            Ok(vec![])
+            Ok((vec![], Word::from_bytes(&hash::empty())))
         }
     }
 
     pub async fn balance(&mut self, addr: &Address) -> eyre::Result<Word> {
         if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
-            Ok(acc.balance)
+            Ok(acc.value)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));
             let balance = eth.get_balance(block_hash, &address).await?;
             let state = self.state.entry(*addr).or_default();
-            state.account.balance = balance;
+            state.account.value = balance;
             Ok(balance)
         } else {
             Ok(Word::zero())
@@ -117,7 +123,7 @@ impl Ext {
         &mut self.state.entry(*addr).or_default().account
     }
 
-    pub fn code_mut(&mut self, addr: &Address) -> &mut Vec<u8> {
+    pub fn code_mut(&mut self, addr: &Address) -> &mut (Vec<u8>, Word) {
         &mut self.state.entry(*addr).or_default().code
     }
 

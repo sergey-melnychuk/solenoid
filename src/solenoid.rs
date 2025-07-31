@@ -178,7 +178,7 @@ impl Runner {
         let code = if self.call.to.is_zero() {
             Decoder::decode(self.code)
         } else {
-            let code = ext.code(&self.call.to).await?;
+            let (code, _) = ext.code(&self.call.to).await?;
             Decoder::decode(code)
         };
 
@@ -207,8 +207,8 @@ impl Runner {
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
             .await;
 
-        *ext.code_mut(&address) = ret.clone();
-        ext.acc_mut(&address).code = Word::from_bytes(&keccak256(&ret));
+        let hash = Word::from_bytes(&keccak256(&ret));
+        *ext.code_mut(&address) = (ret.clone(), hash);
         ext.acc_mut(&self.call.from).nonce += Word::one();
 
         Ok(CallResult {

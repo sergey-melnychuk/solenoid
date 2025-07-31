@@ -68,7 +68,7 @@ async fn main() -> eyre::Result<()> {
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
     let mut ext = Ext::latest(eth).await?;
-    ext.acc_mut(&from).balance = Word::from(1_000_000_000_000_000_000u64);
+    ext.acc_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
 
     println!("\nEXECUTION:");
     let executor = Executor::<LoggingTracer>::new().with_log();
@@ -111,7 +111,7 @@ async fn main() -> eyre::Result<()> {
         println!("{addr}:");
         println!("{:#?}", state.account);
         println!("DATA: {:#?}", state.data);
-        println!("CODE: ({} bytes)", state.code.len());
+        println!("CODE: ({} bytes)", state.code.0.len());
     }
     println!("---");
     let events = tracer.take();

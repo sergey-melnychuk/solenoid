@@ -21,7 +21,7 @@ async fn test_tx_0x9b312d7abad8a54cca5735b21304097b700142cea90aeba3740f6a470e734
     let mut ext = Ext::latest(eth).await?;
 
     let from = addr("0xb6b1581b3d267044761156d55717b719ab0565b1");
-    ext.acc_mut(&from).balance = Word::from(1_000_000_000_000_000_000u64);
+    ext.acc_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
     let to = addr("0x5c2e112783a6854653b4bc7dc22248d3e592559c");
     let method = "";
     let input = hex::decode("b081b4eb")?;
@@ -56,7 +56,7 @@ async fn test_tx_0x6d2d94b5bf06ff07cca77f0100233da7d45876cc58595122505ebd124d00d
     let mut ext = Ext::latest(eth).await?;
 
     let from = addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512");
-    ext.acc_mut(&from).balance = Word::from(1_000_000_000_000_000_000u64);
+    ext.acc_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
     let to = addr("0x0000000000000068f116a894984e2db1123eb395");
     let method = "";
 

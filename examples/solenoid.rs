@@ -26,7 +26,7 @@ async fn main() -> eyre::Result<()> {
     let code = hex::decode(code.trim_start_matches("0x"))?;
 
     let from = addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512");
-    ext.acc_mut(&from).balance = Word::from(100_000_000_000_000_000u64);
+    ext.acc_mut(&from).value = Word::from(100_000_000_000_000_000u64);
 
     let sole = Solenoid::new();
     let res = sole

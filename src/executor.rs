@@ -155,9 +155,9 @@ impl Evm {
         }
     }
 
-    pub async fn code(&mut self, ext: &mut Ext, addr: &Address) -> eyre::Result<Vec<u8>> {
+    pub async fn code(&mut self, ext: &mut Ext, addr: &Address) -> eyre::Result<(Vec<u8>, Word)> {
         match ext.code(addr).await {
-            Ok(code) => Ok(code),
+            Ok(ret) => Ok(ret),
             Err(e) => self.error(e).map(|_| Default::default()),
         }
     }
@@ -173,11 +173,10 @@ impl Evm {
                     ext.acc_mut(addr).nonce = (*val).into();
                 }
                 AccountTouch::Value(addr, val, _new) => {
-                    ext.acc_mut(addr).balance = *val;
+                    ext.acc_mut(addr).value = *val;
                 }
                 AccountTouch::Code(addr, _hash, _code) => {
-                    ext.acc_mut(addr).code = Word::zero();
-                    ext.code_mut(addr).clear();
+                    *ext.code_mut(addr) = (vec![], Word::from_bytes(&hash::empty()));
                 }
                 AccountTouch::Empty => (),
             }
@@ -323,7 +322,7 @@ impl<T: EventTracer> Executor<T> {
                 reverted: false,
             });
 
-            ext.acc_mut(&call.from).balance -= call.value + gas_fee;
+            ext.acc_mut(&call.from).value -= call.value + gas_fee;
             evm.account.push(AccountTouch::Value(
                 call.from,
                 src,
@@ -339,7 +338,7 @@ impl<T: EventTracer> Executor<T> {
                 reverted: false,
             });
 
-            ext.acc_mut(&call.to).balance += call.value;
+            ext.acc_mut(&call.to).value += call.value;
             evm.account
                 .push(AccountTouch::Value(call.to, dst, dst + call.value));
             self.tracer.push(Event {
@@ -862,7 +861,7 @@ impl<T: EventTracer> Executor<T> {
             0x3b => {
                 // EXTCODESIZE
                 let address: Address = (&evm.pop()?).into();
-                let code_size = ext.code(&address).await?.len();
+                let code_size = ext.code(&address).await?.0.len();
                 evm.push(Word::from(code_size))?;
                 gas = evm.address_access_cost(&address, ext);
             }
@@ -873,7 +872,7 @@ impl<T: EventTracer> Executor<T> {
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
 
-                let code = ext.code(&address).await?;
+                let (code, _) = ext.code(&address).await?;
                 if evm.memory.len() < dest_offset + size {
                     evm.memory.resize(dest_offset + size, 0);
                 }
@@ -911,11 +910,8 @@ impl<T: EventTracer> Executor<T> {
                 if !exists {
                     evm.push(Word::zero())?;
                 }
-                let code = ext.code(&address).await?;
-                if code.is_empty() {
-                    evm.push(Word::from_bytes(&hash::empty()))?;
-                }
-                evm.push(ext.acc_mut(&address).code)?;
+                let (_, hash) = ext.code(&address).await?;
+                evm.push(hash)?;
 
                 gas += evm.address_access_cost(&address, ext);
             }
@@ -1398,11 +1394,12 @@ impl<T: EventTracer> Executor<T> {
             *gas = Word::from(2600);
         }
 
-        let bytecode = evm.code(ext, &address).await?;
+        let (bytecode, codehash) = evm.code(ext, &address).await?;
         let code = Decoder::decode(bytecode);
         self.tracer.push(Event {
             data: EventData::Account(AccountEvent::GetCode {
                 address,
+                codehash,
                 bytecode: code.bytecode.clone().into(),
             }),
             depth: ctx.depth,
@@ -1547,8 +1544,7 @@ impl<T: EventTracer> Executor<T> {
         }
 
         let hash = keccak256(&code);
-        *ext.code_mut(&address) = code.clone();
-        ext.acc_mut(&address).code = Word::from_bytes(&hash);
+        *ext.code_mut(&address) = (code.clone(), Word::from_bytes(&hash));
         ext.acc_mut(&call.from).nonce += Word::one();
         evm.account.push(AccountTouch::Code(
             address,

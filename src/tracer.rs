@@ -20,13 +20,23 @@ pub enum StateEvent {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum AccountEvent {
-    SetCode {
+    GetCode {
         address: Address,
         codehash: Word,
         bytecode: Hex,
     },
-    GetCode {
+    // TODO:
+    // GetNonce {
+    //     address: Address,
+    //     val: u64,
+    // },
+    // GetValue {
+    //     address: Address,
+    //     val: Word,
+    // },
+    SetCode {
         address: Address,
+        codehash: Word,
         bytecode: Hex,
     },
     SetNonce {
@@ -34,19 +44,11 @@ pub enum AccountEvent {
         val: u64,
         new: u64,
     },
-    // GetNonce {
-    //     address: Address,
-    //     val: u64,
-    // },
     SetValue {
         address: Address,
         val: Word,
         new: Word,
     },
-    // GetValue {
-    //     address: Address,
-    //     val: Word,
-    // },
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
