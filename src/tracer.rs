@@ -74,12 +74,14 @@ pub enum EventData {
         gas_used: Word,
         gas_left: Word,
     },
+
     Keccak {
         data: Hex,
         hash: Hex,
     },
 
     State(StateEvent),
+
     Account(AccountEvent),
 
     Call {
@@ -107,40 +109,6 @@ pub enum EventData {
         topics: Vec<Word>,
         data: Hex,
     },
-
-    // BlockHead {
-    //     number: u64,
-    //     hash: Word,
-    //     // extra: gas_cost, etc
-    // },
-    // BlockDone {
-    //     number: u64,
-    //     hash: Word,
-    //     execution_millis: u64,
-    // },
-    // TxHead {
-    //     index: u64,
-    //     hash: Word,
-    //     call: Call,
-    //     gas_limit: Word,
-    //     // extra?
-    // },
-    // TxDone {
-    //     index: u64,
-    //     hash: Word,
-    //     status: Word,
-    //     gas_used: Word,
-    //     execution_millis: u64,
-    //     // more?
-    // },
-    // Init {
-    //     chain_id: u64,
-    //     spec: u64,
-    //     // extra?
-    // },
-    // Reorg(/* TODO */),
-    // Fork(/* TODO */),
-    Error(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

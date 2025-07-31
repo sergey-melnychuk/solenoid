@@ -34,11 +34,7 @@ impl Serialize for Hex {
     where
         S: Serializer,
     {
-        let hex: String = hex::encode(&self.0)
-            .chars()
-            .skip_while(|c| c == &'0')
-            .collect();
-        let hex = format!("0x{hex}");
+        let hex = format!("0x{}", hex::encode(&self.0));
         serializer.serialize_str(&hex)
     }
 }

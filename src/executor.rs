@@ -1,5 +1,3 @@
-use std::time::SystemTime;
-
 use eyre::Context as _;
 use i256::I256;
 use thiserror::Error;
@@ -245,14 +243,7 @@ pub struct Executor<T: EventTracer> {
 
 impl<T: EventTracer> Executor<T> {
     pub fn new() -> Self {
-        let mut this = Self::default();
-        let timestamp = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_secs();
-        this.tracer.push(Event {
-            data: EventData::Init(format!("{{\"timestamp\":{timestamp}}}")),
-            depth: 0,
-            reverted: false,
-        });
-        this
+        Self::default()
     }
 
     pub fn with_log(self) -> Self {
