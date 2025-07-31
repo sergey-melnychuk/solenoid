@@ -1,3 +1,5 @@
+use solenoid::common::word::word;
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     use solenoid::{
@@ -60,7 +62,7 @@ async fn main() -> eyre::Result<()> {
         value,
         from,
         to,
-        gas: Word::from(1_000_0000u64),
+        gas: word("0x9a38"),
     };
 
     let url = std::env::var("URL")?;

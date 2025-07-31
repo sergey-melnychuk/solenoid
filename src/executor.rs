@@ -53,8 +53,7 @@ pub struct StateTouch(pub Address, pub Word, pub Word, pub Option<Word>, pub Wor
 
 impl StateTouch {
     pub fn is_write(&self) -> bool {
-        let Self(_, _, _, new, _) = self;
-        new.is_some()
+        matches!(self, Self(_, _, _, Some(_), _))
     }
 }
 
@@ -166,9 +165,9 @@ impl Evm {
     }
 
     pub async fn revert(&mut self, ext: &mut Ext) -> eyre::Result<()> {
-        for StateTouch(address, key, val, _, gas) in self.state.iter().filter(|st| st.is_write()) {
+        for StateTouch(address, key, val, _, _) in self.state.iter().filter(|st| st.is_write()) {
             ext.put(address, *key, *val).await?;
-            self.gas.add(*gas);
+            // self.gas.add(*gas); // TODO: this is not how gas refund works
         }
         for ac in self.account.iter() {
             match ac {
@@ -377,8 +376,7 @@ impl<T: EventTracer> Executor<T> {
             executor.set_log(self.log);
             let (tracer, ret) = executor
                 .execute_with_context(code, call, evm, ext, ctx)
-                .await
-                .with_context(|| "execute")?;
+                .await;
             self.tracer.join(tracer, evm.reverted);
             Ok((self.tracer, ret))
         }
@@ -391,7 +389,7 @@ impl<T: EventTracer> Executor<T> {
         evm: &mut Evm,
         ext: &mut Ext,
         ctx: Context,
-    ) -> eyre::Result<(T, Vec<u8>)> {
+    ) -> (T, Vec<u8>) {
         self.tracer.push(Event {
             data: EventData::Call {
                 r#type: ctx.call_type,
@@ -406,32 +404,47 @@ impl<T: EventTracer> Executor<T> {
         });
 
         if ctx.depth > CALL_DEPTH_LIMIT {
-            return Err(ExecutorError::CallDepthLimitReached.into());
+            // return Err(ExecutorError::CallDepthLimitReached.into());
+            evm.stopped = true;
+            evm.reverted = true;
+            return (self.tracer, vec![]);
         }
 
         while !evm.stopped && evm.pc < code.instructions.len() {
             let instruction = &code.instructions[evm.pc];
 
-            let cost = self
+            if let Ok(cost) = self
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
                 .await
                 .with_context(|| {
                     format!("{:#06x}: {}", instruction.offset, instruction.opcode.name())
-                })?;
-
-            self.tracer.push(Event {
-                depth: ctx.depth,
-                reverted: false,
-                data: EventData::OpCode {
-                    pc: evm.pc - 1,
-                    op: instruction.opcode.code,
-                    name: instruction.opcode.name(),
-                    data: instruction.argument.clone().unwrap_or_default().into(),
-                    gas: cost,
-                },
-            });
-
-            evm.gas(cost)?;
+                })
+            {
+                self.tracer.push(Event {
+                    depth: ctx.depth,
+                    reverted: false,
+                    data: EventData::OpCode {
+                        pc: evm.pc - 1, // TODO: do not adjust for JUMP
+                        op: instruction.opcode.code,
+                        name: instruction.opcode.name(),
+                        data: instruction.argument.clone().unwrap_or_default().into(),
+                        gas: cost,
+                        gas_used: evm.gas.used,
+                        gas_left: evm.gas.remaining(),
+                    },
+                });
+                if evm.gas(cost).is_err() {
+                    eprintln!("out of gas");
+                    evm.stopped = true;
+                    evm.reverted = true;
+                    return (self.tracer, vec![]);
+                }
+            } else {
+                // eprintln!("{} failed", instruction.opcode.name());
+                evm.stopped = true;
+                evm.reverted = true;
+                return (self.tracer, vec![]);
+            }
 
             if self.log {
                 let data = instruction
@@ -460,7 +473,7 @@ impl<T: EventTracer> Executor<T> {
             }
         }
 
-        Ok((self.tracer, self.ret))
+        (self.tracer, self.ret)
     }
 
     async fn execute_instruction(
@@ -485,9 +498,20 @@ impl<T: EventTracer> Executor<T> {
         match opcode {
             // 0x00: STOP
             0x00 => {
+                evm.pc = code.instructions.len();
                 evm.stopped = true;
                 evm.reverted = false;
                 self.ret.clear();
+
+                self.tracer.push(Event {
+                    data: EventData::Return {
+                        data: self.ret.clone().into(),
+                        gas_used: evm.gas.used,
+                    },
+                    depth: ctx.depth,
+                    reverted: evm.reverted,
+                });
+                return Ok(gas);
             }
             // 0x01..0x0b: Arithmetic Operations
             0x01 => {
@@ -1376,14 +1400,19 @@ impl<T: EventTracer> Executor<T> {
         let ret_offset = evm.pop()?.as_usize();
         let ret_size = evm.pop()?.as_usize();
 
-        *gas = evm.memory_expansion_cost() + Word::from(21000);
+        let is_warm = ext.state.contains_key(&address);
+        if is_warm {
+            *gas = Word::from(100);
+        } else {
+            *gas = Word::from(2600);
+        }
 
         let bytecode = evm.code(ext, &address).await?;
         let code = Decoder::decode(bytecode);
         self.tracer.push(Event {
             data: EventData::Account(AccountEvent::GetCode {
                 address,
-                bytecode: code.bytecode.clone(),
+                bytecode: code.bytecode.clone().into(),
             }),
             depth: ctx.depth,
             reverted: false,
@@ -1420,41 +1449,33 @@ impl<T: EventTracer> Executor<T> {
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
-        let (tracer, ret) = Box::pin(future)
-            .await
-            .with_context(|| format!("calltype: {:?}", ctx.call_type))?;
+        let (tracer, mut ret) = Box::pin(future).await;
         self.tracer.join(tracer, inner_evm.reverted);
 
-        if !inner_evm.reverted {
-            if ret.len() != ret_size {
-                evm.error(
-                    ExecutorError::WrongReturnDataSize {
-                        exp: ret_size,
-                        got: ret.len(),
-                    }
-                    .into(),
-                )?;
-            }
-            let size = ret_offset + ret_size;
-            if size > evm.memory.len() {
-                evm.memory.resize(size, 0);
-                *gas += evm.memory_expansion_cost();
-            }
-            evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
-            self.ret = ret;
-            for acc in inner_evm.account {
-                evm.account.push(acc);
-            }
-            for sta in inner_evm.state {
-                evm.state.push(sta);
-            }
-            *gas += evm.gas.used;
-            evm.push(Word::one())?;
-        } else {
-            *gas += evm.gas.used;
+        *gas += inner_evm.gas.used;
+        if inner_evm.reverted {
             inner_evm.revert(ext).await?;
             evm.push(Word::zero())?;
+            return Ok(());
         }
+
+        if ret.len() < ret_size {
+            ret.resize(ret_size, 0);
+        }
+        let size = ret_offset + ret_size;
+        if size > evm.memory.len() {
+            evm.memory.resize(size, 0);
+            *gas += evm.memory_expansion_cost();
+        }
+        evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+        self.ret = ret;
+        for acc in inner_evm.account {
+            evm.account.push(acc);
+        }
+        for sta in inner_evm.state {
+            evm.state.push(sta);
+        }
+        evm.push(Word::one())?;
 
         Ok(())
     }
@@ -1524,56 +1545,55 @@ impl<T: EventTracer> Executor<T> {
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
-        let (tracer, code) = Box::pin(future).await.with_context(|| "create")?;
+        let (tracer, code) = Box::pin(future).await;
         self.tracer.join(tracer, inner_evm.reverted);
 
-        if !inner_evm.reverted {
-            *gas += inner_evm.gas.used;
-
-            let hash = keccak256(&code);
-            *ext.code_mut(&address) = code.clone();
-            ext.acc_mut(&address).code = Word::from_bytes(&hash);
-            ext.acc_mut(&call.from).nonce += Word::one();
-            evm.account.push(AccountTouch::Code(
-                address,
-                Word::from_bytes(&hash),
-                code.clone(),
-            ));
-            evm.account.push(AccountTouch::Nonce(
-                call.from,
-                nonce.as_u64(),
-                nonce.as_u64() + 1,
-            ));
-            self.tracer.push(Event {
-                data: EventData::Account(AccountEvent::SetCode {
-                    address,
-                    codehash: Word::from_bytes(&hash),
-                    bytecode: code,
-                }),
-                depth: ctx.depth,
-                reverted: false,
-            });
-            self.tracer.push(Event {
-                data: EventData::Account(AccountEvent::SetNonce {
-                    address: call.from,
-                    val: nonce.as_u64(),
-                    new: nonce.as_u64() + 1,
-                }),
-                depth: ctx.depth,
-                reverted: false,
-            });
-            for acc in inner_evm.account {
-                evm.account.push(acc);
-            }
-            for state in inner_evm.state {
-                evm.state.push(state);
-            }
-            evm.push((&address).into())?;
-        } else {
-            *gas += evm.gas.used;
+        *gas += inner_evm.gas.used;
+        if inner_evm.reverted {
             inner_evm.revert(ext).await?;
             evm.push(Word::zero())?;
+            return Ok(());
         }
+
+        let hash = keccak256(&code);
+        *ext.code_mut(&address) = code.clone();
+        ext.acc_mut(&address).code = Word::from_bytes(&hash);
+        ext.acc_mut(&call.from).nonce += Word::one();
+        evm.account.push(AccountTouch::Code(
+            address,
+            Word::from_bytes(&hash),
+            code.clone(),
+        ));
+        evm.account.push(AccountTouch::Nonce(
+            call.from,
+            nonce.as_u64(),
+            nonce.as_u64() + 1,
+        ));
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::SetCode {
+                address,
+                codehash: Word::from_bytes(&hash),
+                bytecode: code.into(),
+            }),
+            depth: ctx.depth,
+            reverted: false,
+        });
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::SetNonce {
+                address: call.from,
+                val: nonce.as_u64(),
+                new: nonce.as_u64() + 1,
+            }),
+            depth: ctx.depth,
+            reverted: false,
+        });
+        for acc in inner_evm.account {
+            evm.account.push(acc);
+        }
+        for state in inner_evm.state {
+            evm.state.push(state);
+        }
+        evm.push((&address).into())?;
 
         Ok(())
     }

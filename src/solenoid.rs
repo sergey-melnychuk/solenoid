@@ -205,7 +205,7 @@ impl Runner {
         evm.gas = Gas::new(self.call.gas);
         let (tracer, ret) = exe
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
-            .await?;
+            .await;
 
         *ext.code_mut(&address) = ret.clone();
         ext.acc_mut(&address).code = Word::from_bytes(&keccak256(&ret));

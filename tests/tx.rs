@@ -37,6 +37,7 @@ async fn test_tx_0x9b312d7abad8a54cca5735b21304097b700142cea90aeba3740f6a470e734
         .await
         .context("test-execute")?;
     assert!(!res.evm.reverted);
+    // assert_eq!(res.evm.gas.used, word("0x9a28"));
     for e in res.tracer.take() {
         println!("{}", serde_json::to_string(&e)?);
     }

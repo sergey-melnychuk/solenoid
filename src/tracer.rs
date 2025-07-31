@@ -23,11 +23,11 @@ pub enum AccountEvent {
     SetCode {
         address: Address,
         codehash: Word,
-        bytecode: Vec<u8>,
+        bytecode: Hex,
     },
     GetCode {
         address: Address,
-        bytecode: Vec<u8>,
+        bytecode: Hex,
     },
     SetNonce {
         address: Address,
@@ -71,6 +71,8 @@ pub enum EventData {
         name: String,
         data: Hex,
         gas: Word,
+        gas_used: Word,
+        gas_left: Word,
     },
     Keccak {
         data: Hex,
