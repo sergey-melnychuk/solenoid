@@ -7,7 +7,7 @@ use crate::{
         address::Address,
         call::Call,
         hash::{self, keccak256},
-        word::Word,
+        word::{Word, decode_error_string},
     },
     decoder::{Bytecode, Decoder, Instruction},
     ext::Ext,
@@ -496,6 +496,7 @@ impl<T: EventTracer> Executor<T> {
                 self.tracer.push(Event {
                     data: EventData::Return {
                         data: self.ret.clone().into(),
+                        error: None,
                         gas_used: evm.gas.used,
                     },
                     depth: ctx.depth,
@@ -1308,6 +1309,11 @@ impl<T: EventTracer> Executor<T> {
                 self.tracer.push(Event {
                     data: EventData::Return {
                         data: self.ret.clone().into(),
+                        error: if evm.reverted {
+                            decode_error_string(&self.ret)
+                        } else {
+                            None
+                        },
                         gas_used: evm.gas.used,
                     },
                     depth: ctx.depth,
@@ -1414,7 +1420,8 @@ impl<T: EventTracer> Executor<T> {
         let inner_call = Call {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
             value,
-            from: this,
+            // from: this,
+            from: ctx.origin,
             to: if matches!(ctx.call_type, CallType::Delegate | CallType::Callcode) {
                 this
             } else {

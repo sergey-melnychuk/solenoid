@@ -22,6 +22,27 @@ impl EthClient {
         }
     }
 
+    pub async fn get_block_by_number(&self, number: Word) -> eyre::Result<(u64, String)> {
+        self.rpc(serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_getBlockByNumber",
+            "params": [
+                number,
+                false
+            ],
+            "id": 0
+        }))
+        .await
+        .and_then(|value| {
+            let num = hex_to_u64(&value["number"])?;
+            let hash = value["hash"]
+                .as_str()
+                .map(ToOwned::to_owned)
+                .ok_or_else(|| eyre::eyre!("block hash missing"))?;
+            Ok((num, hash))
+        })
+    }
+
     pub async fn get_latest_block(&self) -> eyre::Result<(u64, String)> {
         self.rpc(serde_json::json!({
             "jsonrpc": "2.0",

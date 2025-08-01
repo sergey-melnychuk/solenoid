@@ -1,6 +1,9 @@
 use eyre::Context;
 use solenoid::{
-    common::{address::addr, word::Word},
+    common::{
+        address::addr,
+        word::{Word, decode_error_string},
+    },
     ext::Ext,
     solenoid::{Builder, Solenoid},
     tracer::EventTracer,
@@ -52,7 +55,10 @@ async fn main() -> eyre::Result<()> {
         println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
-        format!("FAILURE: '{}'", decode_error_string(&res.ret))
+        format!(
+            "FAILURE: '{}'",
+            decode_error_string(&res.ret).unwrap_or_default()
+        )
     } else {
         format!("SUCCESS: '{}'", hex::encode(res.ret))
     };
@@ -71,7 +77,10 @@ async fn main() -> eyre::Result<()> {
         println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
-        format!("FAILURE: '{}'", decode_error_string(&res.ret))
+        format!(
+            "FAILURE: '{}'",
+            decode_error_string(&res.ret).unwrap_or_default()
+        )
     } else {
         format!("SUCCESS: '{}'", hex::encode(res.ret))
     };
@@ -92,7 +101,10 @@ async fn main() -> eyre::Result<()> {
         println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
-        format!("FAILURE: '{}'", decode_error_string(&res.ret))
+        format!(
+            "FAILURE: '{}'",
+            decode_error_string(&res.ret).unwrap_or_default()
+        )
     } else {
         format!("SUCCESS: '{}'", hex::encode(res.ret))
     };
@@ -113,20 +125,14 @@ async fn main() -> eyre::Result<()> {
         println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
     let ret = if res.evm.reverted {
-        format!("FAILURE: '{}'", decode_error_string(&res.ret))
+        format!(
+            "FAILURE: '{}'",
+            decode_error_string(&res.ret).unwrap_or_default()
+        )
     } else {
         format!("SUCCESS: '{}'", hex::encode(res.ret))
     };
     println!("Fail.even_only({number}): {ret}");
 
     Ok(())
-}
-
-fn decode_error_string(ret: &[u8]) -> String {
-    let _selector = &ret[0..4];
-    let offset = 4 + 32 + Word::from_bytes(&ret[4..4 + 32]).as_usize();
-    let size = Word::from_bytes(&ret[4 + 32..4 + 32 + 32]).as_usize();
-
-    let data = &ret[offset..offset + size];
-    String::from_utf8_lossy(data).to_string()
 }

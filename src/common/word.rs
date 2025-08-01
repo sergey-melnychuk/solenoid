@@ -264,3 +264,25 @@ pub fn word(s: &str) -> Word {
     let b = decode::<32>(s);
     Word::from_bytes(&b)
 }
+
+pub fn decode_error_string(ret: &[u8]) -> Option<String> {
+    if ret.len() < 4 + 32 + 32 {
+        return None;
+    }
+    let _selector = &ret[0..4];
+    let offset = Word::from_bytes(&ret[4..4 + 32]);
+    if offset > Word::from(u64::MAX) {
+        return None;
+    }
+    let offset = 4 + 32 + offset.as_usize();
+    let size = Word::from_bytes(&ret[4 + 32..4 + 32 + 32]);
+    if size > Word::from(u64::MAX) {
+        return None;
+    }
+    let size = size.as_usize();
+    if ret.len() < offset + size {
+        return None;
+    }
+    let data = &ret[offset..offset + size];
+    Some(String::from_utf8_lossy(data).to_string())
+}

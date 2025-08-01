@@ -27,7 +27,7 @@ async fn test_deploy() -> eyre::Result<()> {
     // TODO: extract EthClient trait and provide mock impl here?
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
-    let mut ext = Ext::latest(eth).await?;
+    let mut ext = Ext::at_latest(eth).await?;
 
     let executor = Executor::<NoopTracer>::new();
 

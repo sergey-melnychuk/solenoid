@@ -98,6 +98,8 @@ pub enum EventData {
     Return {
         data: Hex,
         gas_used: Word,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
 
     SelfDestruct {

@@ -35,7 +35,7 @@ impl Ext {
         Self::default()
     }
 
-    pub fn remote(block_hash: String, eth: EthClient) -> Self {
+    pub fn at_hash(block_hash: String, eth: EthClient) -> Self {
         Self {
             remote: Some(Remote { eth, block_hash }),
             state: Default::default(),
@@ -44,9 +44,14 @@ impl Ext {
         }
     }
 
-    pub async fn latest(eth: EthClient) -> eyre::Result<Self> {
+    pub async fn at_number(number: Word, eth: EthClient) -> eyre::Result<Self> {
+        let (_, block_hash) = eth.get_block_by_number(number).await?;
+        Ok(Self::at_hash(block_hash, eth))
+    }
+
+    pub async fn at_latest(eth: EthClient) -> eyre::Result<Self> {
         let (_, block_hash) = eth.get_latest_block().await?;
-        Ok(Self::remote(block_hash, eth))
+        Ok(Self::at_hash(block_hash, eth))
     }
 
     pub async fn get(&mut self, addr: &Address, key: &Word) -> eyre::Result<Word> {
