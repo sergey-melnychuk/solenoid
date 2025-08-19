@@ -358,7 +358,8 @@ impl<T: EventTracer> Executor<T> {
             let nonce = ext.acc_mut(&call.from).nonce;
             let address = call.from.of_smart_contract(nonce);
             let ctx = Context {
-                created: address,
+                created: address, // TODO: provide only on CREATE
+                origin: call.from,
                 ..Context::default()
             };
             let tracer = self.tracer.fork();
@@ -1435,7 +1436,6 @@ impl<T: EventTracer> Executor<T> {
         };
         let inner_ctx = Context {
             created: Address::zero(),
-            origin: ctx.origin,
             depth: ctx.depth + 1,
             ..ctx
         };
@@ -1532,7 +1532,6 @@ impl<T: EventTracer> Executor<T> {
         };
         let inner_ctx = Context {
             created: address,
-            origin: ctx.origin,
             depth: ctx.depth + 1,
             ..ctx
         };

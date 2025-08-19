@@ -25,7 +25,14 @@ impl<const N: usize> From<[u8; N]> for Hex {
 impl std::fmt::Debug for Hex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hex = hex::encode(&self.0);
-        f.debug_tuple("Hex").field(&hex).finish()
+        f.write_str(&hex)
+    }
+}
+
+impl std::fmt::Display for Hex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let hex = hex::encode(&self.0);
+        f.write_str(&hex)
     }
 }
 

@@ -39,30 +39,27 @@ async fn main() -> eyre::Result<()> {
     dotenv::dotenv().ok();
 
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 3 {
-        eprintln!("Usage: {} <bytecode> <input>", args[0]);
+    if args.len() != 7 {
+        eprintln!("Usage: {} <bytecode> <input> <from> <to> <value> <gas>", args[0]);
         std::process::exit(1);
     }
 
     let bytecode = hex::decode(args[1].trim_start_matches("0x"))?;
     let calldata = hex::decode(args[2].trim_start_matches("0x"))?;
+    let from = addr(&args[3]);
+    let to = addr(&args[4]);
+    let value = word(&args[5]);
+    let gas = word(&args[6]);
 
     let code = Decoder::decode(bytecode);
     dump(&code);
-
-    let value = Word::zero();
-    // let from = addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266");
-    // let to = addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")?;
-
-    let from = addr("0xb6b1581b3d267044761156d55717b719ab0565b1");
-    let to = addr("0x5c2e112783a6854653b4bc7dc22248d3e592559c");
 
     let call = Call {
         data: calldata,
         value,
         from,
         to,
-        gas: word("0x9a38"),
+        gas,
     };
 
     let url = std::env::var("URL")?;
