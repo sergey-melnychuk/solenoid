@@ -938,10 +938,10 @@ impl<T: EventTracer> Executor<T> {
                 let exists = ext.state.contains_key(&address);
                 if !exists {
                     evm.push(Word::zero())?;
+                } else {
+                    let (_, hash) = ext.code(&address).await?;
+                    evm.push(hash)?;
                 }
-                let (_, hash) = ext.code(&address).await?;
-                evm.push(hash)?;
-
                 gas += evm.address_access_cost(&address, ext);
             }
 
