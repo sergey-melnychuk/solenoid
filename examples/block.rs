@@ -51,8 +51,11 @@ async fn main() -> eyre::Result<()> {
     let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
 
     println!("BLOCK: {number}");
-    for tx in txs {
-        println!("---\nTX {}: {}", tx.index, tx.hash);
+    let mut seq = 0;
+    for tx in &txs {
+        seq += 1;
+        let idx = tx.index.as_u64();
+        println!("---\nTX {idx}: {}", tx.hash);
         let now = Instant::now();
         let result = Solenoid::new()
             .execute(tx.to.unwrap_or_else(Address::zero), "", tx.input.as_ref())
@@ -65,29 +68,29 @@ async fn main() -> eyre::Result<()> {
             .catch_unwind()
             .await
             .map_err(|e| eyre!("{}", get_panic_message(&e)))
-            .with_context(|| format!("TX:{}:{}", tx.index, tx.hash));
+            .with_context(|| format!("TX:{idx}:{}", tx.hash));
         let ms = now.elapsed().as_millis();
         let result = match result {
             Ok(r) => r,
             Err(e) => {
-                println!("TX {}: PANIC: {} (in {ms} ms)", tx.index, e);
+                println!("TX {idx}: PANIC: {} (in {ms} ms)", e);
                 continue;
             }
         };
         match result {
             Ok(result) => {
                 println!(
-                    "TX {}: OK: 0x{} (in {ms} ms)",
-                    tx.index,
+                    "TX {idx}: OK: 0x{} (in {ms} ms)",
                     hex::encode(result.ret)
                 );
             }
             Err(e) => {
-                println!("TX {}: FAILED: {} (in {ms} ms)", tx.index, e.to_string());
+                println!("TX {idx}: FAILED: {} (in {ms} ms)", e.to_string());
             }
         }
     }
 
+    assert_eq!(txs.len(), seq);
     Ok(())
 }
 
