@@ -1,4 +1,5 @@
 use eyre::OptionExt;
+use serde_json::Value;
 
 use crate::common::word::Word;
 
@@ -20,6 +21,25 @@ impl EthClient {
             http,
             url: url.to_string(),
         }
+    }
+
+    pub async fn get_full_block<T>(
+        &self,
+        number: Word,
+        f: impl FnOnce(Value) -> eyre::Result<T>,
+    ) -> eyre::Result<T> {
+        let result = self
+            .rpc(serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "eth_getBlockByNumber",
+                "params": [
+                    number,
+                    true
+                ],
+                "id": 0
+            }))
+            .await?;
+        f(result)
     }
 
     pub async fn get_block_by_number(&self, number: Word) -> eyre::Result<(u64, String)> {
