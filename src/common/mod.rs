@@ -10,6 +10,12 @@ pub mod word;
 #[derive(Clone)]
 pub struct Hex(Vec<u8>);
 
+impl AsRef<[u8]> for Hex {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl From<Vec<u8>> for Hex {
     fn from(value: Vec<u8>) -> Self {
         Self(value)
@@ -53,9 +59,9 @@ impl<'de> Deserialize<'de> for Hex {
     {
         use serde::de::Error;
 
-        let hex: &str = Deserialize::deserialize(deserializer)?;
+        let hex: String = Deserialize::deserialize(deserializer)?;
         let bin = hex::decode(hex.trim_start_matches("0x")).map_err(|_| {
-            D::Error::invalid_value(serde::de::Unexpected::Str(hex), &"Invalid hex string")
+            D::Error::invalid_value(serde::de::Unexpected::Str(&hex), &"Invalid hex string")
         })?;
         Ok(Hex(bin))
     }

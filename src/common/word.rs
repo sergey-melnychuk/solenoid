@@ -4,8 +4,14 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::common::decode;
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Word(primitive_types::U256);
+
+impl std::fmt::Debug for Word {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::LowerHex::fmt(&self.0, f)
+    }
+}
 
 impl std::fmt::Display for Word {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -16,6 +22,12 @@ impl std::fmt::Display for Word {
 impl std::fmt::LowerHex for Word {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::LowerHex::fmt(&self.0, f)
+    }
+}
+
+impl std::fmt::UpperHex for Word {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::UpperHex::fmt(&self.0, f)
     }
 }
 
@@ -249,14 +261,9 @@ impl<'de> Deserialize<'de> for Word {
     where
         D: Deserializer<'de>,
     {
-        use serde::de::Error;
-
-        let hex: &str = Deserialize::deserialize(deserializer)?;
-        let bin = hex::decode(hex.trim_start_matches("0x")).map_err(|_| {
-            D::Error::invalid_value(serde::de::Unexpected::Str(hex), &"Invalid hex string")
-        })?;
-        let word = primitive_types::U256::from_big_endian(&bin);
-        Ok(Word(word))
+        let hex: String = Deserialize::deserialize(deserializer)?;
+        let word = word(hex.trim_start_matches("0x"));
+        Ok(word)
     }
 }
 

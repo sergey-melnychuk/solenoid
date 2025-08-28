@@ -110,7 +110,7 @@ impl<'de> Deserialize<'de> for Address {
     {
         use serde::de::Error;
 
-        let hex: &str = Deserialize::deserialize(deserializer)?;
+        let hex: String = Deserialize::deserialize(deserializer)?;
         let hex = hex.trim_start_matches("0x");
         if hex.len() != 40 {
             return Err(D::Error::invalid_value(
