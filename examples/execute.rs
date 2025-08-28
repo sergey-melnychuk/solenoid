@@ -40,7 +40,10 @@ async fn main() -> eyre::Result<()> {
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 7 {
-        eprintln!("Usage: {} <bytecode> <input> <from> <to> <value> <gas>", args[0]);
+        eprintln!(
+            "Usage: {} <bytecode> <input> <from> <to> <value> <gas>",
+            args[0]
+        );
         std::process::exit(1);
     }
 
