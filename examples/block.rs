@@ -10,23 +10,20 @@ use solenoid::{
     solenoid::{Builder, Solenoid},
 };
 
-// RUST_LOG=off cargo run --example block
-
-fn get_panic_message(any: &dyn std::any::Any) -> String {
-    if let Some(s) = any.downcast_ref::<&str>() {
-        s.to_string()
-    } else if let Some(s) = any.downcast_ref::<String>() {
-        s.to_owned()
-    } else {
-        "undefined".to_string()
-    }
-}
-
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    // std::panic::set_hook(Box::new(|info| {
-    //     eprintln!("PANIC: {}.", get_panic_message(info.payload()));
-    // }));
+    fn get_panic_message(any: &dyn std::any::Any) -> String {
+        if let Some(s) = any.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = any.downcast_ref::<String>() {
+            s.to_owned()
+        } else {
+            "undefined".to_string()
+        }
+    }
+    std::panic::set_hook(Box::new(|info| {
+        eprintln!("PANICHOOK: {}.", get_panic_message(info.payload()));
+    }));
 
     dotenv::dotenv().ok();
     let _ = tracing_subscriber::fmt::try_init();
@@ -52,6 +49,9 @@ async fn main() -> eyre::Result<()> {
 
     println!("BLOCK: {number}");
     let mut seq = 0;
+    let mut ok = 0;
+    let mut failed = 0;
+    let mut panic = 0;
     for tx in &txs {
         seq += 1;
         let idx = tx.index.as_u64();
@@ -67,27 +67,32 @@ async fn main() -> eyre::Result<()> {
         let result = AssertUnwindSafe(result)
             .catch_unwind()
             .await
-            .map_err(|e| eyre!("{}", get_panic_message(&e)))
+            .map_err(|_| eyre!("panic-caught"))
             .with_context(|| format!("TX:{idx}:{}", tx.hash));
         let ms = now.elapsed().as_millis();
         let result = match result {
             Ok(r) => r,
             Err(e) => {
-                println!("TX {idx}: PANIC: {} (in {ms} ms)", e);
+                panic += 1;
+                println!("TX {idx}: PANIC: {e} (in {ms} ms)");
                 continue;
             }
         };
         match result {
             Ok(result) => {
-                println!("TX {idx}: OK: 0x{} (in {ms} ms)", hex::encode(result.ret));
+                ok += 1;
+                let ret = hex::encode(result.ret);
+                println!("TX {idx}: OK: 0x{ret} (in {ms} ms)");
             }
             Err(e) => {
-                println!("TX {idx}: FAILED: {} (in {ms} ms)", e.to_string());
+                failed += 1;
+                println!("TX {idx}: FAILED: {e:?} (in {ms} ms)");
             }
         }
     }
 
     assert_eq!(txs.len(), seq);
+    println!("---\nOK: {ok}, FAILED: {failed}, PANIC: {panic}");
     Ok(())
 }
 
