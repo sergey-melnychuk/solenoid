@@ -68,40 +68,44 @@ impl<'de> Deserialize<'de> for Hex {
 }
 
 const fn decode<const N: usize>(s: &str) -> [u8; N] {
-    let s = s.as_bytes();
-    let mut b = [0u8; N];
-    let mut n = s.len();
-    let parity = s.len() % 2;
-
-    if s.is_empty() {
-        return b;
+    let chars = s.as_bytes();
+    let mut bytes = [0u8; N];
+    if chars.is_empty() {
+        return bytes;
     }
-    let min = if s[0] == b'0' && s.len() > 1 && s[1] == b'x' {
+
+    let parity = chars.len() % 2;
+    let skip = if chars[0] == b'0' && chars.len() > 1 && chars[1] == b'x' {
         2
     } else {
         0
     };
 
-    let mut i = N;
-    while n > min {
-        let c = s[n - 1];
-        let c = match c {
-            b'0'..=b'9' => c - b'0',
-            b'a'..=b'f' => c - b'a' + 10,
-            b'A'..=b'F' => c - b'A' + 10,
-            _ => panic!("Invalid hex"),
+    if chars.len() - skip > N * 2 {
+        panic!("Value too large");
+    }
+
+    let mut chr_idx = chars.len();
+    let mut bin_idx = N;
+    while chr_idx > skip {
+        let chr = chars[chr_idx - 1];
+        let chr = match chr {
+            b'0'..=b'9' => chr - b'0',
+            b'a'..=b'f' => chr - b'a' + 10,
+            b'A'..=b'F' => chr - b'A' + 10,
+            _ => panic!("Invalid hex char"),
         };
 
-        if n % 2 == parity {
-            b[i - 1] = c;
+        if chr_idx % 2 == parity {
+            bytes[bin_idx - 1] = chr;
         } else {
-            b[i - 1] += c << 4;
-            i -= 1;
+            bytes[bin_idx - 1] += chr << 4;
+            bin_idx -= 1;
         }
 
-        n -= 1;
+        chr_idx -= 1;
     }
-    b
+    bytes
 }
 
 #[cfg(test)]
