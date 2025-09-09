@@ -17,16 +17,84 @@ use revm::{
     primitives::{Address, Bytes, Log, TxKind, B256, U256},
     MainBuilder,
 };
-use revm::{InspectEvm, MainContext};
+use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
 use serde::{Deserialize, Serialize};
 
-pub use alloy_rpc_types;
-pub use alloy_provider;
 pub use alloy_consensus;
 pub use alloy_eips;
+pub use alloy_provider;
+pub use alloy_rpc_types;
 pub use anyhow;
 
-pub async fn trace(
+pub async fn trace_all(
+    txs: impl Iterator<Item = Tx>,
+    header: &Header,
+    client: impl Provider + Clone,
+) -> Result<Vec<(ExecResultAndState<ExecutionResult>, TxTrace)>> {
+    let prev_id: BlockId = (header.number - 1).into();
+    let state_db =
+        WrapDatabaseAsync::new(AlloyDB::new(client.clone(), prev_id))
+            .expect("can only fail if tokio runtime is unavailable");
+    let cache_db = CacheDB::new(state_db);
+    let mut state = StateBuilder::new_with_database(cache_db).build();
+
+    let ctx = Context::mainnet()
+        .with_db(&mut state)
+        .modify_block_chained(|b| {
+            b.number = U256::from(header.number);
+            b.beneficiary = header.beneficiary;
+            b.timestamp = U256::from(header.timestamp);
+            b.difficulty = header.difficulty;
+            b.gas_limit = header.gas_limit;
+            b.basefee = header.base_fee_per_gas.unwrap_or_default();
+        })
+        .modify_cfg_chained(|c| {
+            c.chain_id = 1;
+        });
+
+    let mut tracer = TxTrace::default();
+    let mut evm = ctx.build_mainnet_with_inspector(&mut tracer);
+
+    let mut ret = Vec::new();
+    for tx in txs {
+        let tx_env = TxEnv::builder()
+            .caller(tx.inner.signer())
+            .gas_limit(tx.gas_limit())
+            .value(tx.value())
+            .data(tx.input().to_owned())
+            .chain_id(Some(1))
+            .nonce(tx.nonce())
+            .gas_price(tx.gas_price().unwrap_or(tx.inner.max_fee_per_gas()))
+            .gas_priority_fee(tx.max_priority_fee_per_gas())
+            .access_list(tx.access_list().cloned().unwrap_or_default())
+            .kind(match tx.to() {
+                Some(to_address) => TxKind::Call(to_address),
+                None => TxKind::Create,
+            })
+            .build()
+            .unwrap();
+
+        evm.inspector.setup(
+            tx.info().hash.unwrap_or_default(),
+            tx.inner.signer(),
+            tx.to().unwrap_or_default(),
+            tx.value(),
+            tx.gas_limit(),
+        );
+
+        let result = evm.inspect_tx(tx_env)?;
+        if result.result.is_success() {
+            evm.commit(result.state.clone());
+        }
+
+        let tracer = evm.inspector.reset();
+        ret.push((result, tracer));
+    }
+
+    Ok(ret)
+}
+
+pub async fn trace_one(
     tx: Tx,
     header: &Header,
     client: impl Provider + Clone,
@@ -69,7 +137,8 @@ pub async fn trace(
         .build()
         .unwrap();
 
-    let mut tracer = TxTrace::new(
+    let mut tracer = TxTrace::default();
+    tracer.setup(
         tx.info().hash.unwrap_or_default(),
         tx.inner.signer(),
         tx.to().unwrap_or_default(),
@@ -97,7 +166,7 @@ pub struct OpcodeTrace {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TxTrace {
     pub hash: B256,
     pub from: Address,
@@ -116,14 +185,19 @@ pub struct TxTrace {
 }
 
 impl TxTrace {
-    pub fn new(
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn setup(
+        &mut self,
         hash: B256,
         from: Address,
         to: Address,
         value: U256,
         gas_limit: u64,
-    ) -> Self {
-        Self {
+    ) {
+        *self = Self {
             hash,
             from,
             to,
@@ -136,6 +210,12 @@ impl TxTrace {
             gas: 0,
             refunded: 0,
         }
+    }
+
+    pub fn reset(&mut self) -> Self {
+        let ret = self.clone();
+        *self = Self::default();
+        ret
     }
 }
 

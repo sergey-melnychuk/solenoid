@@ -28,19 +28,11 @@ async fn main() -> Result<()> {
     };
     eprintln!("📦 Fetched block number: {}", block.header.number);
 
-    // Trace single transaction just for the sake of speed and simplicity
-    let txs = txs.into_iter().take(1);
-
-    for tx in txs {
-        match evm_tracer::trace(tx, &block.header, &client).await {
-            Ok((result, tracer)) => {
-                let json = serde_json::to_string_pretty(&(tracer, result))?;
-                println!("{json}");
-            }
-            Err(e) => {
-                eprintln!("{e:?}");
-            }
-        }
+    let traced = evm_tracer::trace_all(txs.into_iter(), &block.header, &client).await?;
+    for (result, traces) in traced {
+        println!("---");
+        let json = serde_json::to_string_pretty(&(traces, result))?;
+        println!("{json}");
     }
 
     Ok(())
