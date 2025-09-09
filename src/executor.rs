@@ -768,7 +768,7 @@ impl<T: EventTracer> Executor<T> {
                 let sha3 = keccak256(data);
                 let hash = Word::from_bytes(&sha3);
                 self.tracer.push(Event {
-                    data: EventData::Keccak {
+                    data: EventData::Hash {
                         data: data.to_vec().into(),
                         hash: sha3.to_vec().into(),
                     },
@@ -1115,26 +1115,24 @@ impl<T: EventTracer> Executor<T> {
 
                 // https://www.evm.codes/?fork=cancun#55
                 let mut gas_refund = Word::zero();
-                {
-                    if val != new {
-                        if val == original {
-                            if !original.is_zero() && new.is_zero() {
+                if val != new {
+                    if val == original {
+                        if !original.is_zero() && new.is_zero() {
+                            gas_refund += 4800.into();
+                        }
+                    } else {
+                        if !original.is_zero() {
+                            if val.is_zero() {
+                                gas_refund = gas_refund.saturating_sub(4800.into());
+                            } else if new.is_zero() {
                                 gas_refund += 4800.into();
                             }
-                        } else {
-                            if !original.is_zero() {
-                                if val.is_zero() {
-                                    gas_refund = gas_refund.saturating_sub(4800.into());
-                                } else if new.is_zero() {
-                                    gas_refund += 4800.into();
-                                }
-                            }
-                            if new == original {
-                                if original.is_zero() {
-                                    gas_refund += (20_000 - 100).into();
-                                } else {
-                                    gas_refund += (5000 - 2100 - 100).into();
-                                }
+                        }
+                        if new == original {
+                            if original.is_zero() {
+                                gas_refund += (20_000 - 100).into();
+                            } else {
+                                gas_refund += (5000 - 2100 - 100).into();
                             }
                         }
                     }

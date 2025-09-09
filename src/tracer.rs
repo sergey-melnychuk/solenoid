@@ -25,7 +25,7 @@ pub enum AccountEvent {
         codehash: Word,
         bytecode: Hex,
     },
-    // TODO:
+    // TODO: is it necessary?
     // GetNonce {
     //     address: Address,
     //     val: u64,
@@ -77,9 +77,10 @@ pub enum EventData {
         gas_left: Word,
     },
 
-    Keccak {
+    Hash {
         data: Hex,
         hash: Hex,
+        // alg? - for now always keccak256
     },
 
     State(StateEvent),
@@ -102,7 +103,8 @@ pub enum EventData {
         error: Option<String>,
     },
 
-    SelfDestruct {
+    // SELFDESTRUCT
+    Remove {
         address: Address,
         beneficiary: Address,
         balance: Word,
