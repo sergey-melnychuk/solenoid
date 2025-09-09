@@ -79,10 +79,7 @@ async fn main() -> eyre::Result<()> {
         };
         match result {
             Ok(result) => {
-                println!(
-                    "TX {idx}: OK: 0x{} (in {ms} ms)",
-                    hex::encode(result.ret)
-                );
+                println!("TX {idx}: OK: 0x{} (in {ms} ms)", hex::encode(result.ret));
             }
             Err(e) => {
                 println!("TX {idx}: FAILED: {} (in {ms} ms)", e.to_string());
