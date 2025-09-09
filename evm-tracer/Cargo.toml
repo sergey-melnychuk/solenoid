@@ -1,0 +1,27 @@
+[package]
+name = "evm-tracer"
+version = "0.1.0"
+edition = "2021"
+description = "EVM transaction tracer"
+
+[dependencies]
+# revm crates
+revm = { version = "29.0.0", features = ["alloydb"] }
+
+# alloy
+alloy-eips = "1.0.27"
+alloy-provider = { version = "1.0.27", default-features = true }
+alloy-consensus = "1.0.27"
+alloy-rpc-types = "1.0.30"
+
+# tokio
+tokio = { version = "1.46.1", features = ["rt-multi-thread", "macros"] }
+
+# serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# misc
+anyhow = "1.0"
+hex = "0.4"
+dotenv = "0.15.0"
