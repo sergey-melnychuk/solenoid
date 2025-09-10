@@ -431,7 +431,7 @@ impl<T: EventTracer> Executor<T> {
                     },
                 });
                 if evm.gas(cost).is_err() {
-                    eprintln!("out of gas");
+                    // eprintln!("out of gas");
                     evm.stopped = true;
                     evm.reverted = true;
                     return (self.tracer, vec![]);

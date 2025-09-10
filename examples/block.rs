@@ -1,28 +1,44 @@
-use std::{panic::AssertUnwindSafe, time::Instant};
+use std::{
+    panic::AssertUnwindSafe,
+    sync::{LazyLock, Mutex},
+    time::Instant,
+};
 
 use eyre::{Context, OptionExt, eyre};
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use solenoid::{
-    common::{Hex, address::Address, word::Word},
+    common::{
+        Hex,
+        address::Address,
+        word::{Word, decode_error_string},
+    },
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},
 };
 
+static PANIC_MESSAGE: LazyLock<Mutex<Option<String>>> = LazyLock::new(|| Mutex::new(None));
+
+fn set_panic_message(msg: String) {
+    *PANIC_MESSAGE.lock().unwrap() = Some(msg);
+}
+
+fn get_panic_message() -> Option<String> {
+    PANIC_MESSAGE.lock().unwrap().take()
+}
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    fn get_panic_message(any: &dyn std::any::Any) -> String {
-        if let Some(s) = any.downcast_ref::<&str>() {
-            s.to_string()
-        } else if let Some(s) = any.downcast_ref::<String>() {
-            s.to_owned()
-        } else {
-            "undefined".to_string()
-        }
-    }
     std::panic::set_hook(Box::new(|info| {
-        eprintln!("PANICHOOK: {}.", get_panic_message(info.payload()));
+        let msg = if let Some(s) = info.payload().downcast_ref::<&str>() {
+            s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s
+        } else {
+            "undefined"
+        };
+        set_panic_message(msg.to_string());
     }));
 
     dotenv::dotenv().ok();
@@ -32,7 +48,7 @@ async fn main() -> eyre::Result<()> {
     let eth = eth::EthClient::new(&url);
 
     // let (number, _) = eth.get_latest_block().await?;
-    let number = 0x15f5e96;
+    let number = 23027350;
 
     let txs = eth
         .get_full_block(Word::from(number), |json| {
@@ -48,10 +64,7 @@ async fn main() -> eyre::Result<()> {
     let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
 
     println!("BLOCK: {number}");
-    let mut seq = 0;
-    let mut ok = 0;
-    let mut failed = 0;
-    let mut panic = 0;
+    let (mut seq, mut ok, mut rev, mut failed, mut panic) = (0, 0, 0, 0, 0);
     for tx in &txs {
         seq += 1;
         let idx = tx.index.as_u64();
@@ -70,29 +83,36 @@ async fn main() -> eyre::Result<()> {
             .map_err(|_| eyre!("panic-caught"))
             .with_context(|| format!("TX:{idx}:{}", tx.hash));
         let ms = now.elapsed().as_millis();
-        let result = match result {
-            Ok(r) => r,
-            Err(e) => {
+        match result {
+            Ok(result) => match result {
+                Ok(result) => {
+                    let ret = hex::encode(&result.ret);
+                    if !result.evm.reverted {
+                        ok += 1;
+                        println!("TX {idx}: OK: 0x{ret} (in {ms} ms)");
+                    } else {
+                        rev += 1;
+                        let msg = decode_error_string(&result.ret)
+                            .map(|msg| format!("\'{msg}\'"))
+                            .unwrap_or_else(|| format!("0x{ret}"));
+                        println!("TX {idx}: REVERT: {msg} (in {ms} ms)");
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    println!("TX {idx}: FAILED: {e:?} (in {ms} ms)");
+                }
+            },
+            Err(_) => {
                 panic += 1;
-                println!("TX {idx}: PANIC: {e} (in {ms} ms)");
-                continue;
+                let msg = get_panic_message().unwrap_or_else(|| "undefined".to_string());
+                println!("TX {idx}: PANIC: '{msg}' (in {ms} ms)");
             }
         };
-        match result {
-            Ok(result) => {
-                ok += 1;
-                let ret = hex::encode(result.ret);
-                println!("TX {idx}: OK: 0x{ret} (in {ms} ms)");
-            }
-            Err(e) => {
-                failed += 1;
-                println!("TX {idx}: FAILED: {e:?} (in {ms} ms)");
-            }
-        }
     }
 
     assert_eq!(txs.len(), seq);
-    println!("---\nOK: {ok}, FAILED: {failed}, PANIC: {panic}");
+    println!("---\nOK: {ok}, REVERT: {rev}, FAILED: {failed}, PANIC: {panic}");
     Ok(())
 }
 
@@ -108,6 +128,12 @@ struct Tx {
     value: Word,
 }
 
+#[allow(dead_code)]
+struct Block {
+    transactions: Vec<Tx>,
+}
+
+// Data for block 23027350:
 /*
 
 todo!("BLOCKHASH")
@@ -144,8 +170,3 @@ todo!("COINBASE")
 ???
 
 */
-
-#[allow(dead_code)]
-struct Block {
-    transactions: Vec<Tx>,
-}

@@ -291,5 +291,5 @@ pub fn decode_error_string(ret: &[u8]) -> Option<String> {
         return None;
     }
     let data = &ret[offset..offset + size];
-    Some(String::from_utf8_lossy(data).to_string())
+    String::from_utf8(data.to_vec()).ok()
 }
