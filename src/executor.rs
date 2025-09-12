@@ -1475,12 +1475,12 @@ impl<T: EventTracer> Executor<T> {
         let ret_offset = evm.pop()?.as_usize();
         let ret_size = evm.pop()?.as_usize();
 
-        let is_warm = ext.state.contains_key(&address);
-        if is_warm {
-            *gas = Word::from(100);
+        // Calculate address access cost (EIP-2929)
+        let access_cost = if ext.state.contains_key(&address) {
+            Word::from(100)  // warm access
         } else {
-            *gas = Word::from(2600);
-        }
+            Word::from(2600) // cold access
+        };
 
         let (bytecode, codehash) = evm.code(ext, &address).await?;
         let code = Decoder::decode(bytecode);
@@ -1494,6 +1494,7 @@ impl<T: EventTracer> Executor<T> {
             reverted: false,
         });
 
+        // Handle memory expansion for arguments
         if args_offset + args_size > evm.memory.len() {
             if args_offset + args_size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(args_offset + args_size).into());
@@ -1501,7 +1502,23 @@ impl<T: EventTracer> Executor<T> {
             let padding = 32 - (args_offset + args_size) % 32;
             evm.memory.resize(args_offset + args_size + padding % 32, 0);
         }
-        *gas += evm.memory_expansion_cost();
+        let memory_expansion_cost = evm.memory_expansion_cost();
+
+        // Calculate base gas cost
+        let mut base_gas_cost = access_cost + memory_expansion_cost;
+
+        // Add value transfer cost if applicable (not for DELEGATECALL/STATICCALL)
+        if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) && !value.is_zero() {
+            base_gas_cost += Word::from(9000); // value transfer cost
+        }
+
+        // Calculate available gas for forwarding using "all but one 64th" rule
+        let remaining_gas = evm.gas.remaining().saturating_sub(base_gas_cost);
+        let all_but_one_64th = remaining_gas.saturating_sub(remaining_gas / Word::from(64));
+        let gas_to_forward = call_gas.min(all_but_one_64th);
+
+        // Total gas cost = base cost + gas actually forwarded
+        *gas = base_gas_cost + gas_to_forward;
 
         let inner_call = Call {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
@@ -1513,10 +1530,10 @@ impl<T: EventTracer> Executor<T> {
             } else {
                 address
             },
-            gas: call_gas,
+            gas: gas_to_forward, // Use the correctly calculated forwarded gas
         };
         let mut inner_evm = Evm {
-            gas: Gas::new(call_gas),
+            gas: Gas::new(gas_to_forward), // Use the correctly calculated forwarded gas
             ..Default::default()
         };
         let inner_ctx = Context {
@@ -1531,7 +1548,8 @@ impl<T: EventTracer> Executor<T> {
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, mut ret) = Box::pin(future).await;
 
-        let cost = inner_evm.gas.used;
+        // The gas cost is what we calculated above (base_gas_cost + gas_to_forward)
+        let total_gas_cost = *gas;
 
         self.tracer.push(Event {
             depth: ctx.depth,
@@ -1541,16 +1559,16 @@ impl<T: EventTracer> Executor<T> {
                 op: instruction.opcode.code,
                 name: instruction.opcode.name(),
                 data: instruction.argument.clone().map(Into::into),
-                gas_cost: cost,
-                gas_used: evm.gas.used.add(cost),
-                gas_left: evm.gas.remaining().saturating_sub(cost),
+                gas_cost: total_gas_cost,
+                gas_used: evm.gas.used + total_gas_cost,
+                gas_left: evm.gas.remaining().saturating_sub(total_gas_cost),
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(hex::encode).collect(),
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);
 
-        *gas += inner_evm.gas.used;
+        // Don't double-count gas - we already calculated the correct total cost above
         if inner_evm.reverted {
             inner_evm.revert(ext).await?;
             evm.push(Word::zero())?;
