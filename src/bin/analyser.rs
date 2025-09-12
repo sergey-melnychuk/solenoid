@@ -4,8 +4,14 @@ use evm_tracer::OpcodeTrace;
 
 fn main() {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
-    let trace_path = args.first().cloned().unwrap_or_else(|| "trace.log".to_string());
-    let block_path = args.get(1).cloned().unwrap_or_else(|| "block.log".to_string());
+    let trace_path = args
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "trace.log".to_string());
+    let block_path = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| "block.log".to_string());
 
     let trace = std::fs::read_to_string(&trace_path).expect("traces");
     let trace = trace.split('\n').collect::<Vec<_>>();
@@ -14,7 +20,11 @@ fn main() {
     let block = block.split('\n').collect::<Vec<_>>();
 
     if block.len() != trace.len() {
-        eprintln!("WARN: len mismatch: block={} trace={}", block.len(), trace.len());
+        eprintln!(
+            "WARN: len mismatch: block={} trace={}",
+            block.len(),
+            trace.len()
+        );
     }
 
     let mut matched = 0;

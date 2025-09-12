@@ -435,10 +435,7 @@ impl<T: EventTracer> Executor<T> {
                             gas_used: evm.gas.used.add(cost),
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
-                            memory: evm.memory
-                                .chunks(32)
-                                .map(hex::encode)
-                                .collect(),
+                            memory: evm.memory.chunks(32).map(hex::encode).collect(),
                         },
                     });
                 }
@@ -1360,7 +1357,8 @@ impl<T: EventTracer> Executor<T> {
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage [, the current sender and the current value] remain the same.
                 // DELEGATECALL difference:  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                self.call(instruction, this, call, &mut gas, evm, ext, ctx).await?;
+                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await?;
             }
             0xf3 | 0xfd => {
                 // RETURN | REVERT
@@ -1407,7 +1405,8 @@ impl<T: EventTracer> Executor<T> {
                 };
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage, the current sender and the current value remain the same.
-                self.call(instruction, this, call, &mut gas, evm, ext, ctx).await?;
+                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await?;
             }
             0xf5 => {
                 // CREATE2
@@ -1426,7 +1425,8 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Static,
                     ..ctx
                 };
-                self.call(instruction, this, call, &mut gas, evm, ext, ctx).await?;
+                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await?;
             }
             0xfe => {
                 // INVALID
@@ -1545,10 +1545,7 @@ impl<T: EventTracer> Executor<T> {
                 gas_used: evm.gas.used.add(cost),
                 gas_left: evm.gas.remaining().saturating_sub(cost),
                 stack: evm.stack.clone(),
-                memory: evm.memory
-                    .chunks(32)
-                    .map(hex::encode)
-                    .collect(),
+                memory: evm.memory.chunks(32).map(hex::encode).collect(),
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);

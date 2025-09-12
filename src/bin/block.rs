@@ -1,11 +1,7 @@
 use eyre::{Context, OptionExt, eyre};
 use serde::{Deserialize, Serialize};
 use solenoid::{
-    common::{
-        Hex,
-        address::Address,
-        word::Word,
-    },
+    common::{Hex, address::Address, word::Word},
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},

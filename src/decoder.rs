@@ -9,7 +9,10 @@ pub struct Instruction {
 
 impl Instruction {
     pub(crate) fn is_call(&self) -> bool {
-        matches!(self.opcode.name, "CALL" | "DELEGATECALL" | "STATICCALL" | "CALLCODE" | "CREATE" | "CREATE2")
+        matches!(
+            self.opcode.name,
+            "CALL" | "DELEGATECALL" | "STATICCALL" | "CALLCODE" | "CREATE" | "CREATE2"
+        )
     }
 }
 
