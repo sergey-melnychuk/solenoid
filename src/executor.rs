@@ -437,7 +437,7 @@ impl<T: EventTracer> Executor<T> {
                             stack: evm.stack.clone(),
                             memory: evm.memory
                                 .chunks(32)
-                                .map(|chunk| hex::encode(chunk))
+                                .map(hex::encode)
                                 .collect(),
                         },
                     });
@@ -1452,6 +1452,7 @@ impl<T: EventTracer> Executor<T> {
         Ok(gas)
     }
 
+    #[allow(clippy::too_many_arguments)] // oh, piss off clippy!
     async fn call(
         &mut self,
         instruction: &Instruction,
@@ -1546,7 +1547,7 @@ impl<T: EventTracer> Executor<T> {
                 stack: evm.stack.clone(),
                 memory: evm.memory
                     .chunks(32)
-                    .map(|chunk| hex::encode(chunk))
+                    .map(hex::encode)
                     .collect(),
             },
         });
