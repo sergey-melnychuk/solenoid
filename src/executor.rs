@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use eyre::Context as _;
 use i256::I256;
 use thiserror::Error;
@@ -11,7 +13,7 @@ use crate::{
     },
     decoder::{Bytecode, Decoder, Instruction},
     ext::Ext,
-    tracer::{AccountEvent, CallType, Event, EventData, EventTracer, StateEvent},
+    tracer::{AccountEvent, CallType, Event, EventData, EventTracer, HashAlg, StateEvent},
 };
 
 #[derive(Error, Debug)]
@@ -93,11 +95,11 @@ impl Evm {
     }
 
     pub(crate) fn memory_expansion_cost(&mut self) -> Word {
-        let memory_byte_size = self.memory.len();
-        let memory_size_word = memory_byte_size.div_ceil(32);
-        let mem_cost = (memory_size_word * memory_size_word) / 512 + (3 * memory_size_word);
-        let exp_cost = Word::from(mem_cost) - self.mem_cost;
-        self.mem_cost = exp_cost;
+        let mem_len = self.memory.len().div_ceil(32);
+        let mem_cost = (mem_len * mem_len) / 512 + (3 * mem_len);
+        let mem_cost = Word::from(mem_cost);
+        let exp_cost = mem_cost - self.mem_cost;
+        self.mem_cost = mem_cost;
         exp_cost
     }
 
@@ -228,7 +230,7 @@ impl Gas {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Context {
     pub created: Address,
     pub origin: Address,
@@ -273,17 +275,19 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
     ) -> eyre::Result<(T, Vec<u8>)> {
         ext.transient.clear();
-        evm.gas = Gas::new(call.gas);
 
+        let mut gas = call.gas;
         let call_cost = 21000;
-        evm.gas.sub(call_cost.into())?;
+        gas -= call_cost.into();
 
         let data_cost = {
             let total_calldata_len = call.data.len();
             let nonzero_bytes_count = call.data.iter().filter(|byte| byte != &&0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         };
-        evm.gas.sub(data_cost.into())?;
+        gas -= data_cost.into();
+
+        evm.gas = Gas::new(gas);
 
         let is_create = call.to.is_zero();
         let is_transfer = code.bytecode.is_empty() || call.data.is_empty() && !is_create;
@@ -365,6 +369,7 @@ impl<T: EventTracer> Executor<T> {
             let ctx = Context {
                 created: address,
                 origin: call.from,
+                depth: 1,
                 ..Context::default()
             };
             let tracer = self.tracer.fork();
@@ -417,19 +422,26 @@ impl<T: EventTracer> Executor<T> {
                     format!("{:#06x}: {}", instruction.offset, instruction.opcode.name())
                 })
             {
-                self.tracer.push(Event {
-                    depth: ctx.depth,
-                    reverted: false,
-                    data: EventData::OpCode {
-                        pc,
-                        op: instruction.opcode.code,
-                        name: instruction.opcode.name(),
-                        data: instruction.argument.clone().unwrap_or_default().into(),
-                        gas: cost,
-                        gas_used: evm.gas.used,
-                        gas_left: evm.gas.remaining(),
-                    },
-                });
+                if !instruction.is_call() {
+                    self.tracer.push(Event {
+                        depth: ctx.depth,
+                        reverted: false,
+                        data: EventData::OpCode {
+                            pc: instruction.offset,
+                            op: instruction.opcode.code,
+                            name: instruction.opcode.name(),
+                            data: instruction.argument.clone().map(Into::into),
+                            gas_cost: cost,
+                            gas_used: evm.gas.used.add(cost),
+                            gas_left: evm.gas.remaining().saturating_sub(cost),
+                            stack: evm.stack.clone(),
+                            memory: evm.memory
+                                .chunks(32)
+                                .map(|chunk| hex::encode(chunk))
+                                .collect(),
+                        },
+                    });
+                }
                 if evm.gas(cost).is_err() {
                     // eprintln!("out of gas");
                     evm.stopped = true;
@@ -502,6 +514,7 @@ impl<T: EventTracer> Executor<T> {
 
                 self.tracer.push(Event {
                     data: EventData::Return {
+                        ok: true,
                         data: self.ret.clone().into(),
                         error: None,
                         gas_used: evm.gas.used,
@@ -771,6 +784,7 @@ impl<T: EventTracer> Executor<T> {
                     data: EventData::Hash {
                         data: data.to_vec().into(),
                         hash: sha3.to_vec().into(),
+                        alg: HashAlg::Keccak256,
                     },
                     depth: ctx.depth,
                     reverted: false,
@@ -809,7 +823,12 @@ impl<T: EventTracer> Executor<T> {
             }
             0x34 => {
                 // CALLVALUE
-                evm.push(call.value)?;
+                let value = if matches!(ctx.call_type, CallType::Static) {
+                    Word::zero()
+                } else {
+                    call.value
+                };
+                evm.push(value)?;
                 gas = 2.into();
             }
             0x35 => {
@@ -838,14 +857,16 @@ impl<T: EventTracer> Executor<T> {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
                     }
-                    evm.memory.resize(dest_offset + size, 0);
+                    let padding = 32 - (dest_offset + size) % 32;
+                    evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
                 let mut buffer = call.data.clone();
                 if offset + size > buffer.len() {
                     if offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + size).into());
                     }
-                    buffer.resize(offset + size, 0);
+                    let padding = 32 - (offset + size) % 32;
+                    buffer.resize(offset + size + padding % 32, 0);
                 }
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&buffer[offset..offset + size]);
@@ -867,7 +888,8 @@ impl<T: EventTracer> Executor<T> {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
                     }
-                    evm.memory.resize(dest_offset + size, 0);
+                    let padding = 32 - (dest_offset + size) % 32;
+                    evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&code.bytecode[offset..offset + size]);
@@ -883,7 +905,7 @@ impl<T: EventTracer> Executor<T> {
                 let address: Address = (&evm.pop()?).into();
                 let code_size = ext.code(&address).await?.0.len();
                 evm.push(Word::from(code_size))?;
-                gas = evm.address_access_cost(&address, ext);
+                gas = evm.address_access_cost(&address, ext); // FIXME
             }
             0x3c => {
                 // EXTCODECOPY
@@ -897,7 +919,8 @@ impl<T: EventTracer> Executor<T> {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
                     }
-                    evm.memory.resize(dest_offset + size, 0);
+                    let padding = 32 - (dest_offset + size) % 32;
+                    evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&code[offset..offset + size]);
@@ -919,13 +942,15 @@ impl<T: EventTracer> Executor<T> {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
                     }
-                    evm.memory.resize(dest_offset + size, 0);
+                    let padding = 32 - (dest_offset + size) % 32;
+                    evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
                 if self.ret.len() < offset + size {
                     if offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + size).into());
                     }
-                    self.ret.resize(offset + size, 0);
+                    let padding = 32 - (dest_offset + size) % 32;
+                    self.ret.resize(offset + size + padding % 32, 0);
                 }
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&self.ret[offset..offset + size]);
@@ -958,6 +983,7 @@ impl<T: EventTracer> Executor<T> {
                 // TIMESTAMP
                 // todo!("TIMESTAMP")
                 evm.push(Word::from(0x6889371b))?; // TODO: remove hard-coded value
+                gas = 2.into();
             }
             0x43 => {
                 // NUMBER
@@ -979,7 +1005,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x47 => {
                 // SELFBALANCE
-                let balance = ext.balance(&this).await?;
+                let balance = ext.balance(&call.from).await?;
                 // TODO: touch account
                 evm.push(balance)?;
                 gas = 5.into();
@@ -1011,7 +1037,8 @@ impl<T: EventTracer> Executor<T> {
                     if end > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(end).into());
                     }
-                    evm.memory.resize(end, 0);
+                    let padding = 32 - end % 32;
+                    evm.memory.resize(end + padding % 32, 0);
                 }
                 let value = Word::from_bytes(&evm.memory[offset..end]);
                 evm.push(value)?;
@@ -1027,7 +1054,8 @@ impl<T: EventTracer> Executor<T> {
                     if end > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(end).into());
                     }
-                    evm.memory.resize(end, 0);
+                    let padding = 32 - end % 32;
+                    evm.memory.resize(end + padding % 32, 0);
                 }
                 let bytes = &value.into_bytes();
                 evm.memory[offset..end].copy_from_slice(bytes);
@@ -1042,7 +1070,8 @@ impl<T: EventTracer> Executor<T> {
                     if offset + 1 > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + 1).into());
                     }
-                    evm.memory.resize(offset + 1, 0);
+                    let padding = 32 - (offset + 1) % 32;
+                    evm.memory.resize(offset + 1 + padding % 32, 0);
                 }
                 evm.memory[offset] = value
                     .into_bytes()
@@ -1219,7 +1248,8 @@ impl<T: EventTracer> Executor<T> {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
                     }
-                    evm.memory.resize(dest_offset + size, 0);
+                    let padding = 32 - (dest_offset + size) % 32;
+                    evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
                 let mut buffer = vec![0u8; size];
                 buffer.copy_from_slice(&evm.memory[offset..offset + size]);
@@ -1286,7 +1316,8 @@ impl<T: EventTracer> Executor<T> {
                     if offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + size).into());
                     }
-                    evm.memory.resize(offset + size, 0);
+                    let padding = 32 - (offset + size) % 32;
+                    evm.memory.resize(offset + size + padding % 32, 0);
                 }
                 let data = evm.memory[offset..offset + size].to_vec();
                 evm.logs.push(Log(this, topics, data));
@@ -1316,7 +1347,7 @@ impl<T: EventTracer> Executor<T> {
                         return Err(ExecutorError::StaticCallViolation(opcode).into());
                     }
                 }
-                self.call(this, &mut gas, evm, ext, ctx)
+                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
                     .await
                     .with_context(|| "opcode: CALL")?;
             }
@@ -1329,7 +1360,7 @@ impl<T: EventTracer> Executor<T> {
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage [, the current sender and the current value] remain the same.
                 // DELEGATECALL difference:  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                self.call(this, &mut gas, evm, ext, ctx).await?;
+                self.call(instruction, this, call, &mut gas, evm, ext, ctx).await?;
             }
             0xf3 | 0xfd => {
                 // RETURN | REVERT
@@ -1344,7 +1375,8 @@ impl<T: EventTracer> Executor<T> {
                         if offset + size > ALLOCATION_SANITY_LIMIT {
                             return Err(ExecutorError::InvalidAllocation(offset + size).into());
                         }
-                        evm.memory.resize(offset + size, 0);
+                        let padding = 32 - (offset + size) % 32;
+                        evm.memory.resize(offset + size + padding % 32, 0);
                     }
                     self.ret = evm.memory[offset..offset + size].to_vec();
                 } else {
@@ -1354,6 +1386,7 @@ impl<T: EventTracer> Executor<T> {
 
                 self.tracer.push(Event {
                     data: EventData::Return {
+                        ok: !evm.reverted,
                         data: self.ret.clone().into(),
                         error: if evm.reverted {
                             decode_error_string(&self.ret)
@@ -1374,7 +1407,7 @@ impl<T: EventTracer> Executor<T> {
                 };
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage, the current sender and the current value remain the same.
-                self.call(this, &mut gas, evm, ext, ctx).await?;
+                self.call(instruction, this, call, &mut gas, evm, ext, ctx).await?;
             }
             0xf5 => {
                 // CREATE2
@@ -1393,7 +1426,7 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Static,
                     ..ctx
                 };
-                self.call(this, &mut gas, evm, ext, ctx).await?;
+                self.call(instruction, this, call, &mut gas, evm, ext, ctx).await?;
             }
             0xfe => {
                 // INVALID
@@ -1421,7 +1454,9 @@ impl<T: EventTracer> Executor<T> {
 
     async fn call(
         &mut self,
+        instruction: &Instruction,
         this: Address,
+        call: &Call,
         gas: &mut Word,
         evm: &mut Evm,
         ext: &mut Ext,
@@ -1432,7 +1467,7 @@ impl<T: EventTracer> Executor<T> {
         let value = if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             evm.pop()?
         } else {
-            Word::zero()
+            call.value
         };
         let args_offset = evm.pop()?.as_usize();
         let args_size = evm.pop()?.as_usize();
@@ -1462,7 +1497,8 @@ impl<T: EventTracer> Executor<T> {
             if args_offset + args_size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(args_offset + args_size).into());
             }
-            evm.memory.resize(args_offset + args_size, 0);
+            let padding = 32 - (args_offset + args_size) % 32;
+            evm.memory.resize(args_offset + args_size + padding % 32, 0);
         }
         *gas += evm.memory_expansion_cost();
 
@@ -1493,6 +1529,27 @@ impl<T: EventTracer> Executor<T> {
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, mut ret) = Box::pin(future).await;
+
+        let cost = inner_evm.gas.used;
+
+        self.tracer.push(Event {
+            depth: ctx.depth,
+            reverted: false,
+            data: EventData::OpCode {
+                pc: instruction.offset,
+                op: instruction.opcode.code,
+                name: instruction.opcode.name(),
+                data: instruction.argument.clone().map(Into::into),
+                gas_cost: cost,
+                gas_used: evm.gas.used.add(cost),
+                gas_left: evm.gas.remaining().saturating_sub(cost),
+                stack: evm.stack.clone(),
+                memory: evm.memory
+                    .chunks(32)
+                    .map(|chunk| hex::encode(chunk))
+                    .collect(),
+            },
+        });
         self.tracer.join(tracer, inner_evm.reverted);
 
         *gas += inner_evm.gas.used;
@@ -1506,25 +1563,27 @@ impl<T: EventTracer> Executor<T> {
             if ret_size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(ret_size).into());
             }
-            ret.resize(ret_size, 0);
+            let padding = 32 - (ret_size) % 32;
+            ret.resize(ret_size + padding % 32, 0);
         }
         let size = ret_offset + ret_size;
         if size > evm.memory.len() {
             if size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(size).into());
             }
-            evm.memory.resize(size, 0);
+            let padding = 32 - size % 32;
+            evm.memory.resize(size + padding % 32, 0);
             *gas += evm.memory_expansion_cost();
         }
         if size > 0 {
             evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
         }
         self.ret = ret;
-        for acc in inner_evm.account {
-            evm.account.push(acc);
+        for entry in inner_evm.account {
+            evm.account.push(entry);
         }
-        for sta in inner_evm.state {
-            evm.state.push(sta);
+        for entry in inner_evm.state {
+            evm.state.push(entry);
         }
         evm.push(Word::one())?;
 
@@ -1553,7 +1612,8 @@ impl<T: EventTracer> Executor<T> {
             if offset + size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(offset + size).into());
             }
-            evm.memory.resize(offset + size, 0);
+            let padding = 32 - (offset + size) % 32;
+            evm.memory.resize(offset + size + padding % 32, 0);
         }
         *gas = evm.memory_expansion_cost() + Word::from(32000);
         evm.gas(*gas)?;

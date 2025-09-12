@@ -7,7 +7,7 @@ use revm::context::result::{ExecResultAndState, ExecutionResult};
 use revm::context::{ContextTr, JournalTr};
 use revm::inspector::Inspector;
 use revm::interpreter::{
-    interpreter_types::{Jumps, LoopControl, MemoryTr, StackTr},
+    interpreter_types::{Jumps, MemoryTr, StackTr},
     CallInputs, CallOutcome, CreateInputs, CreateOutcome, Interpreter,
     InterpreterTypes,
 };
@@ -22,9 +22,12 @@ use serde::{Deserialize, Serialize};
 
 pub use alloy_consensus;
 pub use alloy_eips;
+pub use alloy_primitives;
 pub use alloy_provider;
 pub use alloy_rpc_types;
 pub use anyhow;
+
+mod aux;
 
 pub async fn trace_all(
     txs: impl Iterator<Item = Tx>,
@@ -154,16 +157,15 @@ pub async fn trace_one(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpcodeTrace {
     pub pc: u64,
-    pub opcode: u8,
-    pub gas_remaining: u64,
+    pub op: u8,
+    pub name: String,
+    pub gas_used: u64,
+    // pub gas_left: u64, // NOTE: temporary disabled
     pub gas_cost: u64,
-    pub stack: u64,  //Vec<U256>, // TODO: capture full stack?
-    pub memory: u64, // TODO: capture full memory?
+    pub gas_refunded: u64,
+    pub stack: Vec<U256>,
+    pub memory: Vec<String>,
     pub depth: usize,
-    pub refunded: i64,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -179,9 +181,16 @@ pub struct TxTrace {
     pub traces: Vec<OpcodeTrace>,
 
     #[serde(skip)]
+    aux: Aux,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Aux {
+    pc: u64,
+    opcode: u8,
     gas: u64,
-    #[serde(skip)]
     refunded: i64,
+    depth: usize,
 }
 
 impl TxTrace {
@@ -207,8 +216,7 @@ impl TxTrace {
             success: false,
             return_data: Bytes::new(),
             traces: Vec::new(),
-            gas: 0,
-            refunded: 0,
+            aux: Aux::default(),
         }
     }
 
@@ -233,41 +241,44 @@ where
     }
 
     fn step(&mut self, interp: &mut Interpreter<INTR>, _context: &mut CTX) {
-        self.gas = interp.gas.remaining();
-        self.refunded = interp.gas.refunded();
+        self.aux.pc = interp.bytecode.pc() as u64;
+        self.aux.opcode = interp.bytecode.opcode();
+        self.aux.gas = interp.gas.remaining();
+        self.aux.refunded = interp.gas.refunded();
     }
 
-    fn step_end(&mut self, interp: &mut Interpreter<INTR>, context: &mut CTX) {
-        let pc = interp.bytecode.pc();
-        let opcode = interp.bytecode.opcode();
+    fn step_end(&mut self, interp: &mut Interpreter<INTR>, _context: &mut CTX) {
+        let stack = interp.stack.data().to_vec();
+        let memory = interp.memory.slice(0..interp.memory.size()).to_vec();
 
-        let stack = interp.stack.len() as u64;
-        let memory = interp.memory.size() as u64;
+        let gas_used = interp.gas.used();
+        let gas_left = interp.gas.remaining();
 
-        let error = interp
-            .bytecode
-            .action()
-            .as_ref()
-            .and_then(|a| a.instruction_result())
-            .map(|ir| format!("{ir:?}"));
+        let refunded = interp.gas.refunded() - self.aux.refunded;
+        let refunded = if refunded >= 0 {
+            refunded
+        } else {
+            // panic!("WTF? negative refunded gas?");
+            refunded
+        };
+        self.aux.refunded = interp.gas.refunded();
 
-        let gas_remaining = interp.gas.remaining();
-        let gas_cost = self.gas - gas_remaining;
-        self.gas = gas_remaining;
-
-        let refunded = interp.gas.refunded() - self.refunded;
-        self.refunded = interp.gas.refunded();
+        let gas_cost = self.aux.gas - gas_left + refunded as u64;
+        self.aux.gas = gas_left;
 
         self.traces.push(OpcodeTrace {
-            pc: pc as u64,
-            opcode,
-            gas_remaining,
+            pc: self.aux.pc,
+            op: self.aux.opcode,
+            name: aux::opcode_name(self.aux.opcode).to_string(),
+            gas_used,
+            // gas_left,
             gas_cost,
+            gas_refunded: refunded as u64,
             stack,
-            memory,
-            depth: context.journal_mut().depth(),
-            refunded,
-            error,
+            memory: memory.chunks(32)
+                .map(|chunk| hex::encode(chunk))
+                .collect(),
+            depth: self.aux.depth,
         });
     }
 
@@ -276,7 +287,7 @@ where
         _context: &mut CTX,
         _inputs: &mut CallInputs,
     ) -> Option<CallOutcome> {
-        //
+        self.aux.depth += 1;
         None
     }
 
@@ -286,6 +297,7 @@ where
         _inputs: &CallInputs,
         outcome: &mut CallOutcome,
     ) {
+        self.aux.depth -= 1;
         if context.journal_mut().depth() == 0 {
             // This is the top-level call ending
             self.success = outcome.result.is_ok();
@@ -302,6 +314,7 @@ where
         _inputs: &CreateInputs,
         outcome: &mut CreateOutcome,
     ) {
+        self.aux.depth -= 1;
         if context.journal_mut().depth() == 0 {
             // This is the top-level create ending
             self.success = outcome.result.is_ok();

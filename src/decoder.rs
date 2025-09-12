@@ -7,6 +7,12 @@ pub struct Instruction {
     pub argument: Option<Vec<u8>>,
 }
 
+impl Instruction {
+    pub(crate) fn is_call(&self) -> bool {
+        matches!(self.opcode.name, "CALL" | "DELEGATECALL" | "STATICCALL" | "CALLCODE" | "CREATE" | "CREATE2")
+    }
+}
+
 #[derive(Debug)]
 pub struct Bytecode {
     pub bytecode: Vec<u8>,

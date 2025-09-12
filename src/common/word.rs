@@ -1,5 +1,6 @@
 use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
 
+use evm_tracer::alloy_primitives;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::common::decode;
@@ -93,6 +94,7 @@ impl Word {
     }
 
     pub fn from_hex(hex: &str) -> eyre::Result<Self> {
+        let hex = hex.trim_start_matches("0x");
         let word = primitive_types::U256::from_str_radix(hex, 16);
         Ok(Self(
             word.map_err(|_| eyre::eyre!("Invalid U256: '{hex}'."))?,
@@ -123,6 +125,40 @@ impl From<usize> for Word {
         Self(primitive_types::U256::from(value))
     }
 }
+
+impl From<u128> for Word {
+    fn from(value: u128) -> Self {
+        Self(primitive_types::U256::from(value))
+    }
+}
+
+#[cfg(feature = "testkit")]
+impl From<Word> for alloy_primitives::U256 {
+    fn from(value: Word) -> Self {
+        Self::from_be_slice(&value.0.to_big_endian())
+    }
+}
+
+// TODO: remove?
+
+// impl From<alloy_primitives::U256> for Word {
+//     fn from(value: alloy_primitives::U256) -> Self {
+//         let bytes: &[u8] = value.as_le_slice();
+//         Word::from_bytes(bytes)
+//     }
+// }
+
+// impl From<Word> for alloy_primitives::FixedBytes<32> {
+//     fn from(value: Word) -> Self {
+//         Self::from_slice(&value.0.to_big_endian())
+//     }
+// }
+
+// impl From<alloy_primitives::FixedBytes<32>> for Word {
+//     fn from(value: alloy_primitives::FixedBytes<32>) -> Self {
+//         Word::from_bytes(&value.0)
+//     }
+// }
 
 impl std::ops::Sub<Word> for Word {
     type Output = Word;

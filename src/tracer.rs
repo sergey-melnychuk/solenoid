@@ -1,3 +1,4 @@
+use evm_tracer::OpcodeTrace;
 use serde::{Deserialize, Serialize};
 
 use crate::common::{Hex, address::Address, word::Word};
@@ -25,7 +26,7 @@ pub enum AccountEvent {
         codehash: Word,
         bytecode: Hex,
     },
-    // TODO: is it necessary?
+    // TODO: add necessary events in the executor
     // GetNonce {
     //     address: Address,
     //     val: u64,
@@ -64,23 +65,37 @@ pub enum CallType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum EventTag {
+    Block(u64, Word),
+    Tx(Word),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum HashAlg {
+    Keccak256,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum EventData {
-    Init(String),
+    Tag(EventTag),
 
     OpCode {
         pc: usize,
         op: u8,
         name: String,
-        data: Hex,
-        gas: Word,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        data: Option<Hex>,
+        gas_cost: Word,
         gas_used: Word,
         gas_left: Word,
+        stack: Vec<Word>,
+        memory: Vec<String>, // NOTE: this is temporary - just for readability
     },
 
     Hash {
         data: Hex,
         hash: Hex,
-        // alg? - for now always keccak256
+        alg: HashAlg,
     },
 
     State(StateEvent),
@@ -97,6 +112,7 @@ pub enum EventData {
     },
 
     Return {
+        ok: bool,
         data: Hex,
         gas_used: Word,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -166,5 +182,39 @@ impl EventTracer for LoggingTracer {
 
     fn take(&mut self) -> Vec<Event> {
         std::mem::take(&mut self.0)
+    }
+}
+
+#[cfg(feature = "testkit")]
+impl TryFrom<Event> for OpcodeTrace {
+    type Error = eyre::Error;
+
+    fn try_from(value: Event) -> Result<Self, Self::Error> {
+        let depth = value.depth;
+        match value.data {
+            EventData::OpCode {
+                pc,
+                op,
+                name,
+                data: _,
+                gas_cost,
+                gas_used,
+                gas_left: _,
+                stack,
+                memory,
+            } => Ok(OpcodeTrace {
+                pc: pc as u64,
+                op,
+                name,
+                gas_used: gas_used.as_u64(),
+                // gas_left: gas_left.as_u64(),
+                gas_cost: gas_cost.as_u64(),
+                gas_refunded: 0,
+                stack: stack.into_iter().map(Into::into).collect(),
+                memory,
+                depth,
+            }),
+            _ => eyre::bail!("Not an opcode"),
+        }
     }
 }

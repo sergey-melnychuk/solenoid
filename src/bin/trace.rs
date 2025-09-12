@@ -3,6 +3,8 @@ use evm_tracer::alloy_provider::network::primitives::BlockTransactions;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::anyhow::{self, Result};
 
+// cargo run --release --bin trace > trace.log
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
@@ -12,7 +14,7 @@ async fn main() -> Result<()> {
     let block_number = std::env::args()
         .nth(1)
         .and_then(|number| number.parse::<u64>().ok())
-        .unwrap_or(23313036); // https://xkcd.com/221/
+        .unwrap_or(23027350); // https://xkcd.com/221/
     let block = match client
         .get_block_by_number(BlockNumberOrTag::Number(block_number))
         .full()
@@ -28,11 +30,13 @@ async fn main() -> Result<()> {
     };
     eprintln!("📦 Fetched block number: {}", block.header.number);
 
-    let traced = evm_tracer::trace_all(txs.into_iter(), &block.header, &client).await?;
-    for (result, traces) in traced {
-        println!("---");
-        let json = serde_json::to_string_pretty(&(traces, result))?;
-        println!("{json}");
+    let txs = txs.into_iter();
+    let txs = txs.take(1);
+    let traced = evm_tracer::trace_all(txs, &block.header, &client).await?;
+    for (_result, traces) in traced {
+        for tr in traces.traces {
+            println!("{}", serde_json::to_string_pretty(&tr).expect("json"));
+        }
     }
 
     Ok(())
