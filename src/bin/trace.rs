@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     let traced = evm_tracer::trace_all(txs, &block.header, &client).await?;
     for (_result, traces) in traced {
         for tr in traces.traces {
-            println!("{}", serde_json::to_string_pretty(&tr).expect("json"));
+            println!("{}", serde_json::to_string(&tr).expect("json"));
         }
     }
 

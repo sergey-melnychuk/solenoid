@@ -60,7 +60,7 @@ async fn main() -> eyre::Result<()> {
             .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
             .collect::<Vec<_>>();
         for tr in traces {
-            println!("{}", serde_json::to_string_pretty(&tr).expect("json"));
+            println!("{}", serde_json::to_string(&tr).expect("json"));
         }
     }
     Ok(())

@@ -154,7 +154,7 @@ pub async fn trace_one(
     Ok((result, tracer))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct OpcodeTrace {
     pub pc: u64,
     pub op: u8,

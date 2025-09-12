@@ -20,6 +20,7 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
 evm-tracer = { path = "./evm-tracer" }
+pretty_assertions = "1.4.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.46.1", features = ["macros", "rt-multi-thread"] }
