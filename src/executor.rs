@@ -87,7 +87,7 @@ pub struct Evm {
     pub account: Vec<AccountTouch>,
 
     // EIP-2929: Track addresses accessed during transaction for warm/cold gas calculation
-    pub accessed: std::collections::HashSet<Address>,    
+    pub accessed: std::collections::HashSet<Address>,
 }
 
 impl Evm {
@@ -1589,21 +1589,20 @@ impl<T: EventTracer> Executor<T> {
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);
-        
+
         // Normal case: add actual gas used by inner call, minus refunds
-        let needs_stipend_adjustment = !value.is_zero() 
-            && inner_evm.gas.used > Word::from(10_000) 
+        let needs_stipend_adjustment = !value.is_zero()
+            && inner_evm.gas.used > Word::from(10_000)
             && matches!(ctx.call_type, CallType::Call);
-        
+
         let stipend_adjustment = if needs_stipend_adjustment {
             Word::from(2300)
         } else {
             Word::zero()
         };
-        
-        let inner_gas_to_add = inner_evm.gas.used
-            .saturating_sub(stipend_adjustment);
-        
+
+        let inner_gas_to_add = inner_evm.gas.used.saturating_sub(stipend_adjustment);
+
         evm.gas.used += inner_gas_to_add;
 
         if inner_evm.reverted {
