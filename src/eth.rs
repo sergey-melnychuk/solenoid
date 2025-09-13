@@ -138,6 +138,22 @@ impl EthClient {
         .and_then(|value| hex_to_word(&value))
     }
 
+    pub async fn get_nonce(&self, block_hash: &str, address: &str) -> eyre::Result<Word> {
+        self.rpc(serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_getTransactionCount",
+            "params": [
+                address,
+                {
+                    "blockHash": block_hash,
+                }
+            ],
+            "id": 0
+        }))
+        .await
+        .and_then(|value| hex_to_word(&value))
+    }
+
     #[cfg(feature = "account")]
     pub async fn get_account(&self, block_hash: &str, address: &str) -> eyre::Result<Account> {
         self.rpc(serde_json::json!({

@@ -1534,8 +1534,7 @@ impl<T: EventTracer> Executor<T> {
         let inner_call = Call {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
             value,
-            // from: this,
-            from: ctx.origin,
+            from: this,
             to: if matches!(ctx.call_type, CallType::Delegate | CallType::Callcode) {
                 this
             } else {
@@ -1548,7 +1547,6 @@ impl<T: EventTracer> Executor<T> {
             ..Default::default()
         };
         let inner_ctx = Context {
-            created: Address::zero(),
             depth: ctx.depth + 1,
             ..ctx
         };
