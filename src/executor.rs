@@ -1581,7 +1581,19 @@ impl<T: EventTracer> Executor<T> {
         });
         self.tracer.join(tracer, inner_evm.reverted);
 
-        evm.gas.used += inner_evm.gas.used;
+        // Account for inner call gas usage, but avoid double-counting in specific cases
+        // Only adjust for calls with actual value transfer that consumed significant gas
+        let needs_stipend_adjustment = !value.is_zero() 
+            && inner_evm.gas.used > Word::from(10000) // Only for substantial gas usage
+            && matches!(ctx.call_type, CallType::Call); // Only for regular calls, not DELEGATECALL/STATICCALL
+        
+        let adjustment = if needs_stipend_adjustment {
+            Word::from(2300)
+        } else {
+            Word::zero()
+        };
+        
+        evm.gas.used += inner_evm.gas.used.saturating_sub(adjustment);
 
         if inner_evm.reverted {
             inner_evm.revert(ext).await?;

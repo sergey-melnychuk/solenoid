@@ -8,10 +8,12 @@ fn main() {
         .first()
         .cloned()
         .unwrap_or_else(|| "trace.log".to_string());
+    println!("NOTE: trace path: {trace_path}");
     let block_path = args
         .get(1)
         .cloned()
         .unwrap_or_else(|| "block.log".to_string());
+    println!("NOTE: block path: {block_path}");
 
     let trace = std::fs::read_to_string(&trace_path).expect("traces");
     let trace = trace.split('\n').collect::<Vec<_>>();

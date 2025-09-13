@@ -64,6 +64,7 @@ pub fn opcode_name(opcode: u8) -> &'static str {
         0x59 => "MSIZE",
         0x5a => "GAS",
         0x5b => "JUMPDEST",
+        0x5e => "MCOPY",
         0x5f => "PUSH0",
         0x60 => "PUSH1",
         0x61 => "PUSH2",
