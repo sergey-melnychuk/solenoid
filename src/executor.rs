@@ -87,7 +87,7 @@ pub struct Evm {
     pub logs: Vec<Log>,
     pub state: Vec<StateTouch>,
     pub account: Vec<AccountTouch>,
-    
+
     // EIP-2929: Track addresses accessed during transaction for warm/cold gas calculation
     pub accessed_addresses: std::collections::HashSet<Address>,
 }
@@ -109,14 +109,14 @@ impl Evm {
     pub(crate) fn address_access_cost(&mut self, address: &Address, _ext: &Ext) -> Word {
         // EIP-2929: Check if address has been accessed during this transaction
         let is_warm = self.accessed_addresses.contains(address);
-        
+
         // Mark address as accessed for future operations
         self.accessed_addresses.insert(*address);
-        
+
         if is_warm {
-            Word::from(100)   // warm access
+            Word::from(100) // warm access
         } else {
-            Word::from(2600)  // cold access
+            Word::from(2600) // cold access
         }
     }
 
@@ -404,7 +404,7 @@ impl<T: EventTracer> Executor<T> {
             evm.accessed_addresses.insert(call.from);
             evm.accessed_addresses.insert(call.to);
         }
-        
+
         self.tracer.push(Event {
             data: EventData::Call {
                 r#type: ctx.call_type,
