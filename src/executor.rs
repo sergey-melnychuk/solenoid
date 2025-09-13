@@ -1589,6 +1589,7 @@ impl<T: EventTracer> Executor<T> {
             return Ok(());
         }
 
+        let ret_size = ret_size.max(ret.len());
         if ret.len() < ret_size {
             if ret_size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(ret_size).into());

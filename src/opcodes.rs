@@ -125,9 +125,9 @@ static OPCODES: Lazy<[Opcode; 256]> = Lazy::new(|| {
         table[0x90 + i] = Opcode::new(0x90 + i as u8, "SWAP_", i as u8 + 1);
     }
 
-    // LOG{1..4}
-    for i in 0..5 {
-        table[0xa0 + i] = Opcode::new(0xa0 + i as u8, "LOG_", i as u8 + 1);
+    // LOG{0..4}
+    for i in 0..6 {
+        table[0xa0 + i] = Opcode::new(0xa0 + i as u8, "LOG_", i as u8);
     }
 
     // System operations
