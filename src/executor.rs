@@ -87,6 +87,9 @@ pub struct Evm {
     pub logs: Vec<Log>,
     pub state: Vec<StateTouch>,
     pub account: Vec<AccountTouch>,
+    
+    // EIP-2929: Track addresses accessed during transaction for warm/cold gas calculation
+    pub accessed_addresses: std::collections::HashSet<Address>,
 }
 
 impl Evm {
@@ -103,12 +106,17 @@ impl Evm {
         exp_cost
     }
 
-    pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &Ext) -> Word {
-        let is_warm = ext.state.contains_key(address);
+    pub(crate) fn address_access_cost(&mut self, address: &Address, _ext: &Ext) -> Word {
+        // EIP-2929: Check if address has been accessed during this transaction
+        let is_warm = self.accessed_addresses.contains(address);
+        
+        // Mark address as accessed for future operations
+        self.accessed_addresses.insert(*address);
+        
         if is_warm {
-            Word::from(100)
+            Word::from(100)   // warm access
         } else {
-            Word::from(2600)
+            Word::from(2600)  // cold access
         }
     }
 
@@ -391,6 +399,12 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
         ctx: Context,
     ) -> (T, Vec<u8>) {
+        // EIP-2929: Pre-warm sender and target addresses at transaction start
+        if ctx.depth == 1 {
+            evm.accessed_addresses.insert(call.from);
+            evm.accessed_addresses.insert(call.to);
+        }
+        
         self.tracer.push(Event {
             data: EventData::Call {
                 r#type: ctx.call_type,
@@ -799,14 +813,10 @@ impl<T: EventTracer> Executor<T> {
             0x31 => {
                 // BALANCE
                 let addr = (&evm.pop()?).into();
-                let is_warm = ext.state.contains_key(&addr);
+                // EIP-2929: Use proper address access tracking
+                gas = evm.address_access_cost(&addr, ext);
                 let value = ext.balance(&addr).await?;
                 evm.push(value)?;
-                gas = if is_warm {
-                    100.into() // warm
-                } else {
-                    2600.into() // cold
-                };
             }
             0x32 => {
                 // ORIGIN
@@ -1338,12 +1348,16 @@ impl<T: EventTracer> Executor<T> {
                         .stack
                         .iter()
                         .rev()
-                        .nth(3)
+                        .nth(2)
                         .ok_or(ExecutorError::StackUnderflow)?;
                     if !value.is_zero() {
                         return Err(ExecutorError::StaticCallViolation(opcode).into());
                     }
                 }
+                let ctx = Context {
+                    call_type: CallType::Call,
+                    ..ctx
+                };
                 self.call(instruction, this, call, &mut gas, evm, ext, ctx)
                     .await
                     .with_context(|| "opcode: CALL")?;
@@ -1476,11 +1490,7 @@ impl<T: EventTracer> Executor<T> {
         let ret_size = evm.pop()?.as_usize();
 
         // Calculate address access cost (EIP-2929)
-        let access_cost = if ext.state.contains_key(&address) {
-            Word::from(100) // warm access
-        } else {
-            Word::from(2600) // cold access
-        };
+        let access_cost = evm.address_access_cost(&address, ext);
 
         let (bytecode, codehash) = evm.code(ext, &address).await?;
         let code = Decoder::decode(bytecode);
