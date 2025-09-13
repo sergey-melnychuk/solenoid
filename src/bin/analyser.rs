@@ -31,6 +31,10 @@ fn main() {
 
     let mut matched = 0;
     for (t, b) in trace.into_iter().zip(block.into_iter()) {
+        if t.is_empty() ^ b.is_empty() {
+            break;
+        }
+        // TODO: match json Values, drop particular fields?
         if t == b {
             matched += 1;
             continue;
@@ -38,10 +42,6 @@ fn main() {
         if matched > 0 {
             eprintln!("WARN: skipping {matched} matching lines");
             matched = 0;
-        }
-
-        if t.is_empty() || b.is_empty() {
-            break;
         }
 
         let t: OpcodeTrace = serde_json::from_str(t).expect("trace:json");
@@ -54,7 +54,6 @@ fn main() {
         if r.is_err() {
             break;
         }
-
         // TODO: wait for input to continue, like interactive analysis?
     }
 }
