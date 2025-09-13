@@ -1534,7 +1534,11 @@ impl<T: EventTracer> Executor<T> {
         let inner_call = Call {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
             value,
-            from: this,
+            from: if matches!(ctx.call_type, CallType::Delegate | CallType::Callcode) {
+                call.from
+            } else {
+                this
+            },
             to: if matches!(ctx.call_type, CallType::Delegate | CallType::Callcode) {
                 this
             } else {
