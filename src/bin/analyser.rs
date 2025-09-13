@@ -45,9 +45,13 @@ fn main() {
         let t: OpcodeTrace = serde_json::from_str(t).expect("trace:json");
         let b: OpcodeTrace = serde_json::from_str(b).expect("block:json");
 
-        let _ = std::panic::catch_unwind(|| {
+        let r = std::panic::catch_unwind(|| {
             pretty_assertions::assert_eq!(b, t);
         });
+
+        if r.is_err() {
+            break;
+        }
 
         // TODO: wait for input to continue, like interactive analysis?
     }

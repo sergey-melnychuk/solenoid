@@ -89,7 +89,7 @@ pub enum EventData {
         gas_used: Word,
         gas_left: Word,
         stack: Vec<Word>,
-        memory: Vec<String>, // NOTE: this is temporary - just for readability
+        memory: Vec<Word>,
     },
 
     Hash {
@@ -211,7 +211,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 gas_cost: gas_cost.as_u64(),
                 gas_refunded: 0,
                 stack: stack.into_iter().map(Into::into).collect(),
-                memory,
+                memory: memory.into_iter().map(Into::into).collect(),
                 depth,
             }),
             _ => eyre::bail!("Not an opcode"),

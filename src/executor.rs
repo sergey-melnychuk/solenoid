@@ -435,7 +435,7 @@ impl<T: EventTracer> Executor<T> {
                             gas_used: evm.gas.used.add(cost),
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
-                            memory: evm.memory.chunks(32).map(hex::encode).collect(),
+                            memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                         },
                     });
                 }
@@ -1477,7 +1477,7 @@ impl<T: EventTracer> Executor<T> {
 
         // Calculate address access cost (EIP-2929)
         let access_cost = if ext.state.contains_key(&address) {
-            Word::from(100)  // warm access
+            Word::from(100) // warm access
         } else {
             Word::from(2600) // cold access
         };
@@ -1563,7 +1563,7 @@ impl<T: EventTracer> Executor<T> {
                 gas_used: evm.gas.used + total_gas_cost,
                 gas_left: evm.gas.remaining().saturating_sub(total_gas_cost),
                 stack: evm.stack.clone(),
-                memory: evm.memory.chunks(32).map(hex::encode).collect(),
+                memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);

@@ -164,7 +164,7 @@ pub struct OpcodeTrace {
     pub gas_cost: u64,
     pub gas_refunded: u64,
     pub stack: Vec<U256>,
-    pub memory: Vec<String>,
+    pub memory: Vec<U256>,
     pub depth: usize,
 }
 
@@ -275,9 +275,9 @@ where
             gas_cost,
             gas_refunded: refunded as u64,
             stack,
-            memory: memory.chunks(32)
-                .map(|chunk| hex::encode(chunk))
-                .collect(),
+                memory: memory.chunks(32)
+                    .map(|chunk| U256::from_be_slice(chunk))
+                    .collect(),
             depth: self.aux.depth,
         });
     }
