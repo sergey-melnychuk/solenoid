@@ -1517,8 +1517,9 @@ impl<T: EventTracer> Executor<T> {
         let all_but_one_64th = remaining_gas.saturating_sub(remaining_gas / Word::from(64));
         let gas_to_forward = call_gas.min(all_but_one_64th);
 
-        // Total gas cost = base cost + gas actually forwarded
-        *gas = base_gas_cost + gas_to_forward;
+        // For EVM accounting: only charge the outer EVM for base cost
+        // (forwarded gas was already "spent" by allocating it to inner call)
+        *gas = base_gas_cost;
 
         let inner_call = Call {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
@@ -1548,8 +1549,8 @@ impl<T: EventTracer> Executor<T> {
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, mut ret) = Box::pin(future).await;
 
-        // The gas cost is what we calculated above (base_gas_cost + gas_to_forward)
-        let total_gas_cost = *gas;
+        // For tracing: report the total cost including forwarded gas (to match REVM)
+        let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward;
 
         self.tracer.push(Event {
             depth: ctx.depth,
@@ -1559,16 +1560,17 @@ impl<T: EventTracer> Executor<T> {
                 op: instruction.opcode.code,
                 name: instruction.opcode.name(),
                 data: instruction.argument.clone().map(Into::into),
-                gas_cost: total_gas_cost,
-                gas_used: evm.gas.used + total_gas_cost,
-                gas_left: evm.gas.remaining().saturating_sub(total_gas_cost),
+                gas_cost: total_gas_cost_for_tracing,
+                gas_used: evm.gas.used + total_gas_cost_for_tracing,
+                gas_left: evm.gas.remaining().saturating_sub(base_gas_cost),
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);
 
-        // Don't double-count gas - we already calculated the correct total cost above
+        evm.gas.used += inner_evm.gas.used;
+
         if inner_evm.reverted {
             inner_evm.revert(ext).await?;
             evm.push(Word::zero())?;
@@ -1677,7 +1679,9 @@ impl<T: EventTracer> Executor<T> {
         let (tracer, code) = Box::pin(future).await;
         self.tracer.join(tracer, inner_evm.reverted);
 
-        *gas += inner_evm.gas.used;
+        // Don't add inner_evm.gas.used to outer call cost!
+        // The outer EVM should only pay the base cost for making the call.
+        // Inner call gas was already "spent" when we allocated it to inner EVM.
         if inner_evm.reverted {
             inner_evm.revert(ext).await?;
             evm.push(Word::zero())?;
