@@ -162,7 +162,7 @@ pub struct OpcodeTrace {
     pub gas_used: u64,
     // pub gas_left: u64, // NOTE: temporary disabled
     pub gas_cost: u64,
-    pub gas_refunded: u64,
+    pub gas_back: u64,
     pub stack: Vec<U256>,
     pub memory: Vec<U256>,
     pub depth: usize,
@@ -189,7 +189,7 @@ pub struct Aux {
     pc: u64,
     opcode: u8,
     gas: u64,
-    refunded: i64,
+    refund: i64,
     depth: usize,
 }
 
@@ -244,36 +244,27 @@ where
         self.aux.pc = interp.bytecode.pc() as u64;
         self.aux.opcode = interp.bytecode.opcode();
         self.aux.gas = interp.gas.remaining();
-        self.aux.refunded = interp.gas.refunded();
+        self.aux.refund = interp.gas.refunded();
     }
 
     fn step_end(&mut self, interp: &mut Interpreter<INTR>, _context: &mut CTX) {
         let stack = interp.stack.data().to_vec();
         let memory = interp.memory.slice(0..interp.memory.size()).to_vec();
 
-        let gas_used = interp.gas.used();
-        let gas_left = interp.gas.remaining();
+        let refund = interp.gas.refunded() - self.aux.refund;
+        self.aux.refund = interp.gas.refunded();
 
-        let refunded = interp.gas.refunded() - self.aux.refunded;
-        let refunded = if refunded >= 0 {
-            refunded
-        } else {
-            // panic!("WTF? negative refunded gas?");
-            refunded
-        };
-        self.aux.refunded = interp.gas.refunded();
-
-        let gas_cost = self.aux.gas - gas_left + refunded as u64;
-        self.aux.gas = gas_left;
+        let gas_cost = self.aux.gas - interp.gas.remaining();
+        self.aux.gas = interp.gas.remaining();
 
         self.traces.push(OpcodeTrace {
             pc: self.aux.pc,
             op: self.aux.opcode,
             name: aux::opcode_name(self.aux.opcode).to_string(),
-            gas_used,
-            // gas_left,
+            gas_used: interp.gas.used(),
+            // gas_left: interp.gas.remaining(),
             gas_cost,
-            gas_refunded: refunded as u64,
+            gas_back: refund as u64,
             stack,
                 memory: memory.chunks(32)
                     .map(|chunk| U256::from_be_slice(chunk))
@@ -287,6 +278,7 @@ where
         _context: &mut CTX,
         _inputs: &mut CallInputs,
     ) -> Option<CallOutcome> {
+        self.aux.refund = 0;
         self.aux.depth += 1;
         None
     }

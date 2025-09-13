@@ -1,6 +1,6 @@
 ```
-trace path: trace.log
-block path: block.log
+NOTE: trace path: trace.log
+NOTE: block path: block.log
 WARN: len mismatch: block=8898 trace=8698
 WARN: skipping 2592 matching lines
 
@@ -12,12 +12,10 @@ Diff < left / right > :
      pc: 2331,
      op: 85,
      name: "SSTORE",
-<    gas_used: 991,
-<    gas_cost: 100,
-<    gas_refunded: 0,
+<    gas_used: 100,
 >    gas_used: 0,
->    gas_cost: 20000,
->    gas_refunded: 19900,
+     gas_cost: 100,
+     gas_back: 19900,
      stack: [
          2835717307,
          944,

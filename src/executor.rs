@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use eyre::Context as _;
 use i256::I256;
 use thiserror::Error;
@@ -89,7 +87,7 @@ pub struct Evm {
     pub account: Vec<AccountTouch>,
 
     // EIP-2929: Track addresses accessed during transaction for warm/cold gas calculation
-    pub accessed_addresses: std::collections::HashSet<Address>,
+    pub accessed: std::collections::HashSet<Address>,    
 }
 
 impl Evm {
@@ -108,10 +106,10 @@ impl Evm {
 
     pub(crate) fn address_access_cost(&mut self, address: &Address, _ext: &Ext) -> Word {
         // EIP-2929: Check if address has been accessed during this transaction
-        let is_warm = self.accessed_addresses.contains(address);
+        let is_warm = self.accessed.contains(address);
 
         // Mark address as accessed for future operations
-        self.accessed_addresses.insert(*address);
+        self.accessed.insert(*address);
 
         if is_warm {
             Word::from(100) // warm access
@@ -204,6 +202,7 @@ impl Evm {
 pub struct Gas {
     pub limit: Word,
     pub used: Word,
+    pub refund: Word,
 }
 
 impl Gas {
@@ -211,22 +210,28 @@ impl Gas {
         Self {
             limit,
             used: Word::zero(),
+            refund: Word::zero(),
         }
     }
 
     pub fn remaining(&self) -> Word {
-        self.limit.saturating_sub(self.used)
+        self.limit.saturating_sub(self.used())
+    }
+
+    pub fn used(&self) -> Word {
+        self.used.saturating_sub(self.refund)
     }
 
     pub fn fork(&self, limit: Word) -> Self {
         Self {
             limit,
             used: Word::zero(),
+            refund: Word::zero(),
         }
     }
 
-    pub fn add(&mut self, gas: Word) {
-        self.used -= gas;
+    pub fn refund(&mut self, gas: Word) {
+        self.refund += gas;
     }
 
     pub fn sub(&mut self, gas: Word) -> Result<(), ExecutorError> {
@@ -401,8 +406,8 @@ impl<T: EventTracer> Executor<T> {
     ) -> (T, Vec<u8>) {
         // EIP-2929: Pre-warm sender and target addresses at transaction start
         if ctx.depth == 1 {
-            evm.accessed_addresses.insert(call.from);
-            evm.accessed_addresses.insert(call.to);
+            evm.accessed.insert(call.from);
+            evm.accessed.insert(call.to);
         }
 
         self.tracer.push(Event {
@@ -428,7 +433,6 @@ impl<T: EventTracer> Executor<T> {
         while !evm.stopped && evm.pc < code.instructions.len() {
             let pc = evm.pc;
             let instruction = &code.instructions[pc];
-
             if let Ok(cost) = self
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
                 .await
@@ -437,6 +441,7 @@ impl<T: EventTracer> Executor<T> {
                 })
             {
                 if !instruction.is_call() {
+                    let gas_cost = cost.saturating_sub(evm.gas.refund);
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: false,
@@ -445,8 +450,9 @@ impl<T: EventTracer> Executor<T> {
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
-                            gas_cost: cost,
-                            gas_used: evm.gas.used.add(cost),
+                            gas_cost,
+                            gas_used: evm.gas.used() + gas_cost,
+                            gas_back: evm.gas.refund,
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
@@ -1136,20 +1142,19 @@ impl<T: EventTracer> Executor<T> {
                 let new = evm.pop()?;
                 evm.put(ext, &this, key, new).await?;
 
-                // https://www.evm.codes/?fork=cancun#55
+                // EIP-2200: Calculate gas cost and refunds - always charge full cost upfront
                 let mut gas_cost = if val == new {
-                    100
-                } else if val == original {
-                    if original.is_zero() { 20_000 } else { 2900 }
+                    100 // No change
+                } else if original.is_zero() {
+                    20_000 // Setting a zero slot to non-zero (or changing from zero)
                 } else {
-                    100
+                    2900 // Changing an existing non-zero slot
                 };
                 if !is_warm {
                     gas_cost += 2100;
                 }
-                gas = gas_cost.into();
 
-                // https://www.evm.codes/?fork=cancun#55
+                // Calculate gas refunds according to EIP-2200
                 let mut gas_refund = Word::zero();
                 if val != new {
                     if val == original {
@@ -1173,6 +1178,9 @@ impl<T: EventTracer> Executor<T> {
                         }
                     }
                 }
+
+                evm.gas.refund(gas_refund);
+                gas = gas_cost.into();
                 self.tracer.push(Event {
                     data: EventData::State(StateEvent::Put {
                         address: this,
@@ -1573,27 +1581,30 @@ impl<T: EventTracer> Executor<T> {
                 name: instruction.opcode.name(),
                 data: instruction.argument.clone().map(Into::into),
                 gas_cost: total_gas_cost_for_tracing,
-                gas_used: evm.gas.used + total_gas_cost_for_tracing,
+                gas_used: evm.gas.used() + total_gas_cost_for_tracing,
                 gas_left: evm.gas.remaining().saturating_sub(base_gas_cost),
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                gas_back: Word::zero(),
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);
-
-        // Account for inner call gas usage, but avoid double-counting in specific cases
-        // Only adjust for calls with actual value transfer that consumed significant gas
-        let needs_stipend_adjustment = !value.is_zero() 
-            && inner_evm.gas.used > Word::from(10000) // Only for substantial gas usage
-            && matches!(ctx.call_type, CallType::Call); // Only for regular calls, not DELEGATECALL/STATICCALL
         
-        let adjustment = if needs_stipend_adjustment {
+        // Normal case: add actual gas used by inner call, minus refunds
+        let needs_stipend_adjustment = !value.is_zero() 
+            && inner_evm.gas.used > Word::from(10_000) 
+            && matches!(ctx.call_type, CallType::Call);
+        
+        let stipend_adjustment = if needs_stipend_adjustment {
             Word::from(2300)
         } else {
             Word::zero()
         };
         
-        evm.gas.used += inner_evm.gas.used.saturating_sub(adjustment);
+        let inner_gas_to_add = inner_evm.gas.used
+            .saturating_sub(stipend_adjustment);
+        
+        evm.gas.used += inner_gas_to_add;
 
         if inner_evm.reverted {
             inner_evm.revert(ext).await?;

@@ -88,6 +88,8 @@ pub enum EventData {
         gas_cost: Word,
         gas_used: Word,
         gas_left: Word,
+        #[serde(skip_serializing_if = "Word::is_zero")]
+        gas_back: Word,
         stack: Vec<Word>,
         memory: Vec<Word>,
     },
@@ -202,6 +204,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 gas_left: _,
                 stack,
                 memory,
+                gas_back,
             } => Ok(OpcodeTrace {
                 pc: pc as u64,
                 op,
@@ -209,7 +212,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 gas_used: gas_used.as_u64(),
                 // gas_left: gas_left.as_u64(),
                 gas_cost: gas_cost.as_u64(),
-                gas_refunded: 0,
+                gas_back: gas_back.as_u64(),
                 stack: stack.into_iter().map(Into::into).collect(),
                 memory: memory.into_iter().map(Into::into).collect(),
                 depth,
