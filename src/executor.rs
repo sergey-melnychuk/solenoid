@@ -455,7 +455,12 @@ impl<T: EventTracer> Executor<T> {
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
                             gas_cost,
-                            gas_used: (evm.gas.used + gas_cost).saturating_sub(evm.gas.refund),
+                            // gas_used: (evm.gas.used + gas_cost), // .saturating_sub(evm.gas.refund)
+                            gas_used: if !refund.is_zero() {
+                                evm.gas.used + gas_cost
+                            } else {
+                                (evm.gas.used + gas_cost).saturating_sub(evm.gas.refund)
+                            },
                             gas_back: refund,
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
@@ -966,7 +971,7 @@ impl<T: EventTracer> Executor<T> {
                     if offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + size).into());
                     }
-                    let padding = 32 - (dest_offset + size) % 32;
+                    let padding = 32 - (offset + size) % 32;
                     self.ret.resize(offset + size + padding % 32, 0);
                 }
                 evm.memory[dest_offset..dest_offset + size]
@@ -1575,6 +1580,11 @@ impl<T: EventTracer> Executor<T> {
 
         // For tracing: report the total cost including forwarded gas (to match REVM)
         let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward;
+
+        // TODO: need to propage refund up the stack
+
+        // evm.gas.refund += inner_evm.gas.refund;
+        // evm.last_gas_refund = evm.gas.refund;
 
         self.tracer.push(Event {
             depth: ctx.depth,

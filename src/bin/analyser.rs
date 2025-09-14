@@ -1,4 +1,5 @@
 use evm_tracer::OpcodeTrace;
+use serde_json::Value;
 
 // cargo run --release --bin analyser
 
@@ -14,6 +15,13 @@ fn main() {
         .cloned()
         .unwrap_or_else(|| "block.log".to_string());
     println!("NOTE: block path: {block_path}");
+    let overrides = args.get(2)
+        .cloned()
+        .unwrap_or_else(|| "{}".to_string());
+    let overrides: Value = serde_json::from_str(&overrides).expect("overrides:json");
+    let overrides = overrides.as_object().cloned().unwrap_or_default()
+        .into_iter()
+        .collect::<Vec<_>>();
 
     let trace = std::fs::read_to_string(&trace_path).expect("traces");
     let trace = trace.split('\n').collect::<Vec<_>>();
@@ -29,36 +37,40 @@ fn main() {
         );
     }
 
-    let mut matched = 0;
-    for (t, b) in trace.into_iter().zip(block.into_iter()) {
-        if t.is_empty() ^ b.is_empty() {
+    let mut line = 1;
+    let pairs = trace.into_iter().zip(block.into_iter());
+    for (trace, block) in pairs {
+        if trace.is_empty() ^ block.is_empty() {
             break;
         }
-        if t.starts_with('#') && b.starts_with('#') {
+        if trace.starts_with('#') && block.starts_with('#') {
             continue;
         }
 
-        // TODO: match json Values, drop particular fields?
-        if t == b {
-            matched += 1;
-            continue;
-        }
-        if matched > 0 {
-            eprintln!("WARN: skipping {matched} matching lines");
-            matched = 0;
-        }
+        let trace: OpcodeTrace = parse(trace, &overrides);
 
-        let t: OpcodeTrace = serde_json::from_str(t).expect("trace:json");
-        let b: OpcodeTrace = serde_json::from_str(b).expect("block:json");
+        let block: OpcodeTrace = parse(block, &overrides);
 
         let r = std::panic::catch_unwind(|| {
-            pretty_assertions::assert_eq!(b, t);
+            pretty_assertions::assert_eq!(block, trace);
         });
 
         if r.is_err() {
+            eprintln!("LINE: {line}");
             break;
         }
 
+        line += 1;
         // TODO: wait for input to continue, like interactive analysis?
     }
+}
+
+fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
+    let mut json: Value = serde_json::from_str(s).expect("opcode:json");
+    for (name, value) in overrides {
+        if let Some(field) = json.get_mut(&name) {
+            *field = value.clone();
+        }
+    }
+    serde_json::from_value(json).expect("opcode:parse")
 }

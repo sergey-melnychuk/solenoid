@@ -251,7 +251,7 @@ where
         let stack = interp.stack.data().to_vec();
         let memory = interp.memory.slice(0..interp.memory.size()).to_vec();
 
-        let refund = interp.gas.refunded() - self.aux.refund;
+        let refund = (interp.gas.refunded() - self.aux.refund).max(0); // TODO: negative refunds?
         self.aux.refund = interp.gas.refunded();
 
         let gas_cost = self.aux.gas - interp.gas.remaining();
@@ -261,7 +261,7 @@ where
             pc: self.aux.pc,
             op: self.aux.opcode,
             name: aux::opcode_name(self.aux.opcode).to_string(),
-            gas_used: interp.gas.used(),
+            gas_used: interp.gas.spent(),
             // gas_left: interp.gas.remaining(),
             gas_cost,
             gas_back: refund as u64,
