@@ -1,9 +1,13 @@
+MEMORY INCONSISTENCY: likely different return data?
+
+`cargo run --release --bin analyser -- trace.log block.log '{}'` :
+
 ```
 NOTE: trace path: trace.log
 NOTE: block path: block.log
 WARN: len mismatch: block=8898 trace=8698
 
-thread 'main' panicked at src/bin/analyser.rs:55:13:
+thread 'main' panicked at src/bin/analyser.rs:56:13:
 assertion failed: `(left == right)`
 
 Diff < left / right > :
@@ -11,8 +15,7 @@ Diff < left / right > :
      pc: 9877,
      op: 145,
      name: "SWAP2",
-<    gas_used: 77886,   ## BLOCK: 19900 extra (exact refund amount)
->    gas_used: 57986,
+     gas_used: 57986,
      gas_cost: 3,
      gas_back: 0,
      stack: [
@@ -104,16 +107,113 @@ Diff < left / right > :
          84582502685070814625811617955567685469023907245394710729341255370241452071093,
          80511687047821417130451700513853310929226786212828204683685352734017722952768,
 <        0,
-<        807177937245784687337051634564162358961550977599738509540728416042584690435,   ## MEMORY difference!
->        298635888124359522038516331969889366211489344612905077187126310669954229501,   ##
+<        807177937245784687337051634564162358961550977599738509540728416042584690435,
+>        298635888124359522038516331969889366211489344612905077187126310669954229501,
 >        52370842675738152961896005896245496324870841024017802183361683794566400233219,
          105852996476681239859947738906205525500858744965338788130149554264238400208896,
          0,
      ],
      depth: 2,
+     extra: Extra {
+<        value: Object {
+<            "evm.gas.used": Number(57983),
+<            "evm.gas.refund": Number(0),
+<        },
+>        value: Object {},
+     },
  }
 
 
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 LINE: 2692
+```
+
+BUT THEN - GAS INCONSISTENCY!
+
+`cargo run --release --bin analyser -- trace.log block.log '{"memory":[]}'` :
+
+```
+NOTE: trace path: trace.log
+NOTE: block path: block.log
+WARN: len mismatch: block=8898 trace=8698
+
+thread 'main' panicked at src/bin/analyser.rs:56:13:
+assertion failed: `(left == right)`
+
+Diff < left / right > :
+ OpcodeTrace {
+     pc: 14061,
+     op: 145,
+     name: "SWAP2",
+<    gas_used: 67384,
+>    gas_used: 67378,
+     gas_cost: 3,
+     gas_back: 0,
+     stack: [
+         163676867,
+         267,
+         128,
+         452,
+         2,
+         697323163401596485410334513241460920685086001293,
+         0,
+         0,
+         416,
+         3500000000000000,
+         1587,
+         128,
+         452,
+         2,
+         697323163401596485410334513241460920685086001293,
+         1097077688018008265106216665536940668749033598146,
+         512,
+         7606,
+         128,
+         512,
+         697323163401596485410334513241460920685086001293,
+         9462,
+         128,
+         512,
+         697323163401596485410334513241460920685086001293,
+         0,
+         0,
+         0,
+         15830,
+         346500000000000000,
+         7605926109286743903427827315419,
+         512,
+         697323163401596485410334513241460920685086001293,
+         0,
+         18581,
+         512,
+         1473,
+         1761,
+         0,
+         1097077688018008265106216665536940668749033598146,
+         87449498630317259039493649861936745254872503236,
+         87449498630317259039493649861936745254872503236,
+         110740880135300409037005663291962183505703559521832940373939358529507531732402,
+         0,
+         0,
+         0,
+         0,
+         0,
+         1,
+         2662,
+         688711508633122346260471332793165302056487531954,
+     ],
+     memory: [],
+     depth: 2,
+     extra: Extra {
+<        value: Object {
+<            "evm.gas.used": Number(67381),
+<            "evm.gas.refund": Number(0),
+<        },
+>        value: Object {},
+     },
+ }
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+LINE: 4013
 ```
