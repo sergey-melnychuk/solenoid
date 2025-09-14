@@ -88,6 +88,7 @@ pub struct Evm {
 
     // EIP-2929: Track addresses accessed during transaction for warm/cold gas calculation
     pub accessed: std::collections::HashSet<Address>,
+    pub last_gas_refund: Word,
 }
 
 impl Evm {
@@ -441,7 +442,10 @@ impl<T: EventTracer> Executor<T> {
                 })
             {
                 if !instruction.is_call() {
-                    let gas_cost = cost.saturating_sub(evm.gas.refund);
+                    let refund = evm.gas.refund - evm.last_gas_refund;
+                    evm.last_gas_refund = evm.gas.refund;
+
+                    let gas_cost = cost.saturating_sub(refund);
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: false,
@@ -451,8 +455,8 @@ impl<T: EventTracer> Executor<T> {
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
                             gas_cost,
-                            gas_used: evm.gas.used() + gas_cost,
-                            gas_back: evm.gas.refund,
+                            gas_used: (evm.gas.used + gas_cost).saturating_sub(evm.gas.refund),
+                            gas_back: refund,
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
