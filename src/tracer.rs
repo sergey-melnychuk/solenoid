@@ -1,5 +1,6 @@
 use evm_tracer::OpcodeTrace;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::common::{Hex, address::Address, word::Word};
 
@@ -92,6 +93,7 @@ pub enum EventData {
         gas_back: Word,
         stack: Vec<Word>,
         memory: Vec<Word>,
+        extra: Value,
     },
 
     Hash {
@@ -192,6 +194,8 @@ impl TryFrom<Event> for OpcodeTrace {
     type Error = eyre::Error;
 
     fn try_from(value: Event) -> Result<Self, Self::Error> {
+        use evm_tracer::Extra;
+
         let depth = value.depth;
         match value.data {
             EventData::OpCode {
@@ -205,6 +209,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 stack,
                 memory,
                 gas_back,
+                extra,
             } => Ok(OpcodeTrace {
                 pc: pc as u64,
                 op,
@@ -216,6 +221,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 stack: stack.into_iter().map(Into::into).collect(),
                 memory: memory.into_iter().map(Into::into).collect(),
                 depth,
+                extra: Extra::new(extra),
             }),
             _ => eyre::bail!("Not an opcode"),
         }

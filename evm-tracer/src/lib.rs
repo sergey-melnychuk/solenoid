@@ -26,6 +26,7 @@ pub use alloy_primitives;
 pub use alloy_provider;
 pub use alloy_rpc_types;
 pub use anyhow;
+use serde_json::Value;
 
 mod aux;
 
@@ -166,7 +167,30 @@ pub struct OpcodeTrace {
     pub stack: Vec<U256>,
     pub memory: Vec<U256>,
     pub depth: usize,
+
+    #[serde(flatten)]
+    pub extra: Extra,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Extra {
+    #[serde(flatten)]
+    pub value: serde_json::Value,
+}
+
+impl Extra {
+    pub fn new(value: Value) -> Self {
+        Self { value }
+    }
+}
+
+impl PartialEq for Extra {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for Extra {}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TxTrace {
@@ -270,6 +294,7 @@ where
                     .map(|chunk| U256::from_be_slice(chunk))
                     .collect(),
             depth: self.aux.depth,
+            extra: Extra::new(Value::Null),
         });
     }
 
@@ -278,7 +303,6 @@ where
         _context: &mut CTX,
         _inputs: &mut CallInputs,
     ) -> Option<CallOutcome> {
-        self.aux.refund = 0;
         self.aux.depth += 1;
         None
     }
