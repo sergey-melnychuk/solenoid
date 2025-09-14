@@ -15,11 +15,12 @@ fn main() {
         .cloned()
         .unwrap_or_else(|| "block.log".to_string());
     println!("NOTE: block path: {block_path}");
-    let overrides = args.get(2)
-        .cloned()
-        .unwrap_or_else(|| "{}".to_string());
+    let overrides = args.get(2).cloned().unwrap_or_else(|| "{}".to_string());
     let overrides: Value = serde_json::from_str(&overrides).expect("overrides:json");
-    let overrides = overrides.as_object().cloned().unwrap_or_default()
+    let overrides = overrides
+        .as_object()
+        .cloned()
+        .unwrap_or_default()
         .into_iter()
         .collect::<Vec<_>>();
 
@@ -38,7 +39,7 @@ fn main() {
     }
 
     let mut line = 1;
-    let pairs = trace.into_iter().zip(block.into_iter());
+    let pairs = trace.into_iter().zip(block);
     for (trace, block) in pairs {
         if trace.is_empty() ^ block.is_empty() {
             break;
@@ -68,7 +69,7 @@ fn main() {
 fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
     let mut json: Value = serde_json::from_str(s).expect("opcode:json");
     for (name, value) in overrides {
-        if let Some(field) = json.get_mut(&name) {
+        if let Some(field) = json.get_mut(name) {
             *field = value.clone();
         }
     }
