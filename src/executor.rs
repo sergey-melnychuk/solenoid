@@ -1,5 +1,6 @@
 use eyre::Context as _;
 use i256::I256;
+use serde_json::{Value, json};
 use thiserror::Error;
 
 use crate::{
@@ -88,7 +89,7 @@ pub struct Evm {
 
     // EIP-2929: Track addresses accessed during transaction for warm/cold gas calculation
     pub accessed: std::collections::HashSet<Address>,
-    pub last_gas_refund: Word,
+    pub refund: Word,
 }
 
 impl Evm {
@@ -442,10 +443,10 @@ impl<T: EventTracer> Executor<T> {
                 })
             {
                 if !instruction.is_call() {
-                    let refund = evm.gas.refund - evm.last_gas_refund;
-                    evm.last_gas_refund = evm.gas.refund;
+                    // HERE: TODO: remove this
+                    let refund = evm.gas.refund - evm.refund;
+                    evm.refund = evm.gas.refund;
 
-                    let gas_cost = cost.saturating_sub(refund);
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: false,
@@ -454,17 +455,17 @@ impl<T: EventTracer> Executor<T> {
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
-                            gas_cost,
-                            // gas_used: (evm.gas.used + gas_cost), // .saturating_sub(evm.gas.refund)
-                            gas_used: if !refund.is_zero() {
-                                evm.gas.used + gas_cost
-                            } else {
-                                (evm.gas.used + gas_cost).saturating_sub(evm.gas.refund)
-                            },
+                            gas_cost: cost,
+                            gas_used: (evm.gas.used + cost),
                             gas_back: refund,
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                            extra: json!({
+                                "gas_cost": cost.as_u64(),
+                                "evm.gas.used": evm.gas.used.as_u64(),
+                                "evm.gas.refund": evm.gas.refund.as_u64(),
+                            }),
                         },
                     });
                 }
@@ -1190,6 +1191,7 @@ impl<T: EventTracer> Executor<T> {
 
                 evm.gas.refund(gas_refund);
                 gas = gas_cost.into();
+                gas = gas.saturating_sub(gas_refund);
                 self.tracer.push(Event {
                     data: EventData::State(StateEvent::Put {
                         address: this,
@@ -1581,11 +1583,7 @@ impl<T: EventTracer> Executor<T> {
         // For tracing: report the total cost including forwarded gas (to match REVM)
         let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward;
 
-        // TODO: need to propage refund up the stack
-
-        // evm.gas.refund += inner_evm.gas.refund;
-        // evm.last_gas_refund = evm.gas.refund;
-
+        // HERE: TODO: remove this
         self.tracer.push(Event {
             depth: ctx.depth,
             reverted: false,
@@ -1600,6 +1598,7 @@ impl<T: EventTracer> Executor<T> {
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                 gas_back: Word::zero(),
+                extra: Value::Null,
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);
