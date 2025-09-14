@@ -34,6 +34,10 @@ fn main() {
         if t.is_empty() ^ b.is_empty() {
             break;
         }
+        if t.starts_with('#') && b.starts_with('#') {
+            continue;
+        }
+
         // TODO: match json Values, drop particular fields?
         if t == b {
             matched += 1;
@@ -54,6 +58,7 @@ fn main() {
         if r.is_err() {
             break;
         }
+
         // TODO: wait for input to continue, like interactive analysis?
     }
 }
