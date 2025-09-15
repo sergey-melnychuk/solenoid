@@ -462,7 +462,7 @@ impl<T: EventTracer> Executor<T> {
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             extra: json!({
-                                "gas_left": evm.gas.remaining().saturating_sub(cost),
+                                "gas_left": evm.gas.remaining().saturating_sub(cost).as_u64(),
                                 "gas_cost": cost.as_u64(),
                                 "evm.gas.used": evm.gas.used.as_u64(),
                                 "evm.gas.refund": evm.gas.refund.as_u64(),
@@ -1157,12 +1157,18 @@ impl<T: EventTracer> Executor<T> {
                 let new = evm.pop()?;
                 evm.put(ext, &this, key, new).await?;
 
-                // EIP-2200: Calculate gas cost and refunds - always charge full cost upfront
+                // EIP-2200: Calculate gas cost based on state transition
                 let mut gas_cost = if val == new {
+                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (no change)", instruction.offset, original, val, new);
                     100 // No change
-                } else if original.is_zero() {
-                    20_000 // Setting a zero slot to non-zero (or changing from zero)
+                } else if original.is_zero() && !new.is_zero() {
+                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 20000 gas (zero to non-zero)", instruction.offset, original, val, new);
+                    20_000 // Setting a zero slot to non-zero
+                } else if original.is_zero() && new.is_zero() {
+                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (zero to zero, via non-zero)", instruction.offset, original, val, new);
+                    100 // Zero to zero (via non-zero intermediate) - this is like no net change
                 } else {
+                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 2900 gas (non-zero change)", instruction.offset, original, val, new);
                     2900 // Changing an existing non-zero slot
                 };
                 if !is_warm {
@@ -1196,7 +1202,6 @@ impl<T: EventTracer> Executor<T> {
 
                 evm.gas.refund(gas_refund);
                 gas = gas_cost.into();
-                gas = gas.saturating_sub(gas_refund);
                 self.tracer.push(Event {
                     data: EventData::State(StateEvent::Put {
                         address: this,
