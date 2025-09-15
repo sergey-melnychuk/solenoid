@@ -462,6 +462,7 @@ impl<T: EventTracer> Executor<T> {
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             extra: json!({
+                                "gas_left": evm.gas.remaining().saturating_sub(cost),
                                 "gas_cost": cost.as_u64(),
                                 "evm.gas.used": evm.gas.used.as_u64(),
                                 "evm.gas.refund": evm.gas.refund.as_u64(),
@@ -968,15 +969,19 @@ impl<T: EventTracer> Executor<T> {
                     let padding = 32 - (dest_offset + size) % 32;
                     evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
-                if self.ret.len() < offset + size {
-                    if offset + size > ALLOCATION_SANITY_LIMIT {
-                        return Err(ExecutorError::InvalidAllocation(offset + size).into());
-                    }
-                    let padding = 32 - (offset + size) % 32;
-                    self.ret.resize(offset + size + padding % 32, 0);
+                // Copy only the available return data and zero-fill the rest
+                let available = self.ret.len().saturating_sub(offset);
+                let to_copy = size.min(available);
+
+                if to_copy > 0 {
+                    evm.memory[dest_offset..dest_offset + to_copy]
+                        .copy_from_slice(&self.ret[offset..offset + to_copy]);
                 }
-                evm.memory[dest_offset..dest_offset + size]
-                    .copy_from_slice(&self.ret[offset..offset + size]);
+                if to_copy < size {
+                    for b in &mut evm.memory[dest_offset + to_copy..dest_offset + size] {
+                        *b = 0;
+                    }
+                }
                 gas = (3 + 3 * size.div_ceil(32)).into();
                 gas += evm.memory_expansion_cost();
             }
@@ -1023,8 +1028,8 @@ impl<T: EventTracer> Executor<T> {
             }
             0x46 => {
                 // CHAINID
-                // todo!("CHAINID")
                 evm.push(Word::one())?; // TODO: remove hard-coded value
+                gas = 2.into();
             }
             0x47 => {
                 // SELFBALANCE
@@ -1578,7 +1583,7 @@ impl<T: EventTracer> Executor<T> {
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
-        let (tracer, mut ret) = Box::pin(future).await;
+        let (tracer, ret) = Box::pin(future).await;
 
         // For tracing: report the total cost including forwarded gas (to match REVM)
         let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward;
@@ -1624,14 +1629,8 @@ impl<T: EventTracer> Executor<T> {
             return Ok(());
         }
 
-        let ret_size = ret_size.max(ret.len());
-        if ret.len() < ret_size {
-            if ret_size > ALLOCATION_SANITY_LIMIT {
-                return Err(ExecutorError::InvalidAllocation(ret_size).into());
-            }
-            let padding = 32 - (ret_size) % 32;
-            ret.resize(ret_size + padding % 32, 0);
-        }
+        // Copy only up to the returned data length, zero-fill the remainder
+        let copy_len = ret.len().min(ret_size);
         let size = ret_offset + ret_size;
         if size > evm.memory.len() {
             if size > ALLOCATION_SANITY_LIMIT {
@@ -1641,9 +1640,18 @@ impl<T: EventTracer> Executor<T> {
             evm.memory.resize(size + padding % 32, 0);
             *gas += evm.memory_expansion_cost();
         }
-        if size > 0 {
-            evm.memory[ret_offset..ret_offset + ret_size].copy_from_slice(&ret);
+        if ret_size > 0 {
+            if copy_len > 0 {
+                evm.memory[ret_offset..ret_offset + copy_len]
+                    .copy_from_slice(&ret[..copy_len]);
+            }
+            if copy_len < ret_size {
+                for b in &mut evm.memory[ret_offset + copy_len..ret_offset + ret_size] {
+                    *b = 0;
+                }
+            }
         }
+        // Preserve the actual return data as-is for RETURNDATA opcodes
         self.ret = ret;
         for entry in inner_evm.account {
             evm.account.push(entry);

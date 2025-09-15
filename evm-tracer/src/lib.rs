@@ -26,7 +26,7 @@ pub use alloy_primitives;
 pub use alloy_provider;
 pub use alloy_rpc_types;
 pub use anyhow;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 mod aux;
 
@@ -168,7 +168,6 @@ pub struct OpcodeTrace {
     pub memory: Vec<U256>,
     pub depth: usize,
 
-    #[serde(flatten)]
     pub extra: Extra,
 }
 
@@ -294,7 +293,9 @@ where
                     .map(|chunk| U256::from_be_slice(chunk))
                     .collect(),
             depth: self.aux.depth,
-            extra: Extra::new(Value::Null),
+            extra: Extra::new(json!({
+                "gas_left": interp.gas.remaining()
+            })),
         });
     }
 
