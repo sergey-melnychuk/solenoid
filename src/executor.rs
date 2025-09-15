@@ -1,6 +1,6 @@
 use eyre::Context as _;
 use i256::I256;
-use serde_json::{Value, json};
+use serde_json::json;
 use thiserror::Error;
 
 use crate::{
@@ -217,7 +217,7 @@ impl Gas {
     }
 
     pub fn remaining(&self) -> Word {
-        self.limit.saturating_sub(self.used())
+        self.limit.saturating_sub(self.used)
     }
 
     pub fn used(&self) -> Word {
@@ -462,6 +462,7 @@ impl<T: EventTracer> Executor<T> {
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             extra: json!({
+                                "SRC": "not CALL",
                                 "gas_left": evm.gas.remaining().saturating_sub(cost).as_u64(),
                                 "gas_cost": cost.as_u64(),
                                 "evm.gas.used": evm.gas.used.as_u64(),
@@ -1608,7 +1609,13 @@ impl<T: EventTracer> Executor<T> {
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                 gas_back: Word::zero(),
-                extra: Value::Null,
+                extra: json!({
+                    "SRC": "CALL",
+                    "gas_left": evm.gas.remaining().saturating_sub(base_gas_cost).as_u64(),
+                    "gas_cost": total_gas_cost_for_tracing.as_u64(),
+                    "evm.gas.used": evm.gas.used.as_u64(),
+                    "evm.gas.refund": evm.gas.refund.as_u64(),
+                }),
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);

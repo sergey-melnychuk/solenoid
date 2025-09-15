@@ -10,11 +10,13 @@ assertion failed: `(left == right)`
 
 Diff < left / right > :
  OpcodeTrace {
-     pc: 8467,
-     op: 90,
-     name: "GAS",
-     gas_used: 10775,
-     gas_cost: 2,
+     pc: 8468,
+     op: 241,
+     name: "CALL",
+<    gas_used: 167519,
+<    gas_cost: 161544,
+>    gas_used: 172280,
+>    gas_cost: 161505,
      gas_back: 0,
      stack: [
          36441503,
@@ -38,14 +40,6 @@ Diff < left / right > :
          96,
          87449498630317259039493649861936745254872503236,
          360,
-         0,
-         292,
-         68,
-         292,
-         0,
-         87449498630317259039493649861936745254872503236,
-<        168866,
->        164066,
      ],
      memory: [
          0,
@@ -64,17 +58,14 @@ Diff < left / right > :
      ],
      depth: 3,
      extra: Extra {
-         value: Object {
-<            "gas_left": Number(168866),
-<            "gas_cost": Number(2),
-<            "evm.gas.used": Number(10773),
-<            "evm.gas.refund": Number(4800),
->            "gas_left": Number(164066),
-         },
+<        value: Object {},
+>        value: Object {
+>            "gas_left": Number(2561),
+>        },
      },
  }
 
 
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-LINE: 5163
+LINE: 5164
 ```
