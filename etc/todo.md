@@ -13,8 +13,8 @@ Diff < left / right > :
      pc: 8468,
      op: 241,
      name: "CALL",
-<    gas_used: 167519,
-<    gas_cost: 161544,
+<    gas_used: 167519, // missing 4761 | BUT 4761+39=4800,
+<    gas_cost: 161544, // extra 39     | seems like refund
 >    gas_used: 172280,
 >    gas_cost: 161505,
      gas_back: 0,
