@@ -5,8 +5,17 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::common::decode;
 
+type U256 = primitive_types::U256;
+
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct Word(primitive_types::U256);
+pub struct Word(U256);
+
+impl Word {
+    pub fn mul_modulo(&self, that: &Word, modulo: &Word) -> Word {
+        let res = self.0.full_mul(that.0) % modulo.0;
+        Word(U256::from_big_endian(&res.to_big_endian()[32..]))
+    } 
+}
 
 impl std::fmt::Debug for Word {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

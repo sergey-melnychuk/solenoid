@@ -644,7 +644,7 @@ impl<T: EventTracer> Executor<T> {
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let m = evm.pop()?;
-                let res = ((a % m) * (b % m)) % m;
+                let res = a.mul_modulo(&b, &m);
                 evm.push(res)?;
                 gas = 8.into();
             }
@@ -663,8 +663,8 @@ impl<T: EventTracer> Executor<T> {
             }
             0x0b => {
                 // SIGNEXTEND
-                let b = evm.pop()?;
                 let x = evm.pop()?.as_usize();
+                let b = evm.pop()?;
 
                 let bit = ((x + 1) << 3) - 1;
                 let neg = b.bit(bit);
