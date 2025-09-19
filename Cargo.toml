@@ -19,14 +19,14 @@ tiny-keccak = { version = "2.0.0", features = ["keccak"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 
-evm-tracer = { path = "./evm-tracer" }
 pretty_assertions = "1.4.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.46.1", features = ["macros", "rt-multi-thread"] }
+evm-tracer = { path = "./evm-tracer" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-## Only sync,macros,io-util,rt,time features are supported
+## "Only features sync,macros,io-util,rt,time are supported on wasm."
 tokio = { version = "1.46.1", features = ["macros", "rt"] }
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }

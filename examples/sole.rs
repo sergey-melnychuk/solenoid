@@ -7,7 +7,7 @@ use solenoid::{
     tracer::EventTracer,
 };
 
-// RUST_LOG=off cargo run --release --bin revm > revm.log
+// RUST_LOG=off cargo run --release --example revm > revm.log
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {

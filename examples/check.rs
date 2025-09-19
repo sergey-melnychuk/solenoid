@@ -1,7 +1,7 @@
 use evm_tracer::OpcodeTrace;
 use serde_json::Value;
 
-// cargo run --release --bin check
+// cargo run --release --example check
 
 fn main() {
     let args = std::env::args().skip(1).collect::<Vec<_>>();

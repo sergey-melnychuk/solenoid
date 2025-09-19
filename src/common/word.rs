@@ -1,6 +1,5 @@
 use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
 
-use evm_tracer::alloy_primitives;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::common::decode;
@@ -141,8 +140,9 @@ impl From<u128> for Word {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 #[cfg(feature = "testkit")]
-impl From<Word> for alloy_primitives::U256 {
+impl From<Word> for evm_tracer::alloy_primitives::U256 {
     fn from(value: Word) -> Self {
         Self::from_be_slice(&value.0.to_big_endian())
     }
