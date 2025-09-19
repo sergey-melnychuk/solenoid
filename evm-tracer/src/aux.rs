@@ -148,3 +148,18 @@ pub fn opcode_name(opcode: u8) -> &'static str {
         _ => "UNKNOWN",
     }
 }
+
+pub fn dump<T: serde::Serialize>(
+    path: &str,
+    entries: &[T],
+) -> eyre::Result<()> {
+    use std::io::Write as _;
+    let mut buffer = std::io::BufWriter::new(Vec::new());
+    for entry in entries {
+        let json = serde_json::to_vec(entry)?;
+        buffer.write(&json)?;
+        buffer.write(b"\n")?;
+    }
+    std::fs::write(path, buffer.into_inner()?)?;
+    Ok(())
+}

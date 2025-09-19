@@ -2,7 +2,7 @@ use alloy_consensus::Transaction as _;
 use alloy_eips::BlockId;
 use alloy_provider::Provider;
 use alloy_rpc_types::{Header, Transaction as Tx};
-use anyhow::Result;
+use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
 use revm::context::{ContextTr, JournalTr};
 use revm::inspector::Inspector;
@@ -25,10 +25,11 @@ pub use alloy_eips;
 pub use alloy_primitives;
 pub use alloy_provider;
 pub use alloy_rpc_types;
-pub use anyhow;
+pub use eyre;
+pub use revm;
 use serde_json::{json, Value};
 
-mod aux;
+pub mod aux;
 
 pub async fn trace_all(
     txs: impl Iterator<Item = Tx>,
@@ -289,9 +290,10 @@ where
             gas_cost,
             gas_back: refund as u64,
             stack,
-                memory: memory.chunks(32)
-                    .map(|chunk| U256::from_be_slice(chunk))
-                    .collect(),
+            memory: memory
+                .chunks(32)
+                .map(|chunk| U256::from_be_slice(chunk))
+                .collect(),
             depth: self.aux.depth,
             extra: Extra::new(json!({
                 "gas_left": interp.gas.remaining()
