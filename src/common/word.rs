@@ -14,7 +14,7 @@ impl Word {
     pub fn mul_modulo(&self, that: &Word, modulo: &Word) -> Word {
         let res = self.0.full_mul(that.0) % modulo.0;
         Word(U256::from_big_endian(&res.to_big_endian()[32..]))
-    } 
+    }
 }
 
 impl std::fmt::Debug for Word {
@@ -147,27 +147,6 @@ impl From<Word> for alloy_primitives::U256 {
         Self::from_be_slice(&value.0.to_big_endian())
     }
 }
-
-// TODO: remove?
-
-// impl From<alloy_primitives::U256> for Word {
-//     fn from(value: alloy_primitives::U256) -> Self {
-//         let bytes: &[u8] = value.as_le_slice();
-//         Word::from_bytes(bytes)
-//     }
-// }
-
-// impl From<Word> for alloy_primitives::FixedBytes<32> {
-//     fn from(value: Word) -> Self {
-//         Self::from_slice(&value.0.to_big_endian())
-//     }
-// }
-
-// impl From<alloy_primitives::FixedBytes<32>> for Word {
-//     fn from(value: alloy_primitives::FixedBytes<32>) -> Self {
-//         Word::from_bytes(&value.0)
-//     }
-// }
 
 impl std::ops::Sub<Word> for Word {
     type Output = Word;
