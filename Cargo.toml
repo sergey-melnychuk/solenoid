@@ -32,10 +32,11 @@ getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 
 [features]
-default = ["testkit"]
+default = ["testkit", "delay"]
 testkit = []
 account = []
 tracing = []
+delay = []
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"
