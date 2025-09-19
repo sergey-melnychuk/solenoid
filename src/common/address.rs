@@ -28,6 +28,10 @@ impl Address {
         addr.copy_from_slice(&hash[12..32]);
         Address(addr)
     }
+
+    pub fn as_word(&self) -> Word {
+        Word::from_bytes(&self.0)
+    }
 }
 
 impl std::fmt::Display for Address {
