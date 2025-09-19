@@ -1,7 +1,9 @@
 use eyre::OptionExt;
-use serde_json::Value;
 
-use crate::common::word::Word;
+use crate::common::{
+    block::{Block, Header},
+    word::Word,
+};
 
 #[cfg(feature = "account")]
 use crate::common::account::Account;
@@ -23,12 +25,24 @@ impl EthClient {
         }
     }
 
-    pub async fn get_full_block<T>(
-        &self,
-        number: Word,
-        f: impl FnOnce(Value) -> eyre::Result<T>,
-    ) -> eyre::Result<T> {
-        let result = self
+    pub async fn get_block_header(&self, number: Word) -> eyre::Result<Header> {
+        let value = self
+            .rpc(serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "eth_getBlockByNumber",
+                "params": [
+                    number,
+                    false
+                ],
+                "id": 0
+            }))
+            .await?;
+        let header = serde_json::from_value(value)?;
+        Ok(header)
+    }
+
+    pub async fn get_full_block(&self, number: Word) -> eyre::Result<Block> {
+        let value = self
             .rpc(serde_json::json!({
                 "jsonrpc": "2.0",
                 "method": "eth_getBlockByNumber",
@@ -39,7 +53,8 @@ impl EthClient {
                 "id": 0
             }))
             .await?;
-        f(result)
+        let block = serde_json::from_value(value)?;
+        Ok(block)
     }
 
     pub async fn get_block_by_number(&self, number: Word) -> eyre::Result<(u64, String)> {

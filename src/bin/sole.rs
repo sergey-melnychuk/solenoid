@@ -1,7 +1,6 @@
-use eyre::{Context, OptionExt, eyre};
-use serde::{Deserialize, Serialize};
+use eyre::{Context, eyre};
 use solenoid::{
-    common::{Hex, address::Address, word::Word},
+    common::word::Word,
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},
@@ -21,21 +20,12 @@ async fn main() -> eyre::Result<()> {
     // let (number, _) = eth.get_latest_block().await?;
     let number = 23027350; // 0x15f5e96
 
-    let txs = eth
-        .get_full_block(Word::from(number), |json| {
-            let txs = json
-                .get("transactions")
-                .cloned()
-                .ok_or_eyre("no transactions")?;
-            let txs: Vec<Tx> = serde_json::from_value(txs)?;
-            Ok(txs)
-        })
-        .await?;
+    let block = eth.get_full_block(Word::from(number)).await?;
 
     let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
 
     eprintln!("📦 Fetched block number: {number}");
-    let txs = txs.into_iter().take(1);
+    let txs = block.transactions.iter().take(1);
     for tx in txs {
         let idx = tx.index.as_u64();
         let to = tx.to.unwrap_or_default();
@@ -65,21 +55,4 @@ async fn main() -> eyre::Result<()> {
         }
     }
     Ok(())
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Tx {
-    hash: Word,
-    #[serde(rename = "transactionIndex")]
-    index: Word,
-    from: Address,
-    gas: Word,
-    input: Hex,
-    to: Option<Address>,
-    value: Word,
-}
-
-#[allow(dead_code)]
-struct Block {
-    transactions: Vec<Tx>,
 }
