@@ -88,8 +88,6 @@ pub struct Evm {
     pub state: Vec<StateTouch>,
     pub account: Vec<AccountTouch>,
 
-    // EIP-2929: Track addresses accessed during transaction for warm/cold gas calculation
-    pub accessed: std::collections::HashSet<Address>,
     pub refund: Word,
 }
 
@@ -107,13 +105,9 @@ impl Evm {
         exp_cost
     }
 
-    pub(crate) fn address_access_cost(&mut self, address: &Address, _ext: &Ext) -> Word {
+    pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &Ext) -> Word {
         // EIP-2929: Check if address has been accessed during this transaction
-        let is_warm = self.accessed.contains(address);
-
-        // Mark address as accessed for future operations
-        self.accessed.insert(*address);
-
+        let is_warm = ext.state.contains_key(address);
         if is_warm {
             Word::from(100) // warm access
         } else {
@@ -261,6 +255,7 @@ pub struct Executor<T: EventTracer> {
     tracer: T,
     ret: Vec<u8>,
     log: bool,
+    debug: std::collections::HashMap<String, serde_json::Value>,
 }
 
 impl<T: EventTracer> Executor<T> {
@@ -322,8 +317,7 @@ impl<T: EventTracer> Executor<T> {
                 .into());
             }
 
-            // TODO: handle EIP-1559 here?
-            // See: https://www.blocknative.com/blog/eip-1559-fees
+            // TODO: EIP-1559 (see: https://www.blocknative.com/blog/eip-1559-fees)
             let gas_price = Word::one() * 1_000_000.into(); // 100 Gwei
             let gas_fee = evm.gas.used * gas_price;
             if src < call.value + gas_fee {
@@ -413,8 +407,8 @@ impl<T: EventTracer> Executor<T> {
     ) -> (T, Vec<u8>) {
         // EIP-2929: Pre-warm sender and target addresses at transaction start
         if ctx.depth == 1 {
-            evm.accessed.insert(call.from);
-            evm.accessed.insert(call.to);
+            ext.pull(&call.from).await.expect("pre-warm:from");
+            ext.pull(&call.to).await.expect("pre-warm:to");
         }
 
         self.tracer.push(Event {
@@ -448,9 +442,15 @@ impl<T: EventTracer> Executor<T> {
                 })
             {
                 if !instruction.is_call() {
-                    // HERE: TODO: remove this
+                    // HERE: TODO: remove this label
                     let refund = evm.gas.refund - evm.refund;
                     evm.refund = evm.gas.refund;
+
+                    self.debug.insert("SRC".to_string(), "not CALL".into());
+                    self.debug.insert("gas_left".to_string(), evm.gas.remaining().saturating_sub(cost).as_u64().into());
+                    self.debug.insert("gas_cost".to_string(), cost.as_u64().into());
+                    self.debug.insert("evm.gas.used".to_string(), evm.gas.used.as_u64().into());
+                    self.debug.insert("evm.gas.back".to_string(), evm.gas.refund.as_u64().into());
 
                     self.tracer.push(Event {
                         depth: ctx.depth,
@@ -466,13 +466,7 @@ impl<T: EventTracer> Executor<T> {
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
-                            extra: json!({
-                                "SRC": "not CALL",
-                                "gas_left": evm.gas.remaining().saturating_sub(cost).as_u64(),
-                                "gas_cost": cost.as_u64(),
-                                "evm.gas.used": evm.gas.used.as_u64(),
-                                "evm.gas.refund": evm.gas.refund.as_u64(),
-                            }),
+                            extra: json!(self.debug),
                         },
                     });
                 }
@@ -528,6 +522,7 @@ impl<T: EventTracer> Executor<T> {
         ctx: Context,
         instruction: &Instruction,
     ) -> eyre::Result<Word> {
+        self.debug.clear();
         let mut gas = Word::zero();
         let mut pc_increment = true;
 
@@ -823,7 +818,7 @@ impl<T: EventTracer> Executor<T> {
                     depth: ctx.depth,
                     reverted: false,
                 });
-                // tracing::info!(preimage=hex::encode(data), keccak256=hex::encode(&sha3), "HASH");
+                tracing::debug!(preimage=hex::encode(data), keccak256=hex::encode(&sha3), "HASH");
                 evm.push(hash)?;
                 gas = (30 + 6 * size.div_ceil(32)).into();
             }
@@ -934,9 +929,9 @@ impl<T: EventTracer> Executor<T> {
             0x3b => {
                 // EXTCODESIZE
                 let address: Address = (&evm.pop()?).into();
+                gas = evm.address_access_cost(&address, ext);
                 let code_size = ext.code(&address).await?.0.len();
                 evm.push(Word::from(code_size))?;
-                gas = evm.address_access_cost(&address, ext);
             }
             0x3c => {
                 // EXTCODECOPY
@@ -1168,47 +1163,55 @@ impl<T: EventTracer> Executor<T> {
                 let new = evm.pop()?;
                 evm.put(ext, &this, key, new).await?;
 
-                // EIP-2200: Calculate gas cost based on state transition
+                /*
+                new: value from the stack input.
+                val: current value of the storage slot.
+                original: value of the storage slot before the current transaction.
+
+                if new == val
+                    100
+                else if val == original
+                    if original == 0
+                        20000
+                    else
+                        2900
+                else
+                    100
+                */
+
+                // Calculate gas cost according to EIP-2200
                 let mut gas_cost = if val == new {
-                    tracing::debug!(
-                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (no change)",
-                        instruction.offset,
-                        original,
-                        val,
-                        new
-                    );
-                    100 // No change
-                } else if original.is_zero() && !new.is_zero() {
-                    tracing::debug!(
-                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 20000 gas (zero to non-zero)",
-                        instruction.offset,
-                        original,
-                        val,
-                        new
-                    );
-                    20_000 // Setting a zero slot to non-zero
-                } else if original.is_zero() && new.is_zero() {
-                    tracing::debug!(
-                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (zero to zero, via non-zero)",
-                        instruction.offset,
-                        original,
-                        val,
-                        new
-                    );
-                    100 // Zero to zero (via non-zero intermediate) - this is like no net change
+                    100
+                } else if val == original {
+                    if original.is_zero() {
+                        20_000
+                    } else {
+                        2900
+                    }
                 } else {
-                    tracing::debug!(
-                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 2900 gas (non-zero change)",
-                        instruction.offset,
-                        original,
-                        val,
-                        new
-                    );
-                    2900 // Changing an existing non-zero slot
+                    100
                 };
                 if !is_warm {
                     gas_cost += 2100;
                 }
+
+                /*
+                if value != current_value
+                    if current_value == original_value
+                        if original_value != 0 and value == 0
+                            gas_refunds += 4800
+                    else
+                        if original_value != 0
+                            if current_value == 0
+                                gas_refunds -= 4800
+                            else if value == 0
+                                gas_refunds += 4800
+                        if value == original_value
+                            if original_value == 0
+                                gas_refunds += 20000 - 100
+                            else
+                                gas_refunds += 5000 - 2100 - 100
+                 */
 
                 // Calculate gas refunds according to EIP-2200
                 let mut gas_refund = Word::zero();
@@ -1234,6 +1237,16 @@ impl<T: EventTracer> Executor<T> {
                         }
                     }
                 }
+
+                let mut sstore: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+                sstore.insert("is_warm".to_owned(), is_warm.into());
+                sstore.insert("original".to_owned(), hex::encode(original.into_bytes()).into());
+                sstore.insert("key".to_owned(), hex::encode(key.into_bytes()).into());
+                sstore.insert("val".to_owned(), hex::encode(val.into_bytes()).into());
+                sstore.insert("new".to_owned(), hex::encode(new.into_bytes()).into());
+                sstore.insert("gas_cost".to_owned(), gas_cost.into());
+                sstore.insert("gas_back".to_owned(), gas_refund.as_u64().into());
+                self.debug.insert("sstore".to_owned(), serde_json::Value::Object(sstore));
 
                 evm.gas.refund(gas_refund);
                 gas = gas_cost.into();
@@ -1629,7 +1642,7 @@ impl<T: EventTracer> Executor<T> {
         // For tracing: report the total cost including forwarded gas (to match REVM)
         let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward;
 
-        // HERE: TODO: remove this
+        // HERE: TODO: remove this label
         self.tracer.push(Event {
             depth: ctx.depth,
             reverted: false,
