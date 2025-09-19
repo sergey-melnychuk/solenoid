@@ -1,5 +1,5 @@
 use crate::{
-    common::{address::Address, call::Call, hash::keccak256, word::Word},
+    common::{address::Address, block::Header, call::Call, hash::keccak256, word::Word},
     decoder::Decoder,
     executor::{Context, Evm, Executor, Gas},
     ext::Ext,
@@ -45,6 +45,7 @@ impl Solenoid {
 }
 
 pub trait Builder {
+    fn with_header(self, header: Header) -> Self;
     fn with_sender(self, sender: Address) -> Self;
     fn with_value(self, amount: Word) -> Self;
     fn with_gas(self, gas: Word) -> Self;
@@ -53,6 +54,7 @@ pub trait Builder {
 
 #[derive(Default)]
 pub struct CreateBuilder {
+    header: Header,
     from: Address,
     value: Word,
     gas: Word,
@@ -60,6 +62,11 @@ pub struct CreateBuilder {
 }
 
 impl Builder for CreateBuilder {
+    fn with_header(mut self, header: Header) -> Self {
+        self.header = header;
+        self
+    }
+
     fn with_sender(mut self, sender: Address) -> Self {
         self.from = sender;
         self
@@ -77,6 +84,7 @@ impl Builder for CreateBuilder {
 
     fn ready(self) -> Runner {
         Runner {
+            header: self.header,
             call: Call {
                 from: self.from,
                 to: Address::zero(),
@@ -91,6 +99,7 @@ impl Builder for CreateBuilder {
 
 #[derive(Default)]
 pub struct ExecuteBuilder {
+    header: Header,
     from: Address,
     to: Address,
     value: Word,
@@ -99,6 +108,11 @@ pub struct ExecuteBuilder {
 }
 
 impl Builder for ExecuteBuilder {
+    fn with_header(mut self, header: Header) -> Self {
+        self.header = header;
+        self
+    }
+
     fn with_sender(mut self, sender: Address) -> Self {
         self.from = sender;
         self
@@ -116,6 +130,7 @@ impl Builder for ExecuteBuilder {
 
     fn ready(self) -> Runner {
         Runner {
+            header: self.header,
             call: Call {
                 from: self.from,
                 to: self.to,
@@ -130,6 +145,7 @@ impl Builder for ExecuteBuilder {
 
 #[derive(Default)]
 pub struct TransferBuilder {
+    header: Header,
     from: Address,
     to: Address,
     value: Word,
@@ -137,6 +153,11 @@ pub struct TransferBuilder {
 }
 
 impl Builder for TransferBuilder {
+    fn with_header(mut self, header: Header) -> Self {
+        self.header = header;
+        self
+    }
+
     fn with_sender(mut self, sender: Address) -> Self {
         self.from = sender;
         self
@@ -154,6 +175,7 @@ impl Builder for TransferBuilder {
 
     fn ready(self) -> Runner {
         Runner {
+            header: self.header,
             call: Call {
                 from: self.from,
                 to: self.to,
@@ -167,6 +189,7 @@ impl Builder for TransferBuilder {
 }
 
 pub struct Runner {
+    header: Header,
     call: Call,
     code: Vec<u8>,
 }
@@ -174,6 +197,7 @@ pub struct Runner {
 impl Runner {
     pub async fn apply(self, ext: &mut Ext) -> eyre::Result<CallResult<LoggingTracer>> {
         let exe = Executor::<LoggingTracer>::with_tracer(LoggingTracer::default());
+        let exe = exe.with_header(self.header);
 
         let code = if self.call.to.is_zero() {
             Decoder::decode(self.code)

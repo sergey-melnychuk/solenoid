@@ -6,6 +6,7 @@ use thiserror::Error;
 use crate::{
     common::{
         address::Address,
+        block::Header,
         call::Call,
         hash::{self, keccak256},
         word::{Word, decode_error_string},
@@ -180,7 +181,6 @@ impl Evm {
     pub async fn revert(&mut self, ext: &mut Ext) -> eyre::Result<()> {
         for StateTouch(address, key, val, _, _) in self.state.iter().filter(|st| st.is_write()) {
             ext.put(address, *key, *val).await?;
-            // self.gas.add(*gas); // TODO: this is not how gas refund works
         }
         for ac in self.account.iter() {
             match ac {
@@ -257,6 +257,7 @@ pub struct Context {
 
 #[derive(Default)]
 pub struct Executor<T: EventTracer> {
+    header: Header,
     tracer: T,
     ret: Vec<u8>,
     log: bool,
@@ -265,6 +266,10 @@ pub struct Executor<T: EventTracer> {
 impl<T: EventTracer> Executor<T> {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_header(self, header: Header) -> Self {
+        Self { header, ..self }
     }
 
     pub fn with_log(self) -> Self {
@@ -388,7 +393,7 @@ impl<T: EventTracer> Executor<T> {
                 ..Context::default()
             };
             let tracer = self.tracer.fork();
-            let mut executor = Executor::<T>::with_tracer(tracer);
+            let mut executor = Executor::<T>::with_tracer(tracer).with_header(self.header);
             executor.set_log(self.log);
             let (tracer, ret) = executor
                 .execute_with_context(code, call, evm, ext, ctx)
@@ -818,6 +823,7 @@ impl<T: EventTracer> Executor<T> {
                     depth: ctx.depth,
                     reverted: false,
                 });
+                // tracing::info!(preimage=hex::encode(data), keccak256=hex::encode(&sha3), "HASH");
                 evm.push(hash)?;
                 gas = (30 + 6 * size.div_ceil(32)).into();
             }
@@ -923,14 +929,14 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3a => {
                 // GASPRICE
-                todo!("GASPRICE")
+                todo!("GASPRICE") // From TX
             }
             0x3b => {
                 // EXTCODESIZE
                 let address: Address = (&evm.pop()?).into();
                 let code_size = ext.code(&address).await?.0.len();
                 evm.push(Word::from(code_size))?;
-                gas = evm.address_access_cost(&address, ext); // FIXME
+                gas = evm.address_access_cost(&address, ext);
             }
             0x3c => {
                 // EXTCODECOPY
@@ -1002,7 +1008,8 @@ impl<T: EventTracer> Executor<T> {
             // 40-4a
             0x40 => {
                 // BLOCKHASH
-                todo!("BLOCKHASH")
+                evm.push(self.header.hash)?;
+                gas = 2.into();
             }
             0x41 => {
                 // COINBASE
@@ -1010,26 +1017,27 @@ impl<T: EventTracer> Executor<T> {
             }
             0x42 => {
                 // TIMESTAMP
-                // todo!("TIMESTAMP")
-                evm.push(Word::from(0x6889371b))?; // TODO: remove hard-coded value
+                evm.push(self.header.timestamp)?;
                 gas = 2.into();
             }
             0x43 => {
                 // NUMBER
-                // todo!("NUMBER")
-                evm.push(Word::from(0x15f5e96))?; // TODO: remove hard-coded value
+                evm.push(self.header.number)?;
+                gas = 2.into();
             }
             0x44 => {
                 // PREVRANDAO
-                todo!("PREVRANDAO")
+                evm.push(self.header.mix_hash)?;
+                gas = 2.into();
             }
             0x45 => {
                 // GASLIMIT
-                todo!("GASLIMIT")
+                evm.push(self.header.gas_limit)?;
+                gas = 2.into();
             }
             0x46 => {
                 // CHAINID
-                evm.push(Word::one())?; // TODO: remove hard-coded value
+                evm.push(Word::one())?; // From TX
                 gas = 2.into();
             }
             0x47 => {
@@ -1041,11 +1049,13 @@ impl<T: EventTracer> Executor<T> {
             }
             0x48 => {
                 // BASEFEE
-                todo!("BASEFEE")
+                evm.push(self.header.base_fee)?;
+                gas = 2.into();
             }
             0x49 => {
                 // BLOBHASH
-                todo!("BLOBHASH")
+                evm.push(self.header.extra_data)?;
+                gas = 2.into();
             }
             0x4a => {
                 // BLOBBASEFEE
@@ -1160,16 +1170,40 @@ impl<T: EventTracer> Executor<T> {
 
                 // EIP-2200: Calculate gas cost based on state transition
                 let mut gas_cost = if val == new {
-                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (no change)", instruction.offset, original, val, new);
+                    tracing::debug!(
+                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (no change)",
+                        instruction.offset,
+                        original,
+                        val,
+                        new
+                    );
                     100 // No change
                 } else if original.is_zero() && !new.is_zero() {
-                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 20000 gas (zero to non-zero)", instruction.offset, original, val, new);
+                    tracing::debug!(
+                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 20000 gas (zero to non-zero)",
+                        instruction.offset,
+                        original,
+                        val,
+                        new
+                    );
                     20_000 // Setting a zero slot to non-zero
                 } else if original.is_zero() && new.is_zero() {
-                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (zero to zero, via non-zero)", instruction.offset, original, val, new);
+                    tracing::debug!(
+                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 100 gas (zero to zero, via non-zero)",
+                        instruction.offset,
+                        original,
+                        val,
+                        new
+                    );
                     100 // Zero to zero (via non-zero intermediate) - this is like no net change
                 } else {
-                    tracing::debug!("SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 2900 gas (non-zero change)", instruction.offset, original, val, new);
+                    tracing::debug!(
+                        "SSTORE DEBUG: pc={}, original={:#x}, val={:#x}, new={:#x} -> 2900 gas (non-zero change)",
+                        instruction.offset,
+                        original,
+                        val,
+                        new
+                    );
                     2900 // Changing an existing non-zero slot
                 };
                 if !is_warm {
@@ -1585,7 +1619,8 @@ impl<T: EventTracer> Executor<T> {
             ..ctx
         };
 
-        let mut executor = Executor::<T>::with_tracer(self.tracer.fork());
+        let mut executor =
+            Executor::<T>::with_tracer(self.tracer.fork()).with_header(self.header.clone());
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
@@ -1654,8 +1689,7 @@ impl<T: EventTracer> Executor<T> {
         }
         if ret_size > 0 {
             if copy_len > 0 {
-                evm.memory[ret_offset..ret_offset + copy_len]
-                    .copy_from_slice(&ret[..copy_len]);
+                evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&ret[..copy_len]);
             }
             if copy_len < ret_size {
                 for b in &mut evm.memory[ret_offset + copy_len..ret_offset + ret_size] {
@@ -1740,7 +1774,8 @@ impl<T: EventTracer> Executor<T> {
             depth: ctx.depth + 1,
             ..ctx
         };
-        let mut executor = Executor::<T>::with_tracer(self.tracer.fork());
+        let mut executor =
+            Executor::<T>::with_tracer(self.tracer.fork()).with_header(self.header.clone());
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
