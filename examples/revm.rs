@@ -3,7 +3,7 @@ use evm_tracer::alloy_provider::network::primitives::BlockTransactions;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::eyre::{self, Result};
 
-// cargo run --release --example sole > sole.log
+// cargo run --release --example revm > revm.log
 
 #[tokio::main]
 async fn main() -> Result<()> {

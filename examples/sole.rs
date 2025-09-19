@@ -7,7 +7,7 @@ use solenoid::{
     tracer::EventTracer,
 };
 
-// RUST_LOG=off cargo run --release --example revm > revm.log
+// RUST_LOG=off cargo run --release --example sole > sole.log
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -36,6 +36,7 @@ async fn main() -> eyre::Result<()> {
         //eprintln!("TX: {tx:#?}");
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
+            .with_header(block.header.clone())
             .with_sender(tx.from)
             .with_gas(tx.gas)
             .with_value(tx.value)
