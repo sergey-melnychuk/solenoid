@@ -1,7 +1,7 @@
 use alloy_eips::BlockNumberOrTag;
 use alloy_provider::network::primitives::BlockTransactions;
 use alloy_provider::{Provider, ProviderBuilder};
-use anyhow::Result;
+use eyre::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -19,12 +19,12 @@ async fn main() -> Result<()> {
         .await
     {
         Ok(Some(block)) => block,
-        Ok(None) => anyhow::bail!("Block not found"),
-        Err(error) => anyhow::bail!("Error: {:?}", error),
+        Ok(None) => eyre::bail!("Block not found"),
+        Err(error) => eyre::bail!("Error: {:?}", error),
     };
 
     let BlockTransactions::Full(txs) = block.transactions else {
-        anyhow::bail!("Expected full block");
+        eyre::bail!("Expected full block");
     };
     eprintln!("📦 Fetched block number: {}", block.header.number);
 

@@ -157,8 +157,8 @@ pub fn dump<T: serde::Serialize>(
     let mut buffer = std::io::BufWriter::new(Vec::new());
     for entry in entries {
         let json = serde_json::to_vec(entry)?;
-        buffer.write(&json)?;
-        buffer.write(b"\n")?;
+        let _ = buffer.write(&json)?;
+        let _ = buffer.write(b"\n")?;
     }
     std::fs::write(path, buffer.into_inner()?)?;
     Ok(())
