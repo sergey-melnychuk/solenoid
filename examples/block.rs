@@ -4,7 +4,7 @@ use std::{
     time::Instant,
 };
 
-use eyre::{Context, OptionExt, eyre};
+use eyre::{Context, eyre};
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use solenoid::{
@@ -50,22 +50,13 @@ async fn main() -> eyre::Result<()> {
     // let (number, _) = eth.get_latest_block().await?;
     let number = 23027350;
 
-    let txs = eth
-        .get_full_block(Word::from(number), |json| {
-            let txs = json
-                .get("transactions")
-                .cloned()
-                .ok_or_eyre("no transactions")?;
-            let txs: Vec<Tx> = serde_json::from_value(txs)?;
-            Ok(txs)
-        })
-        .await?;
+    let block = eth.get_full_block(Word::from(number)).await?;
 
     let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
 
     println!("BLOCK: {number}");
     let (mut seq, mut ok, mut rev, mut failed, mut panic) = (0, 0, 0, 0, 0);
-    for tx in &txs {
+    for tx in &block.transactions {
         seq += 1;
         let idx = tx.index.as_u64();
         println!("---\nTX {idx}: {}", tx.hash);
@@ -111,7 +102,7 @@ async fn main() -> eyre::Result<()> {
         };
     }
 
-    assert_eq!(txs.len(), seq);
+    assert_eq!(block.transactions.len(), seq);
     println!("---\nOK: {ok}, REVERT: {rev}, FAILED: {failed}, PANIC: {panic}");
     Ok(())
 }
@@ -132,41 +123,3 @@ struct Tx {
 struct Block {
     transactions: Vec<Tx>,
 }
-
-// Data for block 23027350:
-/*
-
-todo!("BLOCKHASH")
-"hash": "0x5f98c4bb41ad348ee23e9f9f59eef495831da7d5e9c0975cde2d130896eb4824",
-
-todo!("NUMBER")
-"number": "0x15f5e96",
-
-todo!("BASEFEE")
-"baseFeePerGas": "0x5109a1b1",
-
-todo!("PREVRANDAO")
-"mixHash": "0x1d40a92c6d4359619a0b942c84fb60aae000fc5259e316d27aa3021fe735bb50",
-
-todo!("TIMESTAMP")
-"timestamp": "0x6889371b",
-
-todo!("GASLIMIT")
-"gasLimit": "0x2aea540",
-
-todo!("BLOBHASH")
-"extraData": "0x4275696c6465724e65742028466c617368626f747329",
-
-todo!("GASPRICE")
-"gasPrice": "0x3cf1b77b1", // TX
-
-todo!("CHAINID")
-"chainId": "0x1", // TX
-
-todo!("BLOBBASEFEE")
-???
-
-todo!("COINBASE")
-???
-
-*/
