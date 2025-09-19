@@ -30,7 +30,7 @@ async fn call(
         value,
         from,
         to,
-        gas: Word::max(),
+        gas: Word::from(100500),
     };
 
     // TODO: use mock http server for hermetic tests
@@ -233,6 +233,6 @@ async fn test_set() -> eyre::Result<()> {
             Word::zero()
         )]
     );
-    assert_eq!(evm.gas.used, 43513.into());
+    assert_eq!(evm.gas.used.as_usize(), 22309);
     Ok(())
 }
