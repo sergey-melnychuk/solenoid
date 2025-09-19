@@ -5,16 +5,16 @@ use serde_json::Value;
 
 fn main() {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
-    let trace_path = args
+    let revm_path = args
         .first()
         .cloned()
-        .unwrap_or_else(|| "trace.log".to_string());
-    println!("NOTE: trace path: {trace_path}");
-    let block_path = args
+        .unwrap_or_else(|| "revm.log".to_string());
+    println!("NOTE: revm path: {revm_path}");
+    let sole_path = args
         .get(1)
         .cloned()
-        .unwrap_or_else(|| "block.log".to_string());
-    println!("NOTE: block path: {block_path}");
+        .unwrap_or_else(|| "sole.log".to_string());
+    println!("NOTE: sole path: {sole_path}");
     let overrides = args.get(2).cloned().unwrap_or_else(|| "{}".to_string());
     let overrides: Value = serde_json::from_str(&overrides).expect("overrides:json");
     let overrides = overrides
@@ -24,10 +24,10 @@ fn main() {
         .into_iter()
         .collect::<Vec<_>>();
 
-    let trace = std::fs::read_to_string(&trace_path).expect("traces");
+    let trace = std::fs::read_to_string(&revm_path).expect("traces");
     let trace = trace.split('\n').collect::<Vec<_>>();
 
-    let block = std::fs::read_to_string(&block_path).expect("traces");
+    let block = std::fs::read_to_string(&sole_path).expect("traces");
     let block = block.split('\n').collect::<Vec<_>>();
 
     if block.len() != trace.len() {
