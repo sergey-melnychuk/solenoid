@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     // Function selector for quoteExactInputSingle((address,address,uint256,uint24,uint160))
     let method = "quoteExactInputSingle((address,address,uint256,uint24,uint160))";
     let selector = keccak256(method.as_bytes())[..4].to_vec();
-    println!("Function selector: {}", hex::encode(&selector));
+    println!("{}", hex::encode(&selector));
 
     // Prepare function arguments
     let mut call_data = selector;
@@ -90,7 +90,10 @@ async fn main() -> Result<()> {
     call_data.extend_from_slice(&U256::from(3_000).to_be_bytes::<32>()); // fee
     call_data.extend_from_slice(&U256::ZERO.to_be_bytes::<32>()); // sqrtPriceLimitX96
 
-    println!("Call data: {}", hex::encode(&call_data));
+    for arg in call_data[4..].chunks(32) {
+        eprintln!("{}", hex::encode(arg));
+    }
+    eprintln!("---");
 
     // Get the correct nonce for the sender
     // let nonce = client.get_transaction_count(from).await?;
@@ -124,12 +127,11 @@ async fn main() -> Result<()> {
     let result = evm.transact(tx_env)?;
     */
 
-    println!("✅ Transaction executed successfully!");
-    println!("🔄 Reverted: {}", result.result.is_halt());
-    println!("⛽ Gas used: {}", result.result.gas_used());
-
     if let Some(output) = result.result.output() {
-        println!("📤 Return data: {}", hex::encode(output));
+        println!("RET:");
+        for chunk in output.chunks(32) {
+            eprintln!("{}", hex::encode(chunk));
+        }
 
         // Decode QuoterV2 return values:
         // (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)
@@ -163,6 +165,10 @@ async fn main() -> Result<()> {
             );
         }
     }
+
+    println!("✅ Transaction executed successfully!");
+    println!("🔄 Reverted: {}", result.result.is_halt());
+    println!("⛽ Gas used: {}", result.result.gas_used());
 
     let path = "quoter-revm.log";
     evm_tracer::aux::dump(path, &tracer.traces)?;

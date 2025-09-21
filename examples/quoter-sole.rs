@@ -27,6 +27,8 @@ async fn main() -> eyre::Result<()> {
     let header = eth.get_block_header(Word::from(number)).await?;
     let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
 
+    println!("📦 Using block number: {}", header.number.as_u64());
+
     let from = addr("0xb18f13b8fde294e0147188a78d5b1328f206f4e2");
 
     // Uniswap V3 QuoterV2: https://etherscan.io/address/0x61fFE014bA17989E743c5F6cB21bF9697530B21e
@@ -65,13 +67,16 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await
         .context("execute")?;
-    println!("EVM: OK={}", !result.evm.reverted);
 
     if let Some(error) = decode_error_string(&result.ret) {
         println!("ERR: '{error}'");
     } else {
-        println!("RET: {}", hex::encode(&result.ret));
+        println!("RET:");
+        for chunk in result.ret.chunks(32) {
+            eprintln!("{}", hex::encode(chunk));
+        }
     }
+    println!("EVM: OK={}", !result.evm.reverted);
 
     let path = "quoter-sole.log";
     let traces = result
