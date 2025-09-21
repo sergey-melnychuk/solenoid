@@ -132,38 +132,7 @@ async fn main() -> Result<()> {
         for chunk in output.chunks(32) {
             eprintln!("{}", hex::encode(chunk));
         }
-
-        // Decode QuoterV2 return values:
-        // (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)
-        if output.len() >= 128 {
-            let amount_out = U256::from_be_slice(&output[0..32]);
-            let sqrt_price_x96_after = U256::from_be_slice(&output[32..64]); // Note: actually uint160 but stored in 32-byte slot
-            let initialized_ticks_crossed = U256::from_be_slice(&output[64..96]); // Note: actually uint32 but stored in 32-byte slot
-            let gas_estimate = U256::from_be_slice(&output[96..128]);
-
-            let weth_decimals = 18;
-            let usdc_decimals = 6;
-            let price_after =
-                calculate_price_from_sqrt(sqrt_price_x96_after, usdc_decimals, weth_decimals);
-
-            println!("📊 QuoterV2 Results:");
-            println!(
-                "  💰 Amount Out: {} WETH for {} USDC",
-                format_weth_amount(amount_in),
-                format_usdc_amount(amount_out)
-            );
-            println!("  📊 Price After (WETH/USDC): {}", 1.0 / price_after);
-            println!(
-                "  🎯 Initialized Ticks Crossed: {}",
-                initialized_ticks_crossed
-            );
-            println!("  ⛽ Gas Estimate: {}", gas_estimate);
-        } else {
-            println!(
-                "⚠️  Unexpected return data length: {} bytes (expected at least 128)",
-                output.len()
-            );
-        }
+        decode_quoter_output(&output, amount_in);
     }
 
     println!("✅ Transaction executed successfully!");
@@ -175,6 +144,40 @@ async fn main() -> Result<()> {
     println!("TRACES: {} in {path}", tracer.traces.len());
 
     Ok(())
+}
+
+fn decode_quoter_output(output: &[u8], amount_in: U256) {
+    // Decode QuoterV2 return values:
+    // (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)
+    if output.len() >= 128 {
+        let amount_out = U256::from_be_slice(&output[0..32]);
+        let sqrt_price_x96_after = U256::from_be_slice(&output[32..64]); // Note: actually uint160 but stored in 32-byte slot
+        let initialized_ticks_crossed = U256::from_be_slice(&output[64..96]); // Note: actually uint32 but stored in 32-byte slot
+        let gas_estimate = U256::from_be_slice(&output[96..128]);
+
+        let weth_decimals = 18;
+        let usdc_decimals = 6;
+        let price_after =
+            calculate_price_from_sqrt(sqrt_price_x96_after, usdc_decimals, weth_decimals);
+
+        println!("📊 QuoterV2 Results:");
+        println!(
+            "  💰 Amount Out: {} WETH for {} USDC",
+            format_weth_amount(amount_in),
+            format_usdc_amount(amount_out)
+        );
+        println!("  📊 Price After (WETH/USDC): {}", 1.0 / price_after);
+        println!(
+            "  🎯 Initialized Ticks Crossed: {}",
+            initialized_ticks_crossed
+        );
+        println!("  ⛽ Gas Estimate: {}", gas_estimate);
+    } else {
+        println!(
+            "⚠️  Unexpected return data length: {} bytes (expected at least 128)",
+            output.len()
+        );
+    }
 }
 
 fn calculate_price_from_sqrt(
@@ -211,17 +214,27 @@ fn format_usdc_amount(amount: U256) -> f64 {
 
 $ cargo run --example quoter-revm
 ...
-📦 Using block number: 23396227
-Function selector: c6a5026a
-Call data: c6a5026a000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000de0b6b3a76400000000000000000000000000000000000000000000000000000000000000000bb80000000000000000000000000000000000000000000000000000000000000000
+📦 Using block number: 23027350
+c6a5026a
+000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
+000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+0000000000000000000000000000000000000000000000000de0b6b3a7640000
+0000000000000000000000000000000000000000000000000000000000000bb8
+0000000000000000000000000000000000000000000000000000000000000000
+---
+RET:
+00000000000000000000000000000000000000000000000000000000df3da755
+0000000000000000000000000000000000003fbbeb272536a77eac6dce8bfc61
+0000000000000000000000000000000000000000000000000000000000000001
+0000000000000000000000000000000000000000000000000000000000016982
+📊 QuoterV2 Results:
+  💰 Amount Out: 1 WETH for 3745.359701 USDC
+  📊 Price After (WETH/USDC): 3756.4441989793545
+  🎯 Initialized Ticks Crossed: 1
+  ⛽ Gas Estimate: 92546
 ✅ Transaction executed successfully!
 🔄 Reverted: false
-⛽ Gas used: 123286
-📤 Return data: 000000000000000000000000000000000000000000000000000000010dc57db400000000000000000000000000000000000039f9f6468911bcf1e46ec4c482d900000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000014bb3
-📊 QuoterV2 Results:
-  💰 Amount Out: 1 WETH for 4526.013876 USDC
-  📊 Price After (WETH/USDC): 4539.597712923113
-  🎯 Initialized Ticks Crossed: 1
-  ⛽ Gas Estimate: 84915
+⛽ Gas used: 130917
+TRACES: 9221 in quoter-revm.log
 
 */

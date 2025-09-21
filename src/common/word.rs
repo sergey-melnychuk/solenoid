@@ -13,7 +13,7 @@ impl Word {
     pub fn mul_modulo(&self, that: &Word, modulo: &Word) -> Word {
         let res = self.0.full_mul(that.0) % modulo.0;
         Word(U256::from_big_endian(&res.to_big_endian()[32..]))
-    }
+    }    
 }
 
 impl std::fmt::Debug for Word {
@@ -47,6 +47,10 @@ impl Word {
 
     pub fn is_zero(&self) -> bool {
         self.0.is_zero()
+    }
+
+    pub fn as_u128(&self) -> u128 {
+        self.0.as_u128()
     }
 
     pub fn as_u64(&self) -> u64 {

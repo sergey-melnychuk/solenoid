@@ -37,6 +37,8 @@ async fn main() -> eyre::Result<()> {
     let method = "quoteExactInputSingle((address,address,uint256,uint24,uint160))";
     eprintln!("{}", hex::encode(&keccak256(method.as_bytes())[..4]));
 
+    let amount_in = Word::from(1_000_000_000_000_000_000u128);
+
     let mut args = Vec::new();
     args.extend_from_slice(
         &addr("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
@@ -48,7 +50,7 @@ async fn main() -> eyre::Result<()> {
             .as_word()
             .into_bytes(),
     ); // USDC address
-    args.extend_from_slice(&Word::from(1_000_000_000_000_000_000u128).into_bytes()); // amountIn
+    args.extend_from_slice(&amount_in.into_bytes());
     args.extend_from_slice(&Word::from(3_000).into_bytes()); // fee (3000 basis points = 0.3%)
     args.extend_from_slice(&Word::zero().into_bytes()); // sqrtPriceLimitX96 (0 for no limit)
 
@@ -75,8 +77,12 @@ async fn main() -> eyre::Result<()> {
         for chunk in result.ret.chunks(32) {
             eprintln!("{}", hex::encode(chunk));
         }
+        decode_quoter_output(&result.ret, amount_in);
     }
-    println!("EVM: OK={}", !result.evm.reverted);
+
+    println!("✅ Transaction executed successfully!");
+    println!("🔄 Reverted: {}", result.evm.reverted);
+    println!("⛽ Gas used: {}", result.evm.gas.used().as_u64());
 
     let path = "quoter-sole.log";
     let traces = result
@@ -90,3 +96,96 @@ async fn main() -> eyre::Result<()> {
 
     Ok(())
 }
+
+fn decode_quoter_output(output: &[u8], amount_in: Word) {
+    // Decode QuoterV2 return values:
+    // (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate)
+    if output.len() >= 128 {
+        let amount_out = Word::from_bytes(&output[0..32]);
+        let sqrt_price_x96_after = Word::from_bytes(&output[32..64]); // Note: actually uint160 but stored in 32-byte slot
+        let initialized_ticks_crossed = Word::from_bytes(&output[64..96]); // Note: actually uint32 but stored in 32-byte slot
+        let gas_estimate = Word::from_bytes(&output[96..128]);
+
+        let weth_decimals = 18;
+        let usdc_decimals = 6;
+        let price_after =
+            calculate_price_from_sqrt(sqrt_price_x96_after, usdc_decimals, weth_decimals);
+
+        println!("📊 QuoterV2 Results:");
+        println!(
+            "  💰 Amount Out: {} WETH for {} USDC",
+            format_weth_amount(amount_in),
+            format_usdc_amount(amount_out)
+        );
+        println!("  📊 Price After (WETH/USDC): {}", 1.0 / price_after);
+        println!(
+            "  🎯 Initialized Ticks Crossed: {}",
+            initialized_ticks_crossed
+        );
+        println!("  ⛽ Gas Estimate: {}", gas_estimate);
+    } else {
+        println!(
+            "⚠️  Unexpected return data length: {} bytes (expected at least 128)",
+            output.len()
+        );
+    }
+}
+
+fn calculate_price_from_sqrt(
+    sqrt_price_x96: Word,
+    decimals_token0: u8,
+    decimals_token1: u8,
+) -> f64 {
+    // Convert sqrt_price_x96 to f64
+    let sqrt_price_x96_f64 = sqrt_price_x96.as_u128() as f64;
+
+    // Calculate the raw price: (sqrtPriceX96 / 2^96)^2
+    let q96 = 2_f64.powi(96);
+    let sqrt_price = sqrt_price_x96_f64 / q96;
+    let raw_price = sqrt_price * sqrt_price;
+
+    // Adjust for decimal differences
+    // Price is token1/token0, so we need to adjust for decimal differences
+    let decimal_adjustment = 10_f64.powi(decimals_token0 as i32 - decimals_token1 as i32);
+
+    raw_price * decimal_adjustment
+}
+
+fn format_weth_amount(amount: Word) -> f64 {
+    let weth_decimals = 1e18;
+    amount.as_u128() as f64 / weth_decimals
+}
+
+fn format_usdc_amount(amount: Word) -> f64 {
+    let usdc_decimals = 1e6;
+    amount.as_u128() as f64 / usdc_decimals
+}
+
+/*
+
+$ cargo run --example quoter-sole
+...
+📦 Using block number: 23027350
+c6a5026a
+000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
+000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+0000000000000000000000000000000000000000000000000de0b6b3a7640000
+0000000000000000000000000000000000000000000000000000000000000bb8
+0000000000000000000000000000000000000000000000000000000000000000
+---
+RET:
+00000000000000000000000000000000000000000000000000000000df3da755
+0000000000000000000000000000000000003fbbeb272536a77eac6dce8bfc61
+0000000000000000000000000000000000000000000000000000000000000001
+0000000000000000000000000000000000000000000000000000000000016982
+📊 QuoterV2 Results:
+  💰 Amount Out: 1 WETH for 3745.359701 USDC
+  📊 Price After (WETH/USDC): 3756.4441989793545
+  🎯 Initialized Ticks Crossed: 1
+  ⛽ Gas Estimate: 16982 [REVM: 92546]
+✅ Transaction executed successfully!
+🔄 Reverted: false
+⛽ Gas used: 104637 [REVM: 130917]
+TRACES: 9221 in quoter-sole.log
+
+*/
