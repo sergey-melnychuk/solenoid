@@ -52,6 +52,8 @@ async fn main() -> eyre::Result<()> {
             .into_iter()
             .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
             .collect::<Vec<_>>();
+        eprintln!("---\nRET: {}", hex::encode(&result.ret));
+        eprintln!("OK: {}", !result.evm.reverted);
         for tr in traces {
             println!("{}", serde_json::to_string(&tr).expect("json"));
         }
