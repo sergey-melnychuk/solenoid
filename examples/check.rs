@@ -25,10 +25,10 @@ fn main() {
         .collect::<Vec<_>>();
 
     let revm = std::fs::read_to_string(&revm_path).expect("traces");
-    let revm = revm.split('\n').collect::<Vec<_>>();
+    let revm = revm.split('\n').filter(|s| !s.is_empty()).collect::<Vec<_>>();
 
     let sole = std::fs::read_to_string(&sole_path).expect("traces");
-    let sole = sole.split('\n').collect::<Vec<_>>();
+    let sole = sole.split('\n').filter(|s| !s.is_empty()).collect::<Vec<_>>();
 
     if sole.len() != revm.len() {
         eprintln!(
@@ -64,6 +64,8 @@ fn main() {
         line += 1;
         // TODO: wait for input to continue, like interactive analysis?
     }
+
+    println!("DONE");
 }
 
 fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
