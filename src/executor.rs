@@ -1168,6 +1168,14 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     2100.into() // cold
                 };
+
+                let mut sload: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+                sload.insert("address".to_owned(), this.to_string().into());
+                sload.insert("key".to_owned(), hex::encode(key.into_bytes()).into());
+                sload.insert("val".to_owned(), hex::encode(val.into_bytes()).into());
+                self.debug
+                    .insert("SLOAD".to_owned(), serde_json::Value::Object(sload));
+
             }
             0x55 => {
                 // SSTORE
@@ -1721,14 +1729,13 @@ impl<T: EventTracer> Executor<T> {
             Word::zero()
         };
 
-        let inner_gas_to_add = inner_evm.gas.used.saturating_sub(stipend_adjustment);
-
-        evm.gas.used += inner_gas_to_add;
+        let inner_gas_used = inner_evm.gas.used.saturating_sub(stipend_adjustment);
+        evm.gas.used += inner_gas_used;
 
         if inner_evm.reverted {
-            inner_evm.revert(ext).await?;
             self.ret = ret;
             evm.push(Word::zero())?;
+            inner_evm.revert(ext).await?;
             return Ok(());
         }
 
