@@ -31,7 +31,7 @@ async fn main() -> eyre::Result<()> {
         let idx = tx.index.as_u64();
         ext.pull(&tx.from).await?;
         ext.acc_mut(&tx.from).value = Word::from_hex("0x90a4a345dbae6ead").unwrap();
-        //eprintln!("TX: {tx:#?}");
+        eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
             .with_header(block.header.clone())

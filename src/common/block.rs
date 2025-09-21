@@ -12,6 +12,8 @@ pub struct Tx {
     pub input: Hex,
     pub to: Option<Address>,
     pub value: Word,
+    #[serde(rename = "gasPrice")]
+    pub gas_price: Word,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
