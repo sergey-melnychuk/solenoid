@@ -1685,6 +1685,7 @@ impl<T: EventTracer> Executor<T> {
 
         if inner_evm.reverted {
             inner_evm.revert(ext).await?;
+            self.ret = ret;
             evm.push(Word::zero())?;
             return Ok(());
         }
