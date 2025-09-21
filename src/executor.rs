@@ -1652,7 +1652,7 @@ impl<T: EventTracer> Executor<T> {
                 name: instruction.opcode.name(),
                 data: instruction.argument.clone().map(Into::into),
                 gas_cost: total_gas_cost_for_tracing,
-                gas_used: evm.gas.used() + total_gas_cost_for_tracing,
+                gas_used: evm.gas.used + total_gas_cost_for_tracing,
                 gas_left: evm.gas.remaining().saturating_sub(base_gas_cost),
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
