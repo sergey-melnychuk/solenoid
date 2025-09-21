@@ -1,4 +1,5 @@
 ```
+echo "Run Uniswap V3 Quoter V2"
 RUST_LOG=off cargo run --release --example quoter-revm
 RUST_LOG=off cargo run --release --example quoter-sole
 
