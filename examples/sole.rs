@@ -29,11 +29,8 @@ async fn main() -> eyre::Result<()> {
     let txs = txs.take(1);
     for tx in txs {
         let idx = tx.index.as_u64();
-        let to = tx.to.unwrap_or_default();
         ext.pull(&tx.from).await?;
         ext.acc_mut(&tx.from).value = Word::from_hex("0x90a4a345dbae6ead").unwrap();
-        ext.pull(&to).await?;
-        ext.acc_mut(&to).value = Word::from_hex("0x90a4a345dbae6ead").unwrap();
         //eprintln!("TX: {tx:#?}");
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())

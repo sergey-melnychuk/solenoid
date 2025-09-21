@@ -55,35 +55,33 @@ async fn test_deploy() -> eyre::Result<()> {
     assert_eq!(
         evm.account,
         vec![
-            AccountTouch::Code(created2, Word::from_bytes(&keccak256(&code)), code),
-            AccountTouch::Nonce(from, 0, 1)
+            AccountTouch::SetCode(
+                created2,
+                (Word::zero(), vec![]),
+                (Word::from_bytes(&keccak256(&code)), code)
+            ),
+            AccountTouch::SetNonce(from, 0, 1)
         ]
     );
     pretty_assertions::assert_eq!(
         evm.state,
         vec![
-            StateTouch(created1, Word::zero(), Word::zero(), None, Word::zero()),
+            StateTouch(created1, Word::zero(), Word::zero(), None, 0),
             StateTouch(
                 created1,
                 Word::zero(),
                 Word::zero(),
                 Some((&from).into()),
-                Word::zero()
+                0
             ),
-            StateTouch(
-                created2,
-                Word::zero(),
-                Word::zero(),
-                Some(word("0x42")),
-                Word::zero()
-            ),
-            StateTouch(created1, Word::one(), Word::zero(), None, Word::zero()),
+            StateTouch(created2, Word::zero(), Word::zero(), Some(word("0x42")), 0),
+            StateTouch(created1, Word::one(), Word::zero(), None, 0),
             StateTouch(
                 created1,
                 Word::one(),
                 Word::zero(),
                 Some((&created2).into()),
-                Word::zero()
+                0
             ),
         ]
     );

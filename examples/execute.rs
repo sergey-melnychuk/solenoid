@@ -95,16 +95,16 @@ async fn main() -> eyre::Result<()> {
     evm.account.iter().for_each(|acc| {
         use solenoid::executor::AccountTouch;
         match acc {
-            AccountTouch::Empty => (),
-            AccountTouch::Code(addr, hash, code) => {
+            AccountTouch::SetCode(addr, _, (hash, code)) => {
                 println!("CODE: [{addr}]=0x{} (0x{hash:0x})", hex::encode(code));
             }
-            AccountTouch::Nonce(addr, val, new) => {
+            AccountTouch::SetNonce(addr, val, new) => {
                 println!("NONCE: {addr} 0x{val:0x}->0x{new:0x}");
             }
-            AccountTouch::Value(addr, val, new) => {
+            AccountTouch::SetValue(addr, val, new) => {
                 println!("VALUE: {addr} 0x{val:0x}->0x{new:0x}");
             }
+            _ => (),
         }
     });
     for (addr, state) in ext.state {

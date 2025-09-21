@@ -92,13 +92,7 @@ async fn test_get() -> eyre::Result<()> {
     assert_eq!(ret, vec![0u8; 32]);
     assert_eq!(
         evm.state,
-        vec![StateTouch(
-            to,
-            Word::zero(),
-            Word::zero(),
-            None,
-            Word::zero()
-        )]
+        vec![StateTouch(to, Word::zero(), Word::zero(), None, 0)]
     );
     Ok(())
 }
@@ -124,13 +118,7 @@ async fn test_get_with_override() -> eyre::Result<()> {
     );
     assert_eq!(
         evm.state,
-        vec![StateTouch(
-            to,
-            Word::zero(),
-            Word::one(),
-            None,
-            Word::zero()
-        )]
+        vec![StateTouch(to, Word::zero(), Word::one(), None, 0)]
     );
     Ok(())
 }
@@ -147,13 +135,7 @@ async fn test_dec() -> eyre::Result<()> {
     );
     assert_eq!(
         evm.state,
-        vec![StateTouch(
-            to,
-            Word::zero(),
-            Word::zero(),
-            None,
-            Word::zero()
-        )]
+        vec![StateTouch(to, Word::zero(), Word::zero(), None, 0)]
     );
     Ok(())
 }
@@ -177,14 +159,8 @@ async fn test_dec_with_override() -> eyre::Result<()> {
     assert_eq!(
         evm.state,
         vec![
-            StateTouch(to, Word::zero(), Word::one(), None, Word::zero()),
-            StateTouch(
-                to,
-                Word::zero(),
-                Word::one(),
-                Some(Word::zero()),
-                Word::from(19900),
-            ),
+            StateTouch(to, Word::zero(), Word::one(), None, 0),
+            StateTouch(to, Word::zero(), Word::one(), Some(Word::zero()), 19900,),
         ]
     );
     Ok(())
@@ -200,14 +176,8 @@ async fn test_inc() -> eyre::Result<()> {
     assert_eq!(
         evm.state,
         vec![
-            StateTouch(to, Word::zero(), Word::zero(), None, Word::zero()),
-            StateTouch(
-                to,
-                Word::zero(),
-                Word::zero(),
-                Some(Word::one()),
-                Word::zero()
-            ),
+            StateTouch(to, Word::zero(), Word::zero(), None, 0),
+            StateTouch(to, Word::zero(), Word::zero(), Some(Word::one()), 0),
         ]
     );
     Ok(())
@@ -225,13 +195,7 @@ async fn test_set() -> eyre::Result<()> {
 
     assert_eq!(
         evm.state,
-        vec![StateTouch(
-            to,
-            Word::zero(),
-            Word::zero(),
-            Some(val),
-            Word::zero()
-        )]
+        vec![StateTouch(to, Word::zero(), Word::zero(), Some(val), 0)]
     );
     assert_eq!(evm.gas.used.as_usize(), 22309);
     Ok(())

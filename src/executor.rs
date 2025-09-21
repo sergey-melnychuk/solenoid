@@ -54,7 +54,7 @@ const CALL_DEPTH_LIMIT: usize = 1024;
 const ALLOCATION_SANITY_LIMIT: usize = 1024 * 1024 * 10;
 
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct StateTouch(pub Address, pub Word, pub Word, pub Option<Word>, pub Word);
+pub struct StateTouch(pub Address, pub Word, pub Word, pub Option<Word>, pub i64);
 
 impl StateTouch {
     pub fn is_write(&self) -> bool {
@@ -66,9 +66,12 @@ impl StateTouch {
 pub enum AccountTouch {
     #[default]
     Empty,
-    Nonce(Address, u64, u64),
-    Value(Address, Word, Word),
-    Code(Address, Word, Vec<u8>),
+    GetNonce(Address, u64),
+    GetValue(Address, Word),
+    GetCode(Address, Word, Vec<u8>),
+    SetNonce(Address, u64, u64),
+    SetValue(Address, Word, Word),
+    SetCode(Address, (Word, Vec<u8>), (Word, Vec<u8>)),
 }
 
 #[derive(Debug, Clone)]
@@ -88,7 +91,7 @@ pub struct Evm {
     pub state: Vec<StateTouch>,
     pub account: Vec<AccountTouch>,
 
-    pub refund: Word,
+    pub refund: i64,
 }
 
 impl Evm {
@@ -178,16 +181,16 @@ impl Evm {
         }
         for ac in self.account.iter() {
             match ac {
-                AccountTouch::Nonce(addr, val, _new) => {
+                AccountTouch::SetNonce(addr, val, _new) => {
                     ext.acc_mut(addr).nonce = (*val).into();
                 }
-                AccountTouch::Value(addr, val, _new) => {
+                AccountTouch::SetValue(addr, val, _new) => {
                     ext.acc_mut(addr).value = *val;
                 }
-                AccountTouch::Code(addr, _hash, _code) => {
+                AccountTouch::SetCode(addr, _hash, _code) => {
                     *ext.code_mut(addr) = (vec![], Word::from_bytes(&hash::empty()));
                 }
-                AccountTouch::Empty => (),
+                _ => (),
             }
         }
         Ok(())
@@ -226,8 +229,13 @@ impl Gas {
         }
     }
 
-    pub fn refund(&mut self, gas: Word) {
-        self.refund += gas;
+    pub fn refund(&mut self, gas: i64) {
+        if gas < 0 {
+            self.refund -= (-gas as u64).into();
+        } else {
+            self.refund += (gas as u64).into();
+        }
+        // self.refund += gas;
     }
 
     pub fn sub(&mut self, gas: Word) -> Result<(), ExecutorError> {
@@ -330,7 +338,7 @@ impl<T: EventTracer> Executor<T> {
 
             let nonce = ext.acc_mut(&call.from).nonce;
             ext.acc_mut(&call.from).nonce = nonce + Word::one();
-            evm.account.push(AccountTouch::Nonce(
+            evm.account.push(AccountTouch::SetNonce(
                 call.from,
                 nonce.as_u64(),
                 nonce.as_u64() + 1,
@@ -346,7 +354,7 @@ impl<T: EventTracer> Executor<T> {
             });
 
             ext.acc_mut(&call.from).value -= call.value + gas_fee;
-            evm.account.push(AccountTouch::Value(
+            evm.account.push(AccountTouch::SetValue(
                 call.from,
                 src,
                 src - call.value - gas_fee,
@@ -363,7 +371,7 @@ impl<T: EventTracer> Executor<T> {
 
             ext.acc_mut(&call.to).value += call.value;
             evm.account
-                .push(AccountTouch::Value(call.to, dst, dst + call.value));
+                .push(AccountTouch::SetValue(call.to, dst, dst + call.value));
             self.tracer.push(Event {
                 data: EventData::Account(AccountEvent::SetValue {
                     address: call.to,
@@ -443,14 +451,20 @@ impl<T: EventTracer> Executor<T> {
             {
                 if !instruction.is_call() {
                     // HERE: TODO: remove this label
-                    let refund = evm.gas.refund - evm.refund;
-                    evm.refund = evm.gas.refund;
+                    let refund = evm.gas.refund.as_i64() - evm.refund;
+                    evm.refund = evm.gas.refund.as_i64();
 
                     self.debug.insert("SRC".to_string(), "not CALL".into());
-                    self.debug.insert("gas_left".to_string(), evm.gas.remaining().saturating_sub(cost).as_u64().into());
-                    self.debug.insert("gas_cost".to_string(), cost.as_u64().into());
-                    self.debug.insert("evm.gas.used".to_string(), evm.gas.used.as_u64().into());
-                    self.debug.insert("evm.gas.back".to_string(), evm.gas.refund.as_u64().into());
+                    self.debug.insert(
+                        "gas_left".to_string(),
+                        evm.gas.remaining().saturating_sub(cost).as_u64().into(),
+                    );
+                    self.debug
+                        .insert("gas_cost".to_string(), cost.as_u64().into());
+                    self.debug
+                        .insert("evm.gas.used".to_string(), evm.gas.used.as_u64().into());
+                    self.debug
+                        .insert("evm.gas.back".to_string(), evm.gas.refund.as_u64().into());
 
                     self.tracer.push(Event {
                         depth: ctx.depth,
@@ -818,7 +832,11 @@ impl<T: EventTracer> Executor<T> {
                     depth: ctx.depth,
                     reverted: false,
                 });
-                tracing::debug!(preimage=hex::encode(data), keccak256=hex::encode(&sha3), "HASH");
+                tracing::debug!(
+                    preimage = hex::encode(data),
+                    keccak256 = hex::encode(sha3),
+                    "HASH"
+                );
                 evm.push(hash)?;
                 gas = (30 + 6 * size.div_ceil(32)).into();
             }
@@ -1038,6 +1056,14 @@ impl<T: EventTracer> Executor<T> {
             0x47 => {
                 // SELFBALANCE
                 let balance = ext.balance(&call.from).await?;
+
+                let mut selfbalance: serde_json::Map<String, serde_json::Value> =
+                    serde_json::Map::new();
+                selfbalance.insert("address".to_string(), call.from.to_string().into());
+                selfbalance.insert("balance".to_string(), balance.as_u128().to_string().into());
+                self.debug
+                    .insert("SELFBALANCE".to_string(), selfbalance.into());
+
                 // TODO: touch account
                 evm.push(balance)?;
                 gas = 5.into();
@@ -1127,8 +1153,7 @@ impl<T: EventTracer> Executor<T> {
                     .unwrap_or_default();
                 let val = evm.get(ext, &this, &key).await?;
                 evm.push(val)?;
-                evm.state
-                    .push(StateTouch(this, key, val, None, Word::zero()));
+                evm.state.push(StateTouch(this, key, val, None, 0));
                 self.tracer.push(Event {
                     data: EventData::State(StateEvent::Get {
                         address: this,
@@ -1183,11 +1208,7 @@ impl<T: EventTracer> Executor<T> {
                 let mut gas_cost = if val == new {
                     100
                 } else if val == original {
-                    if original.is_zero() {
-                        20_000
-                    } else {
-                        2900
-                    }
+                    if original.is_zero() { 20_000 } else { 2900 }
                 } else {
                     100
                 };
@@ -1196,43 +1217,53 @@ impl<T: EventTracer> Executor<T> {
                 }
 
                 /*
-                if value != current_value
-                    if current_value == original_value
-                        if original_value != 0 and value == 0
+                new: value from the stack input.
+                val: current value of the storage slot.
+                original: value of the storage slot before the current transaction.
+
+                if new != val
+                    if val == original
+                        if original != 0 and new == 0
                             gas_refunds += 4800
                     else
-                        if original_value != 0
-                            if current_value == 0
+                        if original != 0
+                            if val == 0
                                 gas_refunds -= 4800
-                            else if value == 0
+                            else if new == 0
                                 gas_refunds += 4800
-                        if value == original_value
-                            if original_value == 0
+                        if new == original
+                            if original == 0
                                 gas_refunds += 20000 - 100
                             else
                                 gas_refunds += 5000 - 2100 - 100
                  */
 
                 // Calculate gas refunds according to EIP-2200
-                let mut gas_refund = Word::zero();
-                if val != new {
+                let mut refund_traces = Vec::new();
+                let mut gas_refund = 0i64;
+                if new != val {
                     if val == original {
                         if !original.is_zero() && new.is_zero() {
-                            gas_refund += 4800.into();
+                            refund_traces.push("+4800");
+                            gas_refund += 4800;
                         }
                     } else {
                         if !original.is_zero() {
                             if val.is_zero() {
-                                gas_refund = gas_refund.saturating_sub(4800.into());
+                                refund_traces.push("-4800");
+                                gas_refund -= 4800;
                             } else if new.is_zero() {
-                                gas_refund += 4800.into();
+                                refund_traces.push("+4800");
+                                gas_refund += 4800;
                             }
                         }
                         if new == original {
                             if original.is_zero() {
-                                gas_refund += (20_000 - 100).into();
+                                refund_traces.push("+19900");
+                                gas_refund += 20_000 - 100;
                             } else {
-                                gas_refund += (5000 - 2100 - 100).into();
+                                refund_traces.push("+2800");
+                                gas_refund += 5000 - 2100 - 100;
                             }
                         }
                     }
@@ -1240,13 +1271,24 @@ impl<T: EventTracer> Executor<T> {
 
                 let mut sstore: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
                 sstore.insert("is_warm".to_owned(), is_warm.into());
-                sstore.insert("original".to_owned(), hex::encode(original.into_bytes()).into());
+                sstore.insert(
+                    "original".to_owned(),
+                    hex::encode(original.into_bytes()).into(),
+                );
                 sstore.insert("key".to_owned(), hex::encode(key.into_bytes()).into());
                 sstore.insert("val".to_owned(), hex::encode(val.into_bytes()).into());
                 sstore.insert("new".to_owned(), hex::encode(new.into_bytes()).into());
                 sstore.insert("gas_cost".to_owned(), gas_cost.into());
-                sstore.insert("gas_back".to_owned(), gas_refund.as_u64().into());
-                self.debug.insert("sstore".to_owned(), serde_json::Value::Object(sstore));
+                sstore.insert("gas_back".to_owned(), gas_refund.into());
+                let refund_traces = refund_traces
+                    .into_iter()
+                    .map(ToOwned::to_owned)
+                    .map(serde_json::Value::from)
+                    .collect();
+                let refund_traces = serde_json::Value::Array(refund_traces);
+                sstore.insert("refund".to_owned(), refund_traces);
+                self.debug
+                    .insert("sstore".to_owned(), serde_json::Value::Object(sstore));
 
                 evm.gas.refund(gas_refund);
                 gas = gas_cost.into();
@@ -1656,7 +1698,7 @@ impl<T: EventTracer> Executor<T> {
                 gas_left: evm.gas.remaining().saturating_sub(base_gas_cost),
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
-                gas_back: Word::zero(),
+                gas_back: 0,
                 extra: json!({
                     "SRC": "CALL",
                     "gas_left": evm.gas.remaining().saturating_sub(base_gas_cost).as_u64(),
@@ -1806,14 +1848,15 @@ impl<T: EventTracer> Executor<T> {
         }
 
         let hash = keccak256(&code);
+        let (old_code, old_hash) = ext.code_mut(&address).clone();
         *ext.code_mut(&address) = (code.clone(), Word::from_bytes(&hash));
         ext.acc_mut(&call.from).nonce += Word::one();
-        evm.account.push(AccountTouch::Code(
+        evm.account.push(AccountTouch::SetCode(
             address,
-            Word::from_bytes(&hash),
-            code.clone(),
+            (old_hash, old_code),
+            (Word::from_bytes(&hash), code.clone()),
         ));
-        evm.account.push(AccountTouch::Nonce(
+        evm.account.push(AccountTouch::SetNonce(
             call.from,
             nonce.as_u64(),
             nonce.as_u64() + 1,

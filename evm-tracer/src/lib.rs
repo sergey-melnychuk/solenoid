@@ -164,7 +164,7 @@ pub struct OpcodeTrace {
     pub gas_used: u64,
     // pub gas_left: u64, // NOTE: temporary disabled
     pub gas_cost: u64,
-    pub gas_back: u64,
+    pub gas_back: i64,
     pub stack: Vec<U256>,
     pub memory: Vec<U256>,
     pub depth: usize,
@@ -275,7 +275,7 @@ where
         let stack = interp.stack.data().to_vec();
         let memory = interp.memory.slice(0..interp.memory.size()).to_vec();
 
-        let refund = (interp.gas.refunded() - self.aux.refund).max(0); // TODO: negative refunds?
+        let refund = interp.gas.refunded() - self.aux.refund;
         self.aux.refund = interp.gas.refunded();
 
         let gas_cost = self.aux.gas - interp.gas.remaining();
@@ -288,7 +288,7 @@ where
             gas_used: interp.gas.spent(),
             // gas_left: interp.gas.remaining(),
             gas_cost,
-            gas_back: refund as u64,
+            gas_back: refund,
             stack,
             memory: memory
                 .chunks(32)
