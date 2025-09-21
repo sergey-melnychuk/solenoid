@@ -7,10 +7,8 @@ cargo run --release --example check -- quoter-revm.log quoter-sole.log
 ```
 ---
 ```
-...
 NOTE: revm path: quoter-revm.log
 NOTE: sole path: quoter-sole.log
-WARN: len mismatch: block=7404 trace=9222
 
 thread 'main' panicked at examples/check.rs:56:13:
 assertion failed: `(left == right)`
