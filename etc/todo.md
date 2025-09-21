@@ -1,11 +1,17 @@
-`cargo run --release --bin analyser -- trace.log block.log '{}'` :
+```
+echo "Running REVM vs SOLE:"
+RUST_LOG=off cargo run --release --example revm > revm.log
+RUST_LOG=off cargo run --release --example sole > sole.log
+
+cargo run --release --example check -- revm.log sole.log '{}'
+```
 
 ```
-NOTE: trace path: trace.log
-NOTE: block path: block.log
+NOTE: revm path: revm.log
+NOTE: sole path: sole.log
 WARN: len mismatch: block=8898 trace=8698
 
-thread 'main' panicked at src/bin/analyser.rs:56:13:
+thread 'main' panicked at examples/check.rs:56:13:
 assertion failed: `(left == right)`
 
 Diff < left / right > :
@@ -13,10 +19,9 @@ Diff < left / right > :
      pc: 8468,
      op: 241,
      name: "CALL",
-<    gas_used: 167519, // missing 4761 | BUT 4761+39=4800,
-<    gas_cost: 161544, // extra 39     | seems like refund
+<    gas_used: 167480,
 >    gas_used: 172280,
->    gas_cost: 161505,
+     gas_cost: 161505,
      gas_back: 0,
      stack: [
          36441503,
@@ -58,10 +63,14 @@ Diff < left / right > :
      ],
      depth: 3,
      extra: Extra {
-<        value: Object {},
->        value: Object {
+         value: Object {
+<            "SRC": String("CALL"),
+<            "gas_left": Number(163966),
+<            "gas_cost": Number(161505),
+<            "evm.gas.used": Number(10775),
+<            "evm.gas.refund": Number(4800),
 >            "gas_left": Number(2561),
->        },
+         },
      },
  }
 

@@ -25,7 +25,8 @@ async fn main() -> eyre::Result<()> {
     let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
 
     eprintln!("📦 Fetched block number: {number}");
-    let txs = block.transactions.iter().take(1);
+    let txs = block.transactions.iter();
+    let txs = txs.take(1);
     for tx in txs {
         let idx = tx.index.as_u64();
         let to = tx.to.unwrap_or_default();

@@ -24,22 +24,22 @@ fn main() {
         .into_iter()
         .collect::<Vec<_>>();
 
-    let trace = std::fs::read_to_string(&revm_path).expect("traces");
-    let trace = trace.split('\n').collect::<Vec<_>>();
+    let revm = std::fs::read_to_string(&revm_path).expect("traces");
+    let revm = revm.split('\n').collect::<Vec<_>>();
 
-    let block = std::fs::read_to_string(&sole_path).expect("traces");
-    let block = block.split('\n').collect::<Vec<_>>();
+    let sole = std::fs::read_to_string(&sole_path).expect("traces");
+    let sole = sole.split('\n').collect::<Vec<_>>();
 
-    if block.len() != trace.len() {
+    if sole.len() != revm.len() {
         eprintln!(
-            "WARN: len mismatch: block={} trace={}",
-            block.len(),
-            trace.len()
+            "WARN: len mismatch: sole={} revm={}",
+            sole.len(),
+            revm.len()
         );
     }
 
     let mut line = 1;
-    let pairs = trace.into_iter().zip(block);
+    let pairs = revm.into_iter().zip(sole);
     for (trace, block) in pairs {
         if trace.is_empty() ^ block.is_empty() {
             break;
