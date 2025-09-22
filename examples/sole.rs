@@ -51,12 +51,11 @@ async fn main() -> eyre::Result<()> {
             .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
             .collect::<Vec<_>>();
         eprintln!("---\nRET: {}", hex::encode(&result.ret));
-        eprintln!("GAS {}", result.evm.gas.used().as_u64());
+        eprintln!("GAS: {}", result.evm.gas.used().as_u64());
         eprintln!("OK: {}", !result.evm.reverted);
         for tr in traces {
             println!("{}", serde_json::to_string(&tr).expect("json"));
         }
-        println!("{{\"gas\":{}}}", result.evm.gas.used().as_u64());
     }
     Ok(())
 }

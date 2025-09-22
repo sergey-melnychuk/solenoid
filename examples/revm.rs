@@ -40,7 +40,6 @@ async fn main() -> Result<()> {
         for tr in traces.traces {
             println!("{}", serde_json::to_string(&tr).expect("json"));
         }
-        println!("{{\"gas\":{}}}", result.result.gas_used());
     }
     Ok(())
 }
