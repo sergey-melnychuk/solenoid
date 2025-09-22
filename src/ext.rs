@@ -125,8 +125,8 @@ impl Ext {
     }
 
     pub async fn balance(&mut self, addr: &Address) -> eyre::Result<Word> {
-        if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
-            Ok(acc.value)
+        if let Some(value) = self.state.get(addr).map(|s| s.account.value) {
+            Ok(value)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));
 
@@ -144,8 +144,8 @@ impl Ext {
     }
 
     pub async fn nonce(&mut self, addr: &Address) -> eyre::Result<Word> {
-        if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
-            Ok(acc.nonce)
+        if let Some(nonce) = self.state.get(addr).map(|s| s.account.nonce) {
+            Ok(nonce)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));
 
@@ -164,10 +164,10 @@ impl Ext {
 
     pub async fn pull(&mut self, addr: &Address) -> eyre::Result<Account> {
         let (_code, _hash) = self.code(addr).await?;
-        let balance = self.balance(addr).await?;
+        let value = self.balance(addr).await?;
         let nonce = self.nonce(addr).await?;
         Ok(Account {
-            value: balance,
+            value,
             nonce,
             root: Word::zero(),
         })
