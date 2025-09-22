@@ -35,10 +35,12 @@ async fn main() -> Result<()> {
     let traced = evm_tracer::trace_all(txs, &block.header, &client).await?;
     for (result, traces) in traced {
         eprintln!("---\nRET: {}", hex::encode(&result.result.output().unwrap_or_default()));
+        eprintln!("GAS: {}", result.result.gas_used());
         eprintln!("OK: {}", !result.result.is_halt());
         for tr in traces.traces {
             println!("{}", serde_json::to_string(&tr).expect("json"));
         }
+        println!("{{\"gas\":{}}}", result.result.gas_used());
     }
     Ok(())
 }

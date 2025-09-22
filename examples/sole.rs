@@ -31,7 +31,8 @@ async fn main() -> eyre::Result<()> {
         let idx = tx.index.as_u64();
         ext.pull(&tx.from).await?;
         ext.acc_mut(&tx.from).value = Word::from_hex("0x90a4a345dbae6ead").unwrap();
-        eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
+        // eprintln!("TX: {}", tx.hash);
+        // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
             .with_header(block.header.clone())
@@ -50,10 +51,12 @@ async fn main() -> eyre::Result<()> {
             .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
             .collect::<Vec<_>>();
         eprintln!("---\nRET: {}", hex::encode(&result.ret));
+        eprintln!("GAS {}", result.evm.gas.used().as_u64());
         eprintln!("OK: {}", !result.evm.reverted);
         for tr in traces {
             println!("{}", serde_json::to_string(&tr).expect("json"));
         }
+        println!("{{\"gas\":{}}}", result.evm.gas.used().as_u64());
     }
     Ok(())
 }
