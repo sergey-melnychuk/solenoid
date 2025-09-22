@@ -942,7 +942,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3a => {
                 // GASPRICE
-                todo!("GASPRICE") // From TX
+                todo!("GASPRICE") // TODO: From TX
             }
             0x3b => {
                 // EXTCODESIZE
@@ -1026,7 +1026,8 @@ impl<T: EventTracer> Executor<T> {
             }
             0x41 => {
                 // COINBASE
-                todo!("COINBASE")
+                evm.push(Word::zero())?;
+                gas = 2.into();
             }
             0x42 => {
                 // TIMESTAMP
@@ -1050,7 +1051,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x46 => {
                 // CHAINID
-                evm.push(Word::one())?; // From TX
+                evm.push(Word::one())?; // TODO: From TX
                 gas = 2.into();
             }
             0x47 => {
@@ -1677,6 +1678,21 @@ impl<T: EventTracer> Executor<T> {
             gas: Gas::new(gas_to_forward), // Use the correctly calculated forwarded gas
             ..Default::default()
         };
+
+        // Apply value transfer BEFORE call execution
+        let mut transferred = false;
+        if !value.is_zero() && !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
+            let sender_address = call.from;
+            let recipient_address = address;
+
+            let sender_balance = ext.balance(&sender_address).await?;
+            if sender_balance >= value {
+                ext.acc_mut(&sender_address).value -= value;
+                ext.acc_mut(&recipient_address).value += value;
+                transferred = true;
+            }
+        }
+
         let inner_ctx = Context {
             depth: ctx.depth + 1,
             ..ctx
@@ -1713,6 +1729,7 @@ impl<T: EventTracer> Executor<T> {
                     "gas_cost": total_gas_cost_for_tracing.as_u64(),
                     "evm.gas.used": evm.gas.used.as_u64(),
                     "evm.gas.refund": evm.gas.refund.as_u64(),
+                    "inner_call.value": value.as_u64(),
                 }),
             },
         });
@@ -1736,6 +1753,12 @@ impl<T: EventTracer> Executor<T> {
             self.ret = ret;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
+            if transferred {
+                let sender_address = call.from;
+                let recipient_address = address;
+                ext.acc_mut(&sender_address).value += value;
+                ext.acc_mut(&recipient_address).value -= value;
+            }
             return Ok(());
         }
 
