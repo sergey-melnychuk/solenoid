@@ -84,7 +84,6 @@ pub async fn trace_all(
             tx.inner.signer(),
             tx.to().unwrap_or_default(),
             tx.value(),
-            tx.gas_limit(),
         );
 
         let result = evm.inspect_tx(tx_env)?;
@@ -148,7 +147,6 @@ pub async fn trace_one(
         tx.inner.signer(),
         tx.to().unwrap_or_default(),
         tx.value(),
-        tx.gas_limit(),
     );
 
     let mut evm = ctx.build_mainnet_with_inspector(&mut tracer);
@@ -198,8 +196,6 @@ pub struct TxTrace {
     pub from: Address,
     pub to: Address,
     pub value: U256,
-    pub gas_limit: u64,
-    pub gas_used: u64,
     pub success: bool,
     pub return_data: Bytes,
     pub traces: Vec<OpcodeTrace>,
@@ -228,15 +224,12 @@ impl TxTrace {
         from: Address,
         to: Address,
         value: U256,
-        gas_limit: u64,
     ) {
         *self = Self {
             hash,
             from,
             to,
             value,
-            gas_limit,
-            gas_used: 0,
             success: false,
             return_data: Bytes::new(),
             traces: Vec::new(),
@@ -321,9 +314,6 @@ where
             // This is the top-level call ending
             self.success = outcome.result.is_ok();
             self.return_data = outcome.result.output.clone();
-            self.gas_used = self
-                .gas_limit
-                .saturating_sub(outcome.result.gas.remaining());
         }
     }
 
@@ -338,9 +328,6 @@ where
             // This is the top-level create ending
             self.success = outcome.result.is_ok();
             self.return_data = outcome.result.output.clone();
-            self.gas_used = self
-                .gas_limit
-                .saturating_sub(outcome.result.gas.remaining());
         }
     }
 

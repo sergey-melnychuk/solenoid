@@ -114,7 +114,7 @@ async fn main() -> Result<()> {
 
     // Execute and trace the transaction
     let mut tracer = TxTrace::default();
-    tracer.setup(B256::ZERO, from, uniswap_v3_quoter, U256::ZERO, 0);
+    tracer.setup(B256::ZERO, from, uniswap_v3_quoter, U256::ZERO);
 
     use revm::InspectEvm as _;
     let mut evm = ctx.build_mainnet_with_inspector(&mut tracer);
