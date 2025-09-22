@@ -1,20 +1,27 @@
 use evm_tracer::OpcodeTrace;
 use serde_json::Value;
 
-// cargo run --release --example check
+// cargo run --release --example check -- revm.log sole.log
 
 fn main() {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
-    let revm_path = args
+    let revm_path = if let Some(path) = args
         .first()
-        .cloned()
-        .unwrap_or_else(|| "revm.log".to_string());
-    println!("NOTE: revm path: {revm_path}");
-    let sole_path = args
+        .cloned() {
+            path
+        } else {
+            println!("NOTE: revm path: revm.log");
+            "revm.log".to_string()
+        };
+    let sole_path = if let Some(path) = args
         .get(1)
-        .cloned()
-        .unwrap_or_else(|| "sole.log".to_string());
-    println!("NOTE: sole path: {sole_path}");
+        .cloned() {
+            path
+        } else {
+            println!("NOTE: sole path: sole.log");
+            "sole.log".to_string()
+        };
+
     let overrides = args.get(2).cloned().unwrap_or_else(|| "{}".to_string());
     let overrides: Value = serde_json::from_str(&overrides).expect("overrides:json");
     let overrides = overrides
@@ -38,7 +45,8 @@ fn main() {
         );
     }
 
-    let mut line = 1;
+    let mut failed = false;
+    let mut line = 0;
     let pairs = revm.into_iter().zip(sole);
     for (trace, block) in pairs {
         if trace.is_empty() ^ block.is_empty() {
@@ -49,23 +57,24 @@ fn main() {
         }
 
         let trace: OpcodeTrace = parse(trace, &overrides);
-
         let block: OpcodeTrace = parse(block, &overrides);
-
         let r = std::panic::catch_unwind(|| {
             pretty_assertions::assert_eq!(block, trace);
         });
 
+        line += 1;
         if r.is_err() {
             eprintln!("LINE: {line}");
+            failed = true;
             break;
         }
 
-        line += 1;
         // TODO: wait for input to continue, like interactive analysis?
     }
 
-    println!("DONE");
+    if !failed {
+        println!("OK");
+    }
 }
 
 fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
