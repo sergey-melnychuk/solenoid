@@ -11,7 +11,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tokio::signal;
 use tokio::{fs, sync::RwLock};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 struct AppState {
     upstream_url: String,
@@ -140,7 +140,7 @@ async fn handle_jsonrpc(
             return (StatusCode::OK, Json(v)).into_response();
         }
 
-        info!(%key, "Cache miss");
+        warn!(%key, "Cache miss");
         match forward(&state, body.clone()).await {
             Ok(resp) => {
                 {
