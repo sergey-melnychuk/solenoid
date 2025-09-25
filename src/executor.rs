@@ -1176,7 +1176,6 @@ impl<T: EventTracer> Executor<T> {
                 sload.insert("val".to_owned(), hex::encode(val.into_bytes()).into());
                 self.debug
                     .insert("SLOAD".to_owned(), serde_json::Value::Object(sload));
-
             }
             0x55 => {
                 // SSTORE

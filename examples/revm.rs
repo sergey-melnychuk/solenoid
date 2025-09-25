@@ -34,7 +34,10 @@ async fn main() -> Result<()> {
     let txs = txs.take(1);
     let traced = evm_tracer::trace_all(txs, &block.header, &client).await?;
     for (result, traces) in traced {
-        eprintln!("---\nRET: {}", hex::encode(&result.result.output().unwrap_or_default()));
+        eprintln!(
+            "---\nRET: {}",
+            hex::encode(&result.result.output().unwrap_or_default())
+        );
         eprintln!("GAS: {}", result.result.gas_used());
         eprintln!("OK: {}", !result.result.is_halt());
         for tr in traces.traces {
