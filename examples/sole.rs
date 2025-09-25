@@ -51,7 +51,20 @@ async fn main() -> eyre::Result<()> {
             .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
             .collect::<Vec<_>>();
         eprintln!("---\nRET: {}", hex::encode(&result.ret));
-        eprintln!("GAS: {}", result.evm.gas.used().as_u64());
+
+        // Calculate transaction costs like in executor.rs:302-312
+        let call_cost = 21000u64;
+        let data_cost = {
+            let total_calldata_len = tx.input.as_ref().len();
+            let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
+            nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
+        };
+        let total_tx_cost = call_cost + data_cost as u64;
+        let final_gas_with_tx_cost = result.evm.gas.finalized().as_u64() + total_tx_cost;
+        // eprintln!("DEBUG: tx_cost={}, execution_gas={}, refunded_gas={}, final_total={}",
+        //           total_tx_cost, result.evm.gas.used.as_u64(), result.evm.gas.refund.as_u64(), final_gas_with_tx_cost);
+        eprintln!("GAS: {}", final_gas_with_tx_cost);
+
         eprintln!("OK: {}", !result.evm.reverted);
         for tr in traces {
             println!("{}", serde_json::to_string(&tr).expect("json"));

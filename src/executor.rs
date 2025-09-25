@@ -217,8 +217,9 @@ impl Gas {
         self.limit.saturating_sub(self.used)
     }
 
-    pub fn used(&self) -> Word {
-        self.used.saturating_sub(self.refund)
+    pub fn finalized(&self) -> Word {
+        let cap = self.refund.min(self.used / Word::from(5));
+        self.used.saturating_sub(cap)
     }
 
     pub fn fork(&self, limit: Word) -> Self {
@@ -235,7 +236,6 @@ impl Gas {
         } else {
             self.refund += (gas as u64).into();
         }
-        // self.refund += gas;
     }
 
     pub fn sub(&mut self, gas: Word) -> Result<(), ExecutorError> {
@@ -1748,6 +1748,10 @@ impl<T: EventTracer> Executor<T> {
 
         let inner_gas_used = inner_evm.gas.used.saturating_sub(stipend_adjustment);
         evm.gas.used += inner_gas_used;
+        evm.gas.refund += inner_evm.gas.refund;
+
+        // keep refund reporting differential, not cumulative
+        evm.refund = evm.gas.refund.as_i64();
 
         if inner_evm.reverted {
             self.ret = ret;

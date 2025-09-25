@@ -82,7 +82,7 @@ async fn main() -> eyre::Result<()> {
 
     println!("✅ Transaction executed successfully!");
     println!("🔄 Reverted: {}", result.evm.reverted);
-    println!("⛽ Gas used: {}", result.evm.gas.used().as_u64());
+    println!("⛽ Gas used: {}", result.evm.gas.finalized().as_u64());
 
     let path = "quoter-sole.log";
     let traces = result
