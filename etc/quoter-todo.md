@@ -2,15 +2,65 @@
 echo "Run Uniswap V3 Quoter V2"
 RUST_LOG=off cargo run --release --example quoter-revm
 RUST_LOG=off cargo run --release --example quoter-sole
-
 cargo run --release --example check -- quoter-revm.log quoter-sole.log
 ```
 ---
 ```
-NOTE: revm path: quoter-revm.log
-NOTE: sole path: quoter-sole.log
+Run Uniswap V3 Quoter V2
+   Compiling solenoid v0.1.0 (/Users/sergey/Private/solenoid)
+    Finished `release` profile [optimized] target(s) in 1.62s
+     Running `target/release/examples/quoter-revm`
+📦 Using block number: 23027350
+c6a5026a
+000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
+000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+0000000000000000000000000000000000000000000000000de0b6b3a7640000
+0000000000000000000000000000000000000000000000000000000000000bb8
+0000000000000000000000000000000000000000000000000000000000000000
+---
+RET:
+00000000000000000000000000000000000000000000000000000000df3da755
+0000000000000000000000000000000000003fbbeb272536a77eac6dce8bfc61
+0000000000000000000000000000000000000000000000000000000000000001
+0000000000000000000000000000000000000000000000000000000000016982
+📊 QuoterV2 Results:
+  💰 Amount Out: 1 WETH for 3745.359701 USDC
+  📊 Price After (WETH/USDC): 3756.4441989793545
+  🎯 Initialized Ticks Crossed: 1
+  ⛽ Gas Estimate: 92546
+✅ Transaction executed successfully!
+🔄 Reverted: false
+⛽ Gas used: 130917
+TRACES: 9221 in quoter-revm.log
+   Compiling solenoid v0.1.0 (/Users/sergey/Private/solenoid)
+    Finished `release` profile [optimized] target(s) in 1.62s
+     Running `target/release/examples/quoter-sole`
+📦 Using block number: 23027350
+c6a5026a
+000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
+000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+0000000000000000000000000000000000000000000000000de0b6b3a7640000
+0000000000000000000000000000000000000000000000000000000000000bb8
+0000000000000000000000000000000000000000000000000000000000000000
+---
+RET:
+00000000000000000000000000000000000000000000000000000000df3da755
+0000000000000000000000000000000000003fbbeb272536a77eac6dce8bfc61
+0000000000000000000000000000000000000000000000000000000000000001
+0000000000000000000000000000000000000000000000000000000000016982
+📊 QuoterV2 Results:
+  💰 Amount Out: 1 WETH for 3745.359701 USDC
+  📊 Price After (WETH/USDC): 3756.4441989793545
+  🎯 Initialized Ticks Crossed: 1
+  ⛽ Gas Estimate: 16982 [HERE: 92546]
+✅ Transaction executed successfully!
+🔄 Reverted: false
+⛽ Gas used: 104637 [HERE: 130917]
+TRACES: 9221 in quoter-sole.log
+    Finished `release` profile [optimized] target(s) in 0.11s
+     Running `target/release/examples/check quoter-revm.log quoter-sole.log`
 
-thread 'main' panicked at examples/check.rs:56:13:
+thread 'main' panicked at examples/check.rs:64:13:
 assertion failed: `(left == right)`
 
 Diff < left / right > :
@@ -77,8 +127,8 @@ Diff < left / right > :
          41734724954537063354143220231105518604284272460604338329227324338126819205929,
          57289264808750748231131402414942728361445565896492682018930884235022624096256,
          0,
->        0, \\ revm has extra 6x32 bytes of empty trailing memory after STATICCALL???
->        0, \\ TODO: ^
+>        0,
+>        0,
 >        0,
 >        0,
 >        0,
@@ -92,6 +142,7 @@ Diff < left / right > :
 <            "gas_cost": Number(843040),
 <            "evm.gas.used": Number(3404),
 <            "evm.gas.refund": Number(0),
+<            "inner_call.value": Number(0),
 >            "gas_left": Number(13379),
          },
      },
