@@ -11,7 +11,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use tokio::signal;
 use tokio::{fs, sync::RwLock};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 struct AppState {
     upstream_url: String,
@@ -24,7 +24,7 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
 
     let bind_addr: SocketAddr = std::env::var("BIND_ADDR")
@@ -117,6 +117,7 @@ async fn handle_jsonrpc(
     };
 
     let method = obj.get("method").and_then(|v| v.as_str()).unwrap_or("");
+    debug!(method, "Request");
     let cacheable = matches!(
         method,
         "eth_getCode"
