@@ -20,8 +20,6 @@ struct AppState {
     persistent: RwLock<HashMap<String, Value>>,
 }
 
-// TODO: Add proper logging
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -32,9 +30,8 @@ async fn main() {
         .parse()
         .expect("invalid BIND_ADDR");
 
-    let upstream_url = std::env::var("URL1").unwrap_or_else(|_| {
-        // Default to public Cloudflare endpoint if not provided
-        "https://cloudflare-eth.com".to_string()
+    let upstream_url = std::env::var("URL").unwrap_or_else(|_| {
+        "https://ethereum-rpc.publicnode.com".to_string()
     });
 
     let cache_file: PathBuf = std::env::var("CACHE_FILE")
@@ -117,6 +114,8 @@ async fn handle_jsonrpc(
     };
 
     let method = obj.get("method").and_then(|v| v.as_str()).unwrap_or("");
+    let params = obj.get("params").cloned().unwrap_or_else(|| json!([]));
+
     debug!(method, "Request");
     let cacheable = matches!(
         method,
@@ -128,8 +127,17 @@ async fn handle_jsonrpc(
             | "eth_getBlockByNumber"
     );
 
+    let is_latest_block = (method == "eth_getBlockByNumber" || method == "eth_getBlockByHash")
+        && (params
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|last| last.as_str())
+            .map(|last| last == "latest")
+            .unwrap_or_default());
+
+    let cacheable = cacheable && !is_latest_block;
+
     if cacheable {
-        let params = obj.get("params").cloned().unwrap_or_else(|| json!([]));
         let key = cache_key(method, &params);
 
         // Check persistent map
@@ -144,7 +152,7 @@ async fn handle_jsonrpc(
         warn!(%key, "Cache miss");
         match forward(&state, body.clone()).await {
             Ok(resp) => {
-                {
+                if resp.get("error").is_none() {
                     let mut store = state.persistent.write().await;
                     store.insert(key, resp.clone());
                 }
