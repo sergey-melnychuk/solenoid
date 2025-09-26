@@ -23,7 +23,7 @@ async fn main() -> eyre::Result<()> {
     let url = std::env::var("URL")?;
     let eth = eth::EthClient::new(&url);
 
-    let number = 23027350; // 0x15f5e96
+    let number = 23448157;
     let header = eth.get_block_header(Word::from(number)).await?;
     let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
 

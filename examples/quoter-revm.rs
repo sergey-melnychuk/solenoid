@@ -22,7 +22,7 @@ async fn main() -> Result<()> {
     let url = std::env::var("URL")?.parse()?;
     let client = ProviderBuilder::new().connect_http(url);
 
-    let number = 23027350; // 0x15f5e96
+    let number = 23448157;
 
     // Get latest block header for context
     let block = client
@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
         })
         .modify_cfg_chained(|c| {
             c.chain_id = 1;
+            c.disable_nonce_check = true;
         });
 
     // Prepare the call data (same as quoter example)
@@ -95,10 +96,6 @@ async fn main() -> Result<()> {
     }
     eprintln!("---");
 
-    // Get the correct nonce for the sender
-    // let nonce = client.get_transaction_count(from).await?;
-    let nonce = 2; // no way to query nonce at given block apparently
-
     // Create transaction environment (using minimal gas price for quoter call)
     let tx_env = TxEnv::builder()
         .caller(from)
@@ -106,7 +103,6 @@ async fn main() -> Result<()> {
         .value(U256::ZERO)
         .data(Bytes::from(call_data))
         .chain_id(Some(1))
-        .nonce(nonce)
         .gas_price(1u128) // Minimal gas price
         .kind(TxKind::Call(uniswap_v3_quoter))
         .build()
