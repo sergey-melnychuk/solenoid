@@ -80,9 +80,21 @@ async fn main() -> eyre::Result<()> {
         decode_quoter_output(&result.ret, amount_in);
     }
 
+    let call_cost = 21000i64;
+    let data_cost = {
+        let total_calldata_len = args.len();
+        let nonzero_bytes_count = args.iter().filter(|byte| *byte != &0).count();
+        nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
+    };
+    let total_tx_cost = call_cost + data_cost as i64;
+    let final_gas_with_tx_cost = result.evm.gas.finalized() + total_tx_cost;
+    eprintln!("DEBUG: tx_cost={}, execution_gas={}, refunded_gas={}, final_total={}",
+          total_tx_cost, result.evm.gas.used, result.evm.gas.refund, final_gas_with_tx_cost);
+
     println!("✅ Transaction executed successfully!");
     println!("🔄 Reverted: {}", result.evm.reverted);
-    println!("⛽ Gas used: {}", result.evm.gas.finalized());
+    println!("⛽ Gas used: {}", final_gas_with_tx_cost);
+    // TODO: FIXME: 4064 gas still missing ¯\_(ツ)_/¯ (revm=123290 sole=119226)
 
     let path = "quoter-sole.log";
     let traces = result
