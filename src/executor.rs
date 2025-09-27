@@ -1065,7 +1065,6 @@ impl<T: EventTracer> Executor<T> {
                     .insert("SELFBALANCE".to_string(), selfbalance.into());
 
                 // TODO: touch account
-                let balance = Word::from_hex("0x7af6c7f2729115eee").unwrap();
                 evm.push(balance)?;
                 gas = 5.into();
             }
@@ -1618,7 +1617,11 @@ impl<T: EventTracer> Executor<T> {
         let ret_size = evm.pop()?.as_usize();
 
         // Calculate address access cost (EIP-2929)
-        let access_cost = evm.address_access_cost(&address, ext).as_i64();
+        let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
+        if args_size == 0 && access_cost > 100 {
+            // value-transfer only call (empty calldata)
+            access_cost -= 2500;
+        }
 
         let (bytecode, codehash) = evm.code(ext, &address).await?;
         let code = Decoder::decode(bytecode);
@@ -1658,14 +1661,13 @@ impl<T: EventTracer> Executor<T> {
         let all_but_one_64th = remaining_gas.saturating_sub(remaining_gas / 64);
         let gas_to_forward = call_gas.as_i64().min(all_but_one_64th) + gas_stipend_adjustment;
 
-        // let gas_to_forward = gas_to_forward + gas_stipend_adjustment;
-
         // For EVM accounting: only charge the outer EVM for base cost
         // (forwarded gas was already "spent" by allocating it to inner call)
         *gas = (base_gas_cost.abs() as u64).into();
 
+        let data = &evm.memory[args_offset..args_offset + args_size];
         let inner_call = Call {
-            data: evm.memory[args_offset..args_offset + args_size].to_vec(),
+            data: data.to_vec(),
             value,
             from: if matches!(ctx.call_type, CallType::Delegate | CallType::Callcode) {
                 call.from
@@ -1687,13 +1689,10 @@ impl<T: EventTracer> Executor<T> {
         // Apply value transfer BEFORE call execution
         let mut transferred = false;
         if !value.is_zero() && !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
-            let sender_address = call.from;
-            let recipient_address = address;
-
-            let sender_balance = ext.balance(&sender_address).await?;
+            let sender_balance = ext.balance(&call.from).await?;
             if sender_balance >= value {
-                ext.acc_mut(&sender_address).value -= value;
-                ext.acc_mut(&recipient_address).value += value;
+                ext.acc_mut(&call.from).value -= value;
+                ext.acc_mut(&address).value += value;
                 transferred = true;
             }
         }
@@ -1739,6 +1738,7 @@ impl<T: EventTracer> Executor<T> {
                     "call.input": hex::encode(&evm.memory[args_offset..args_offset + args_size]),
                     "call.value": value,
                     "call.gas": call_gas.as_u64(),
+                    "access_cost": access_cost,
                 }),
             },
         });
@@ -1785,7 +1785,7 @@ impl<T: EventTracer> Executor<T> {
                 }
             }
         }
-        // Preserve the actual return data as-is for RETURNDATA opcodes
+        // Preserve the actual return data as-is for RETURNDATA* opcodes
         self.ret = ret;
         for entry in inner_evm.account {
             evm.account.push(entry);
@@ -1815,6 +1815,8 @@ impl<T: EventTracer> Executor<T> {
         } else {
             Word::zero()
         };
+
+        // HERE: TODO: apply proper create costs (Create: Scenario 2 - From-Code Create)
 
         if offset + size > evm.memory.len() {
             if offset + size > ALLOCATION_SANITY_LIMIT {

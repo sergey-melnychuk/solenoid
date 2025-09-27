@@ -2,6 +2,8 @@ use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::network::primitives::BlockTransactions;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::eyre::{self, Result};
+use solenoid::common::hash;
+use solenoid::common::word::Word;
 
 // cargo run --release --example revm > revm.log
 
@@ -31,13 +33,16 @@ async fn main() -> Result<()> {
     eprintln!("📦 Fetched block number: {}", block.header.number);
 
     let txs = txs.into_iter();
-    let txs = txs.skip(1).take(1);
+    let txs = txs.skip(4).take(1);
     let traced = evm_tracer::trace_all(txs, &block.header, &client).await?;
     for (result, traces) in traced {
-        eprintln!(
-            "---\nRET: {}",
-            hex::encode(&result.result.output().unwrap_or_default())
-        );
+        let ret = result.result.output().unwrap_or_default().as_ref();
+        eprintln!("---");
+        if ret.len() <= 512 {
+            eprintln!("RET: {}", hex::encode(ret));
+        } else {
+            eprintln!("RET: len={} hash={}", ret.len(), Word::from_bytes(&hash::keccak256(ret)));
+        }
         eprintln!("GAS: {}", result.result.gas_used());
         eprintln!("OK: {}", !result.result.is_halt());
         for tr in traces.traces {

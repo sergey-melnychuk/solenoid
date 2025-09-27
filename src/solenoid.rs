@@ -191,6 +191,7 @@ impl Builder for TransferBuilder {
 pub struct Runner {
     header: Header,
     call: Call,
+    #[allow(dead_code)] // TODO: sort this out
     code: Vec<u8>,
 }
 
@@ -200,33 +201,51 @@ impl Runner {
         let exe = exe.with_header(self.header);
 
         let code = if self.call.to.is_zero() {
-            Decoder::decode(self.code)
+            Decoder::decode(self.call.data.clone())
         } else {
             let (code, _) = ext.code(&self.call.to).await?;
             Decoder::decode(code)
         };
 
         let mut evm = Evm::new();
+        evm.gas = Gas::new(self.call.gas.as_i64());
+
+        ext.pull(&self.call.from).await?;
+        let nonce = ext.acc_mut(&self.call.from).nonce;
+        let address: Address = self.call.from.of_smart_contract(nonce);
 
         if !self.call.to.is_zero() {
+            // HERE: TODO: apply proper create costs (Create: Scenario 1 - From-Tx Create)
+
+            // Initial gas cost: extra 299036
+            /*
+            (https://www.evm.codes/?fork=cancun#f0)
+
+            minimum_word_size = (size + 31) / 32
+            init_code_cost = 2 * minimum_word_size
+            code_deposit_cost = 200 * deployed_code_size
+
+            static_gas = 32000
+            dynamic_gas = init_code_cost 
+                + memory_expansion_cost 
+                + deployment_code_execution_cost 
+                + code_deposit_cost
+            */
+
             let (tracer, ret) = exe.execute(&code, &self.call, &mut evm, ext).await?;
             return Ok(CallResult {
                 evm,
                 ret,
                 tracer,
-                created: None,
+                created: Some(address),
             });
         };
-
-        let nonce = ext.acc_mut(&self.call.from).nonce;
-        let address: Address = self.call.from.of_smart_contract(nonce);
 
         let ctx = Context {
             created: address,
             call_type: CallType::Create,
             ..Default::default()
         };
-        evm.gas = Gas::new(self.call.gas.as_i64());
         let (tracer, ret) = exe
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
             .await;

@@ -1,6 +1,6 @@
 use eyre::{Context, eyre};
 use solenoid::{
-    common::word::Word,
+    common::{address::addr, hash, word::{word, Word}},
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},
@@ -26,14 +26,34 @@ async fn main() -> eyre::Result<()> {
 
     eprintln!("📦 Fetched block number: {number}");
     let txs = block.transactions.iter();
-    let txs = txs.skip(1).take(1);
+    let txs = txs.skip(4).take(1);
     for tx in txs {
         let idx = tx.index.as_u64();
+
+        // TX:1
         ext.pull(&tx.from).await?;
         ext.acc_mut(&tx.from).value = Word::from_hex("0x90a4a345dbae6ead").unwrap();
-        // eprintln!("TX: {}", tx.hash);
+
+        // TX:2
+        let acc = addr("0x042523db4f3effc33d2742022b2490258494f8b3");
+        ext.pull(&acc).await?;
+        ext.acc_mut(&acc).value = word("0x7af6c7f2729115eee");
+
+        // TX:3
+        let acc = addr("0x0fc7cb62247151faf5e7a948471308145f020d2e");
+        ext.pull(&acc).await?;
+        ext.acc_mut(&acc).value = word("0x7af6c7f2728a1bef0");
+
+        // TX:4
+        let acc = addr("0x8a14ce0fecbefdcc612f340be3324655718ce1c1");
+        ext.pull(&acc).await?;
+        ext.acc_mut(&acc).value = word("0x7af6c7f2728a0e4f0");
+
+        // eprintln!("TX: {tx:#?}");
+        // eprintln!("TX hash: {}", tx.hash);
         // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
         eprintln!("GAS LIMIT: {}", tx.gas.as_u64());
+
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
             .with_header(block.header.clone())
@@ -51,7 +71,12 @@ async fn main() -> eyre::Result<()> {
             .into_iter()
             .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
             .collect::<Vec<_>>();
-        eprintln!("---\nRET: {}", hex::encode(&result.ret));
+        eprintln!("---");
+        if result.ret.len() <= 512 {
+            eprintln!("RET: {}", hex::encode(&result.ret));
+        } else {
+            eprintln!("RET: len={} hash={}", result.ret.len(), Word::from_bytes(&hash::keccak256(&result.ret)));
+        }
 
         // Calculate transaction costs like in executor.rs:302-312
         let call_cost = 21000i64;
@@ -63,7 +88,7 @@ async fn main() -> eyre::Result<()> {
         let total_tx_cost = call_cost + data_cost as i64;
         let final_gas_with_tx_cost = result.evm.gas.finalized() + total_tx_cost;
         // eprintln!("DEBUG: tx_cost={}, execution_gas={}, refunded_gas={}, final_total={}",
-        //           total_tx_cost, result.evm.gas.used.as_u64(), result.evm.gas.refund.as_u64(), final_gas_with_tx_cost);
+        //           total_tx_cost, result.evm.gas.used, result.evm.gas.refund, final_gas_with_tx_cost);
         eprintln!("GAS: {}", final_gas_with_tx_cost);
 
         eprintln!("OK: {}", !result.evm.reverted);
