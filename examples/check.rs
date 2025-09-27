@@ -45,6 +45,8 @@ fn main() {
             sole.len(),
             revm.len()
         );
+    } else {
+        eprintln!("NOTE: len match: {}", sole.len());
     }
 
     let mut failed = false;

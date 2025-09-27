@@ -197,6 +197,6 @@ async fn test_set() -> eyre::Result<()> {
         evm.state,
         vec![StateTouch(to, Word::zero(), Word::zero(), Some(val), 0)]
     );
-    assert_eq!(evm.gas.used.as_usize(), 22309);
+    assert_eq!(evm.gas.used, 22309);
     Ok(())
 }

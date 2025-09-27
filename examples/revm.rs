@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     eprintln!("📦 Fetched block number: {}", block.header.number);
 
     let txs = txs.into_iter();
-    let txs = txs.take(1);
+    let txs = txs.skip(1).take(1);
     let traced = evm_tracer::trace_all(txs, &block.header, &client).await?;
     for (result, traces) in traced {
         eprintln!(

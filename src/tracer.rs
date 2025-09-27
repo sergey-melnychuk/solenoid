@@ -88,9 +88,9 @@ pub enum EventData {
         name: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         data: Option<Hex>,
-        gas_cost: Word,
-        gas_used: Word,
-        gas_left: Word,
+        gas_cost: i64,
+        gas_used: i64,
+        gas_left: i64,
         // #[serde(skip_serializing_if = "Word::is_zero")]
         gas_back: i64,
         stack: Vec<Word>,
@@ -120,7 +120,7 @@ pub enum EventData {
     Return {
         ok: bool,
         data: Hex,
-        gas_used: Word,
+        gas_used: i64,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
     },
@@ -208,7 +208,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 data: _,
                 gas_cost,
                 gas_used,
-                gas_left: _,
+                gas_left,
                 stack,
                 memory,
                 gas_back,
@@ -217,9 +217,9 @@ impl TryFrom<Event> for OpcodeTrace {
                 pc: pc as u64,
                 op,
                 name,
-                gas_used: gas_used.as_u64(),
-                // gas_left: gas_left.as_u64(),
-                gas_cost: gas_cost.as_u64(),
+                gas_used,
+                gas_left,
+                gas_cost,
                 gas_back,
                 stack: stack.into_iter().map(Into::into).collect(),
                 memory: memory.into_iter().map(Into::into).collect(),

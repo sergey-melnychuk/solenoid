@@ -226,7 +226,7 @@ impl Runner {
             call_type: CallType::Create,
             ..Default::default()
         };
-        evm.gas = Gas::new(self.call.gas);
+        evm.gas = Gas::new(self.call.gas.as_i64());
         let (tracer, ret) = exe
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
             .await;

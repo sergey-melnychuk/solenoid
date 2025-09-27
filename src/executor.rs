@@ -141,7 +141,7 @@ impl Evm {
         }
     }
 
-    pub fn gas(&mut self, cost: Word) -> eyre::Result<()> {
+    pub fn gas(&mut self, cost: i64) -> eyre::Result<()> {
         match self.gas.sub(cost) {
             Ok(_) => Ok(()),
             Err(e) => self.error(e.into()),
@@ -199,46 +199,42 @@ impl Evm {
 
 #[derive(Clone, Debug, Default)]
 pub struct Gas {
-    pub limit: Word,
-    pub used: Word,
-    pub refund: Word,
+    pub limit: i64,
+    pub used: i64,
+    pub refund: i64,
 }
 
 impl Gas {
-    pub fn new(limit: Word) -> Self {
+    pub fn new(limit: i64) -> Self {
         Self {
             limit,
-            used: Word::zero(),
-            refund: Word::zero(),
+            used: 0,
+            refund: 0,
         }
     }
 
-    pub fn remaining(&self) -> Word {
-        self.limit.saturating_sub(self.used)
+    pub fn remaining(&self) -> i64 {
+        self.limit - self.used
     }
 
-    pub fn finalized(&self) -> Word {
-        let cap = self.refund.min(self.used / Word::from(5));
+    pub fn finalized(&self) -> i64 {
+        let cap = self.refund.min(self.used / 5);
         self.used.saturating_sub(cap)
     }
 
-    pub fn fork(&self, limit: Word) -> Self {
+    pub fn fork(&self, limit: i64) -> Self {
         Self {
             limit,
-            used: Word::zero(),
-            refund: Word::zero(),
+            used: 0,
+            refund: 0,
         }
     }
 
     pub fn refund(&mut self, gas: i64) {
-        if gas < 0 {
-            self.refund -= (-gas as u64).into();
-        } else {
-            self.refund += (gas as u64).into();
-        }
+        self.refund += gas;
     }
 
-    pub fn sub(&mut self, gas: Word) -> Result<(), ExecutorError> {
+    pub fn sub(&mut self, gas: i64) -> Result<(), ExecutorError> {
         if gas > self.remaining() {
             return Err(ExecutorError::OutOfGas());
         }
@@ -299,16 +295,16 @@ impl<T: EventTracer> Executor<T> {
     ) -> eyre::Result<(T, Vec<u8>)> {
         ext.transient.clear();
 
-        let mut gas = call.gas;
+        let mut gas = call.gas.as_i64();
         let call_cost = 21000;
-        gas -= call_cost.into();
+        gas -= call_cost;
 
         let data_cost = {
             let total_calldata_len = call.data.len();
             let nonzero_bytes_count = call.data.iter().filter(|byte| byte != &&0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         };
-        gas -= data_cost.into();
+        gas -= data_cost as i64;
 
         evm.gas = Gas::new(gas);
 
@@ -326,12 +322,12 @@ impl<T: EventTracer> Executor<T> {
             }
 
             // TODO: EIP-1559 (see: https://www.blocknative.com/blog/eip-1559-fees)
-            let gas_price = Word::one() * 1_000_000.into(); // 100 Gwei
-            let gas_fee = evm.gas.used * gas_price;
-            if src < call.value + gas_fee {
+            let gas_price = 1_000_000; // 100 Gwei
+            let gas_fee = (evm.gas.used * gas_price) as u64;
+            if src.as_u64() < call.value.as_u64() + gas_fee {
                 return Err(ExecutorError::InsufficientFunds {
                     have: src,
-                    need: call.value + gas_fee,
+                    need: call.value + gas_fee.into(),
                 }
                 .into());
             }
@@ -353,17 +349,17 @@ impl<T: EventTracer> Executor<T> {
                 reverted: false,
             });
 
-            ext.acc_mut(&call.from).value -= call.value + gas_fee;
+            ext.acc_mut(&call.from).value -= call.value + gas_fee.into();
             evm.account.push(AccountTouch::SetValue(
                 call.from,
                 src,
-                src - call.value - gas_fee,
+                src - call.value - gas_fee.into(),
             ));
             self.tracer.push(Event {
                 data: EventData::Account(AccountEvent::SetValue {
                     address: call.from,
                     val: src,
-                    new: src - call.value - gas_fee,
+                    new: src - call.value - gas_fee.into(),
                 }),
                 depth: 0,
                 reverted: false,
@@ -449,22 +445,23 @@ impl<T: EventTracer> Executor<T> {
                     format!("{:#06x}: {}", instruction.offset, instruction.opcode.name())
                 })
             {
+                let cost = cost.as_i64();
                 if !instruction.is_call() {
                     // HERE: TODO: remove this label
-                    let refund = evm.gas.refund.as_i64() - evm.refund;
-                    evm.refund = evm.gas.refund.as_i64();
+                    let refund = evm.gas.refund - evm.refund;
+                    evm.refund = evm.gas.refund;
 
-                    self.debug.insert("SRC".to_string(), "not CALL".into());
+                    self.debug.insert("is_call".to_string(), false.into());
                     self.debug.insert(
                         "gas_left".to_string(),
-                        evm.gas.remaining().saturating_sub(cost).as_u64().into(),
+                        (evm.gas.remaining() - cost).into(),
                     );
                     self.debug
-                        .insert("gas_cost".to_string(), cost.as_u64().into());
+                        .insert("gas_cost".to_string(), cost.into());
                     self.debug
-                        .insert("evm.gas.used".to_string(), evm.gas.used.as_u64().into());
+                        .insert("evm.gas.used".to_string(), evm.gas.used.into());
                     self.debug
-                        .insert("evm.gas.back".to_string(), evm.gas.refund.as_u64().into());
+                        .insert("evm.gas.back".to_string(), evm.gas.refund.into());
 
                     self.tracer.push(Event {
                         depth: ctx.depth,
@@ -776,11 +773,10 @@ impl<T: EventTracer> Executor<T> {
             }
             0x1a => {
                 // BYTE
-                let index = evm.pop()?;
+                let index = evm.pop()?.as_usize();
                 let value: Word = evm.pop()?;
-                if index < Word::from(32) {
-                    let byte_index = 31 - index.as_usize();
-                    evm.push(Word::from(value.into_bytes()[byte_index]))?;
+                if index < 32 {
+                    evm.push(Word::from(value.into_bytes()[index]))?;
                 } else {
                     evm.push(Word::zero())?;
                 }
@@ -942,7 +938,9 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3a => {
                 // GASPRICE
-                todo!("GASPRICE") // TODO: From TX
+                // todo!("GASPRICE") // TODO: From TX
+                evm.push(Word::from(1359585713u64))?;
+                gas = 2.into();
             }
             0x3b => {
                 // EXTCODESIZE
@@ -1026,7 +1024,8 @@ impl<T: EventTracer> Executor<T> {
             }
             0x41 => {
                 // COINBASE
-                evm.push(Word::zero())?;
+                // evm.push(Word::zero())?;
+                evm.push(Word::from_hex("0xdadb0d80178819f2319190d340ce9a924f783711").unwrap())?;
                 gas = 2.into();
             }
             0x42 => {
@@ -1066,6 +1065,7 @@ impl<T: EventTracer> Executor<T> {
                     .insert("SELFBALANCE".to_string(), selfbalance.into());
 
                 // TODO: touch account
+                let balance = Word::from_hex("0x7af6c7f2729115eee").unwrap();
                 evm.push(balance)?;
                 gas = 5.into();
             }
@@ -1351,7 +1351,8 @@ impl<T: EventTracer> Executor<T> {
             }
             0x5a => {
                 // GAS
-                evm.push(evm.gas.remaining() - Word::from(2))?;
+                let val = (evm.gas.remaining() - 2) as u64;
+                evm.push(val.into())?;
                 gas = 2.into();
             }
             0x5b => {
@@ -1617,7 +1618,7 @@ impl<T: EventTracer> Executor<T> {
         let ret_size = evm.pop()?.as_usize();
 
         // Calculate address access cost (EIP-2929)
-        let access_cost = evm.address_access_cost(&address, ext);
+        let access_cost = evm.address_access_cost(&address, ext).as_i64();
 
         let (bytecode, codehash) = evm.code(ext, &address).await?;
         let code = Decoder::decode(bytecode);
@@ -1639,24 +1640,29 @@ impl<T: EventTracer> Executor<T> {
             let padding = 32 - (args_offset + args_size) % 32;
             evm.memory.resize(args_offset + args_size + padding % 32, 0);
         }
-        let memory_expansion_cost = evm.memory_expansion_cost();
+        let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
 
         // Calculate base gas cost
         let mut base_gas_cost = access_cost + memory_expansion_cost;
 
+        let mut gas_stipend_adjustment = 0;
+
         // Add value transfer cost if applicable (not for DELEGATECALL/STATICCALL)
         if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) && !value.is_zero() {
-            base_gas_cost += Word::from(9000); // value transfer cost
+            base_gas_cost += 9000; // value transfer cost
+            gas_stipend_adjustment = 2300;
         }
 
         // Calculate available gas for forwarding using "all but one 64th" rule
         let remaining_gas = evm.gas.remaining().saturating_sub(base_gas_cost);
-        let all_but_one_64th = remaining_gas.saturating_sub(remaining_gas / Word::from(64));
-        let gas_to_forward = call_gas.min(all_but_one_64th);
+        let all_but_one_64th = remaining_gas.saturating_sub(remaining_gas / 64);
+        let gas_to_forward = call_gas.as_i64().min(all_but_one_64th) + gas_stipend_adjustment;
+
+        // let gas_to_forward = gas_to_forward + gas_stipend_adjustment;
 
         // For EVM accounting: only charge the outer EVM for base cost
         // (forwarded gas was already "spent" by allocating it to inner call)
-        *gas = base_gas_cost;
+        *gas = (base_gas_cost.abs() as u64).into();
 
         let inner_call = Call {
             data: evm.memory[args_offset..args_offset + args_size].to_vec(),
@@ -1671,10 +1677,10 @@ impl<T: EventTracer> Executor<T> {
             } else {
                 address
             },
-            gas: gas_to_forward, // Use the correctly calculated forwarded gas
+            gas: (gas_to_forward as u64).into(),
         };
         let mut inner_evm = Evm {
-            gas: Gas::new(gas_to_forward), // Use the correctly calculated forwarded gas
+            gas: Gas::new(gas_to_forward),
             ..Default::default()
         };
 
@@ -1705,7 +1711,8 @@ impl<T: EventTracer> Executor<T> {
         let (tracer, ret) = Box::pin(future).await;
 
         // For tracing: report the total cost including forwarded gas (to match REVM)
-        let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward;
+        let total_gas_cost_for_tracing = base_gas_cost 
+            + gas_to_forward.saturating_sub(gas_stipend_adjustment);
 
         // HERE: TODO: remove this label
         self.tracer.push(Event {
@@ -1718,39 +1725,31 @@ impl<T: EventTracer> Executor<T> {
                 data: instruction.argument.clone().map(Into::into),
                 gas_cost: total_gas_cost_for_tracing,
                 gas_used: evm.gas.used + total_gas_cost_for_tracing,
-                gas_left: evm.gas.remaining().saturating_sub(base_gas_cost),
+                gas_left: evm.gas.remaining() - total_gas_cost_for_tracing,
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                 gas_back: 0,
                 extra: json!({
-                    "SRC": "CALL",
-                    "gas_left": evm.gas.remaining().saturating_sub(base_gas_cost).as_u64(),
-                    "gas_cost": total_gas_cost_for_tracing.as_u64(),
-                    "evm.gas.used": evm.gas.used.as_u64(),
-                    "evm.gas.refund": evm.gas.refund.as_u64(),
-                    "inner_call.value": value.as_u64(),
+                    "is_call": true,
+                    "gas_left": evm.gas.remaining() - base_gas_cost,
+                    "gas_cost": total_gas_cost_for_tracing,
+                    "evm.gas.used": evm.gas.used,
+                    "evm.gas.refund": evm.gas.refund,
+                    "call.address": address,
+                    "call.input": hex::encode(&evm.memory[args_offset..args_offset + args_size]),
+                    "call.value": value,
+                    "call.gas": call_gas.as_u64(),
                 }),
             },
         });
         self.tracer.join(tracer, inner_evm.reverted);
 
-        // Normal case: add actual gas used by inner call, minus refunds
-        let needs_stipend_adjustment = !value.is_zero()
-            && inner_evm.gas.used > Word::from(10_000)
-            && matches!(ctx.call_type, CallType::Call);
-
-        let stipend_adjustment = if needs_stipend_adjustment {
-            Word::from(2300)
-        } else {
-            Word::zero()
-        };
-
-        let inner_gas_used = inner_evm.gas.used.saturating_sub(stipend_adjustment);
-        evm.gas.used += inner_gas_used;
+        evm.gas.used += inner_evm.gas.used;
+        evm.gas.used -= gas_stipend_adjustment;
         evm.gas.refund += inner_evm.gas.refund;
 
         // keep refund reporting differential, not cumulative
-        evm.refund = evm.gas.refund.as_i64();
+        evm.refund = evm.gas.refund;
 
         if inner_evm.reverted {
             self.ret = ret;
@@ -1825,7 +1824,7 @@ impl<T: EventTracer> Executor<T> {
             evm.memory.resize(offset + size + padding % 32, 0);
         }
         *gas = evm.memory_expansion_cost() + Word::from(32000);
-        evm.gas(*gas)?;
+        evm.gas(gas.as_i64())?;
 
         let bytecode = evm.memory[offset..offset + size].to_vec();
         let code = Decoder::decode(bytecode);
@@ -1852,7 +1851,7 @@ impl<T: EventTracer> Executor<T> {
             value,
             from: this,
             to: Address::zero(),
-            gas: evm.gas.remaining(),
+            gas: (evm.gas.remaining().abs() as u64).into(),
         };
         let mut inner_evm = Evm {
             gas: Gas::new(evm.gas.remaining()),

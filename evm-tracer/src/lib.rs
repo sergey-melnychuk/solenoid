@@ -62,6 +62,7 @@ pub async fn trace_all(
 
     let mut ret = Vec::new();
     for tx in txs {
+        eprintln!("GAS LIMIT: {}", tx.gas_limit());
         let tx_env = TxEnv::builder()
             .caller(tx.inner.signer())
             .gas_limit(tx.gas_limit())
@@ -71,7 +72,7 @@ pub async fn trace_all(
             .nonce(tx.nonce())
             .gas_price(tx.gas_price().unwrap_or(tx.inner.max_fee_per_gas()))
             .gas_priority_fee(tx.max_priority_fee_per_gas())
-            .access_list(tx.access_list().cloned().unwrap_or_default())
+            // .access_list(tx.access_list().cloned().unwrap_or_default())
             .kind(match tx.to() {
                 Some(to_address) => TxKind::Call(to_address),
                 None => TxKind::Create,
@@ -159,9 +160,9 @@ pub struct OpcodeTrace {
     pub pc: u64,
     pub op: u8,
     pub name: String,
-    pub gas_used: u64,
-    // pub gas_left: u64, // NOTE: temporary disabled
-    pub gas_cost: u64,
+    pub gas_used: i64,
+    pub gas_left: i64,
+    pub gas_cost: i64,
     pub gas_back: i64,
     pub stack: Vec<U256>,
     pub memory: Vec<U256>,
@@ -208,7 +209,7 @@ pub struct TxTrace {
 pub struct Aux {
     pc: u64,
     opcode: u8,
-    gas: u64,
+    gas: i64,
     refund: i64,
     depth: usize,
 }
@@ -260,7 +261,7 @@ where
     fn step(&mut self, interp: &mut Interpreter<INTR>, _context: &mut CTX) {
         self.aux.pc = interp.bytecode.pc() as u64;
         self.aux.opcode = interp.bytecode.opcode();
-        self.aux.gas = interp.gas.remaining();
+        self.aux.gas = interp.gas.remaining() as i64;
         self.aux.refund = interp.gas.refunded();
     }
 
@@ -271,15 +272,15 @@ where
         let refund = interp.gas.refunded() - self.aux.refund;
         self.aux.refund = interp.gas.refunded();
 
-        let gas_cost = self.aux.gas - interp.gas.remaining();
-        self.aux.gas = interp.gas.remaining();
+        let gas_cost = self.aux.gas - interp.gas.remaining() as i64;
+        self.aux.gas = interp.gas.remaining() as i64;
 
         self.traces.push(OpcodeTrace {
             pc: self.aux.pc,
             op: self.aux.opcode,
             name: aux::opcode_name(self.aux.opcode).to_string(),
-            gas_used: interp.gas.spent(),
-            // gas_left: interp.gas.remaining(),
+            gas_used: interp.gas.spent() as i64,
+            gas_left: interp.gas.remaining() as i64,
             gas_cost,
             gas_back: refund,
             stack,

@@ -26,13 +26,14 @@ async fn main() -> eyre::Result<()> {
 
     eprintln!("📦 Fetched block number: {number}");
     let txs = block.transactions.iter();
-    let txs = txs.take(1);
+    let txs = txs.skip(1).take(1);
     for tx in txs {
         let idx = tx.index.as_u64();
         ext.pull(&tx.from).await?;
         ext.acc_mut(&tx.from).value = Word::from_hex("0x90a4a345dbae6ead").unwrap();
         // eprintln!("TX: {}", tx.hash);
         // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
+        eprintln!("GAS LIMIT: {}", tx.gas.as_u64());
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
             .with_header(block.header.clone())
@@ -53,14 +54,14 @@ async fn main() -> eyre::Result<()> {
         eprintln!("---\nRET: {}", hex::encode(&result.ret));
 
         // Calculate transaction costs like in executor.rs:302-312
-        let call_cost = 21000u64;
+        let call_cost = 21000i64;
         let data_cost = {
             let total_calldata_len = tx.input.as_ref().len();
             let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         };
-        let total_tx_cost = call_cost + data_cost as u64;
-        let final_gas_with_tx_cost = result.evm.gas.finalized().as_u64() + total_tx_cost;
+        let total_tx_cost = call_cost + data_cost as i64;
+        let final_gas_with_tx_cost = result.evm.gas.finalized() + total_tx_cost;
         // eprintln!("DEBUG: tx_cost={}, execution_gas={}, refunded_gas={}, final_total={}",
         //           total_tx_cost, result.evm.gas.used.as_u64(), result.evm.gas.refund.as_u64(), final_gas_with_tx_cost);
         eprintln!("GAS: {}", final_gas_with_tx_cost);
