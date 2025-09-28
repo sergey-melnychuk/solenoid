@@ -1616,6 +1616,8 @@ impl<T: EventTracer> Executor<T> {
         let ret_offset = evm.pop()?.as_usize();
         let ret_size = evm.pop()?.as_usize();
 
+        // TODO: Add handling of precompiled methods for dedicated addresses
+
         // Calculate address access cost (EIP-2929)
         let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
         if args_size == 0 && access_cost > 100 {

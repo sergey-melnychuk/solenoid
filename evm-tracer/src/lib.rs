@@ -62,7 +62,7 @@ pub async fn trace_all(
 
     let mut ret = Vec::new();
     for tx in txs {
-        eprintln!("GAS LIMIT: {}", tx.gas_limit());
+        // eprintln!("GAS LIMIT: {}", tx.gas_limit());
         let tx_env = TxEnv::builder()
             .caller(tx.inner.signer())
             .gas_limit(tx.gas_limit())
@@ -72,6 +72,7 @@ pub async fn trace_all(
             .nonce(tx.nonce())
             .gas_price(tx.gas_price().unwrap_or(tx.inner.max_fee_per_gas()))
             .gas_priority_fee(tx.max_priority_fee_per_gas())
+            // TODO: add access list support (gas & cold -> warm access costs)
             // .access_list(tx.access_list().cloned().unwrap_or_default())
             .kind(match tx.to() {
                 Some(to_address) => TxKind::Call(to_address),
