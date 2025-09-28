@@ -208,7 +208,22 @@ impl Runner {
         };
 
         let mut evm = Evm::new();
-        evm.gas = Gas::new(self.call.gas.as_i64());
+
+        let upfront_gas_reduction = if self.call.to.is_zero() {
+            let call_cost = 21000i64;
+            let data_cost = {
+                let total_calldata_len = self.call.data.len();
+                let nonzero_bytes_count = self.call.data.iter().filter(|byte| *byte != &0).count();
+                nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
+            } as i64;
+            let create_cost = 32000i64;
+            let init_code_cost = 2 * self.call.data.len().div_ceil(32) as i64;
+            data_cost + create_cost + call_cost + init_code_cost
+        } else {
+            0
+        };
+
+        evm.gas = Gas::new(self.call.gas.as_i64() - upfront_gas_reduction);
 
         ext.pull(&self.call.from).await?;
         let nonce = ext.acc_mut(&self.call.from).nonce;

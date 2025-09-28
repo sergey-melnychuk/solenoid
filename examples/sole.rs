@@ -87,7 +87,7 @@ async fn main() -> eyre::Result<()> {
             } as i64;
             let exec_cost = result.evm.gas.finalized();
             let total_gas = call_cost + data_cost + exec_cost;
-            eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
+            // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
             eprintln!("GAS: {total_gas}");
         } else {
             /*
@@ -110,16 +110,16 @@ async fn main() -> eyre::Result<()> {
                 let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
                 nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
             } as i64;
-            let exec_cost = result.evm.gas.finalized();
-
             let create_cost = 32000i64;
             let init_code_cost = 2 * tx.input.as_ref().len().div_ceil(32) as i64;
+
+            let exec_cost = result.evm.gas.finalized();
             let deployed_code_cost = 200 * result.ret.len() as i64;
 
-            let total_gas = call_cost + data_cost + exec_cost + create_cost + init_code_cost + deployed_code_cost;
-            eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
-            eprintln!("DEBUG: create_cost={create_cost}, init_code_cost={init_code_cost}, deployed_code_cost={deployed_code_cost}");
-            eprintln!("GAS: {total_gas} [created: {}]", result.created.expect("contract should have been created"));
+            let total_gas = call_cost + data_cost + create_cost + init_code_cost + exec_cost + deployed_code_cost;
+            // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
+            // eprintln!("DEBUG: create_cost={create_cost}, init_code_cost={init_code_cost}, deployed_code_cost={deployed_code_cost}");
+            eprintln!("GAS: {total_gas} [created={}]", result.created.expect("contract should have been created"));
         }
 
         eprintln!("OK: {}", !result.evm.reverted);
