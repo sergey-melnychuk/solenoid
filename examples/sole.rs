@@ -17,16 +17,23 @@ async fn main() -> eyre::Result<()> {
     let url = std::env::var("URL")?;
     let eth = eth::EthClient::new(&url);
 
-    // let (number, _) = eth.get_latest_block().await?;
-    let number = 23027350; // 0x15f5e96
+    let block_number = std::env::args()
+        .nth(1)
+        .and_then(|number| number.parse::<u64>().ok())
+        .unwrap_or(23027350); // https://xkcd.com/221/
 
-    let block = eth.get_full_block(Word::from(number)).await?;
+    let skip = std::env::args()
+        .nth(2)
+        .and_then(|number| number.parse::<usize>().ok())
+        .unwrap_or(0);
 
-    let mut ext = Ext::at_number(Word::from(number - 1), eth).await?;
+    let block = eth.get_full_block(Word::from(block_number)).await?;
 
-    eprintln!("📦 Fetched block number: {number}");
+    let mut ext = Ext::at_number(Word::from(block_number - 1), eth).await?;
+
+    eprintln!("📦 Fetched block number: {block_number}");
     let txs = block.transactions.iter();
-    let txs = txs.skip(4).take(1);
+    let txs = txs.skip(skip).take(1);
     for tx in txs {
         let idx = tx.index.as_u64();
 
@@ -48,6 +55,18 @@ async fn main() -> eyre::Result<()> {
         let acc = addr("0x8a14ce0fecbefdcc612f340be3324655718ce1c1");
         ext.pull(&acc).await?;
         ext.acc_mut(&acc).value = word("0x7af6c7f2728a0e4f0");
+
+        // TX:5
+        let acc = addr("0x8778f133d11e81a05f5210b317fb56115b95c7bc");
+        ext.pull(&acc).await?;
+        ext.acc_mut(&acc).value = word("0x7af6c7f27291f2ff0");
+
+        // TX:6 - OK
+
+        // TX:7 - precompile 0x1 (ecrecover) missing
+        let acc = addr("0xbb318a1ab8e46dfd93b3b0bca3d0ebf7d00187b9");
+        ext.pull(&acc).await?;
+        ext.acc_mut(&acc).value = word("0x");
 
         // eprintln!("TX: {tx:#?}");
         // eprintln!("TX hash: {}", tx.hash);
@@ -123,9 +142,10 @@ async fn main() -> eyre::Result<()> {
         }
 
         eprintln!("OK: {}", !result.evm.reverted);
-        for tr in traces {
-            println!("{}", serde_json::to_string(&tr).expect("json"));
-        }
+
+        let path = format!("sole.{block_number}.{skip}.log");
+        evm_tracer::aux::dump(&path, &traces)?;
+        println!("TRACES: {} in {path}", traces.len());
     }
     Ok(())
 }

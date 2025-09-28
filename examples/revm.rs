@@ -17,6 +17,12 @@ async fn main() -> Result<()> {
         .nth(1)
         .and_then(|number| number.parse::<u64>().ok())
         .unwrap_or(23027350); // https://xkcd.com/221/
+
+    let skip = std::env::args()
+        .nth(2)
+        .and_then(|number| number.parse::<usize>().ok())
+        .unwrap_or(0);
+
     let block = match client
         .get_block_by_number(BlockNumberOrTag::Number(block_number))
         .full()
@@ -33,7 +39,7 @@ async fn main() -> Result<()> {
     eprintln!("📦 Fetched block number: {}", block.header.number);
 
     let txs = txs.into_iter();
-    let txs = txs.skip(4).take(1);
+    let txs = txs.skip(skip).take(1);
     let traced = evm_tracer::trace_all(txs, &block.header, &client).await?;
     for (result, traces) in traced {
         let ret = result.result.output().unwrap_or_default().as_ref();
@@ -45,9 +51,10 @@ async fn main() -> Result<()> {
         }
         eprintln!("GAS: {}", result.result.gas_used());
         eprintln!("OK: {}", !result.result.is_halt());
-        for tr in traces.traces {
-            println!("{}", serde_json::to_string(&tr).expect("json"));
-        }
+
+        let path = format!("revm.{block_number}.{skip}.log");
+        evm_tracer::aux::dump(&path, &traces.traces)?;
+        println!("TRACES: {} in {path}", traces.traces.len());
     }
     Ok(())
 }
