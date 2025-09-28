@@ -71,7 +71,6 @@ fn main() -> eyre::Result<()> {
             failed = true;
         }
 
-        // TODO: wait for input to continue, like interactive analysis?
         if is_failed {
             enable_raw_mode()?;
             let event = read()?;

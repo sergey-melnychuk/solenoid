@@ -5,6 +5,9 @@ RUST_LOG=off cargo run --release --example quoter-sole
 cargo run --release --example quoter-check -- quoter-revm.log quoter-sole.log
 ```
 ---
+https://etherscan.io/tx/0xffa1bc20bf7d06dfaef74f5ef4dad97bfc61be3a67c2cfcc6effab877fd12ccb
+https://etherscan.io/tx/0x6b0cbad43e14eecfafe56889af8a2e986fdb8d6b277b6109237d805237ce0890
+---
 ```
 Run Uniswap V3 Quoter V2
 === REVM ===

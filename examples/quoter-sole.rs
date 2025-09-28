@@ -85,15 +85,14 @@ async fn main() -> eyre::Result<()> {
         let total_calldata_len = args.len();
         let nonzero_bytes_count = args.iter().filter(|byte| *byte != &0).count();
         nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
-    };
-    let total_tx_cost = call_cost + data_cost as i64;
-    let final_gas_with_tx_cost = result.evm.gas.finalized() + total_tx_cost;
-    eprintln!("DEBUG: tx_cost={}, execution_gas={}, refunded_gas={}, final_total={}",
-          total_tx_cost, result.evm.gas.used, result.evm.gas.refund, final_gas_with_tx_cost);
+    } as i64;
+    let exec_cost = result.evm.gas.finalized();
+    let total_gas = call_cost + data_cost + exec_cost;
+    eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
 
     println!("✅ Transaction executed successfully!");
     println!("🔄 Reverted: {}", result.evm.reverted);
-    println!("⛽ Gas used: {}", final_gas_with_tx_cost);
+    println!("⛽ Gas used: {total_gas}");
     // TODO: FIXME: 4064 gas still missing ¯\_(ツ)_/¯ (revm=123290 sole=119226)
 
     let path = "quoter-sole.log";

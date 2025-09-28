@@ -1,7 +1,8 @@
+use crossterm::{event::{read, KeyCode}, terminal::{disable_raw_mode, enable_raw_mode}};
 use evm_tracer::OpcodeTrace;
 use serde_json::Value;
 
-fn main() {
+fn main() -> eyre::Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     let revm_path = if let Some(path) = args.first().cloned() {
         path
@@ -65,16 +66,29 @@ fn main() {
         });
 
         line += 1;
-        if r.is_err() {
+        let is_failed = r.is_err();
+        if is_failed {
             eprintln!("LINE: {line}");
             failed = true;
-            break;
+        }
+
+        if is_failed {
+            enable_raw_mode()?;
+            let event = read()?;
+            disable_raw_mode()?;
+            if let Some(event) = event.as_key_press_event() {
+                match event.code {
+                    KeyCode::Char('n') => continue,
+                    _ => break
+                }
+            }
         }
     }
 
     if !failed {
         println!("OK");
     }
+    Ok(())
 }
 
 fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
