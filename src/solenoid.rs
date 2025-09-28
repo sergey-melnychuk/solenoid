@@ -215,23 +215,6 @@ impl Runner {
         let address: Address = self.call.from.of_smart_contract(nonce);
 
         if !self.call.to.is_zero() {
-            // HERE: TODO: apply proper create costs (Create: Scenario 1 - From-Tx Create)
-
-            // Initial gas cost: extra 299036
-            /*
-            (https://www.evm.codes/?fork=cancun#f0)
-
-            minimum_word_size = (size + 31) / 32
-            init_code_cost = 2 * minimum_word_size
-            code_deposit_cost = 200 * deployed_code_size
-
-            static_gas = 32000
-            dynamic_gas = init_code_cost 
-                + memory_expansion_cost 
-                + deployment_code_execution_cost 
-                + code_deposit_cost
-            */
-
             let (tracer, ret) = exe.execute(&code, &self.call, &mut evm, ext).await?;
             return Ok(CallResult {
                 evm,

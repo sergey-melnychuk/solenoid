@@ -78,18 +78,49 @@ async fn main() -> eyre::Result<()> {
             eprintln!("RET: len={} hash={}", result.ret.len(), Word::from_bytes(&hash::keccak256(&result.ret)));
         }
 
-        // Calculate transaction costs like in executor.rs:302-312
-        let call_cost = 21000i64;
-        let data_cost = {
-            let total_calldata_len = tx.input.as_ref().len();
-            let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
-            nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
-        };
-        let total_tx_cost = call_cost + data_cost as i64;
-        let final_gas_with_tx_cost = result.evm.gas.finalized() + total_tx_cost;
-        // eprintln!("DEBUG: tx_cost={}, execution_gas={}, refunded_gas={}, final_total={}",
-        //           total_tx_cost, result.evm.gas.used, result.evm.gas.refund, final_gas_with_tx_cost);
-        eprintln!("GAS: {}", final_gas_with_tx_cost);
+        if tx.to.is_some() {
+            let call_cost = 21000i64;
+            let data_cost = {
+                let total_calldata_len = tx.input.as_ref().len();
+                let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
+                nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
+            } as i64;
+            let exec_cost = result.evm.gas.finalized();
+            let total_gas = call_cost + data_cost + exec_cost;
+            eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
+            eprintln!("GAS: {total_gas}");
+        } else {
+            /*
+            (https://www.evm.codes/?fork=cancun#f0)
+
+            minimum_word_size = (size + 31) / 32
+            init_code_cost = 2 * minimum_word_size
+            code_deposit_cost = 200 * deployed_code_size
+
+            static_gas = 32000
+            dynamic_gas = init_code_cost
+                + memory_expansion_cost
+                + deployment_code_execution_cost
+                + code_deposit_cost
+            */
+
+            let call_cost = 21000i64;
+            let data_cost = {
+                let total_calldata_len = tx.input.as_ref().len();
+                let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
+                nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
+            } as i64;
+            let exec_cost = result.evm.gas.finalized();
+
+            let create_cost = 32000i64;
+            let init_code_cost = 2 * tx.input.as_ref().len().div_ceil(32) as i64;
+            let deployed_code_cost = 200 * result.ret.len() as i64;
+
+            let total_gas = call_cost + data_cost + exec_cost + create_cost + init_code_cost + deployed_code_cost;
+            eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
+            eprintln!("DEBUG: create_cost={create_cost}, init_code_cost={init_code_cost}, deployed_code_cost={deployed_code_cost}");
+            eprintln!("GAS: {total_gas} [created: {}]", result.created.expect("contract should have been created"));
+        }
 
         eprintln!("OK: {}", !result.evm.reverted);
         for tr in traces {
