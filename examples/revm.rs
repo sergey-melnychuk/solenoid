@@ -5,8 +5,6 @@ use evm_tracer::eyre::{self, Result};
 use solenoid::common::hash;
 use solenoid::common::word::Word;
 
-// cargo run --release --example revm > revm.log
-
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
@@ -16,7 +14,7 @@ async fn main() -> Result<()> {
     let block_number = std::env::args()
         .nth(1)
         .and_then(|number| number.parse::<u64>().ok())
-        .unwrap_or(23027350); // https://xkcd.com/221/
+        .unwrap_or(23027350);
 
     let skip = std::env::args()
         .nth(2)

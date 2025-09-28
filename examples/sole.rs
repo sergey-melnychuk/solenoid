@@ -1,13 +1,20 @@
 use eyre::{Context, eyre};
 use solenoid::{
-    common::{address::addr, hash, word::{word, Word}},
+    common::{address::{addr, Address}, hash, word::Word},
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},
     tracer::EventTracer,
 };
 
-// RUST_LOG=off cargo run --release --example sole > sole.log
+async fn patch(ext: &mut Ext, acc: &Address, val: &str) -> eyre::Result<()> {
+    ext.pull(&acc).await?;
+    let old = ext.acc_mut(&acc).value;
+    let val = Word::from_hex(val)?;
+    ext.acc_mut(&acc).value = val;
+    eprintln!("PATCH: {acc} balance {old} -> {val}");
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -37,41 +44,17 @@ async fn main() -> eyre::Result<()> {
     for tx in txs {
         let idx = tx.index.as_u64();
 
-        // TX:1
-        ext.pull(&tx.from).await?;
-        ext.acc_mut(&tx.from).value = Word::from_hex("0x90a4a345dbae6ead").unwrap();
-
-        // TX:2
-        let acc = addr("0x042523db4f3effc33d2742022b2490258494f8b3");
-        ext.pull(&acc).await?;
-        ext.acc_mut(&acc).value = word("0x7af6c7f2729115eee");
-
-        // TX:3
-        let acc = addr("0x0fc7cb62247151faf5e7a948471308145f020d2e");
-        ext.pull(&acc).await?;
-        ext.acc_mut(&acc).value = word("0x7af6c7f2728a1bef0");
-
-        // TX:4
-        let acc = addr("0x8a14ce0fecbefdcc612f340be3324655718ce1c1");
-        ext.pull(&acc).await?;
-        ext.acc_mut(&acc).value = word("0x7af6c7f2728a0e4f0");
-
-        // TX:5
-        let acc = addr("0x8778f133d11e81a05f5210b317fb56115b95c7bc");
-        ext.pull(&acc).await?;
-        ext.acc_mut(&acc).value = word("0x7af6c7f27291f2ff0");
-
-        // TX:6 - OK
-
-        // TX:7 - precompile 0x1 (ecrecover) missing
-        let acc = addr("0xbb318a1ab8e46dfd93b3b0bca3d0ebf7d00187b9");
-        ext.pull(&acc).await?;
-        ext.acc_mut(&acc).value = word("0x");
+        patch(&mut ext, &tx.from, "0x90a4a345dbae6ead").await?; // TX:1
+        patch(&mut ext, &addr("0x042523db4f3effc33d2742022b2490258494f8b3"), "0x7af6c7f2729115eee").await?; // TX:2
+        patch(&mut ext, &addr("0x0fc7cb62247151faf5e7a948471308145f020d2e"), "0x7af6c7f2728a1bef0").await?; // TX:3
+        patch(&mut ext, &addr("0x8a14ce0fecbefdcc612f340be3324655718ce1c1"), "0x7af6c7f2728a0e4f0").await?; // TX:4
+        patch(&mut ext, &addr("0x8778f133d11e81a05f5210b317fb56115b95c7bc"), "0x7af6c7f27291f2ff0").await?; // TX:5
+        // TODO: (TX:7) precompile 0x1 (ecrecover) is needed
 
         // eprintln!("TX: {tx:#?}");
         // eprintln!("TX hash: {}", tx.hash);
         // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
-        eprintln!("GAS LIMIT: {}", tx.gas.as_u64());
+        // eprintln!("GAS LIMIT: {}", tx.gas.as_u64());
 
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
@@ -110,7 +93,7 @@ async fn main() -> eyre::Result<()> {
             eprintln!("GAS: {total_gas}");
         } else {
             /*
-            (https://www.evm.codes/?fork=cancun#f0)
+            (See: https://www.evm.codes/?fork=cancun#f0)
 
             minimum_word_size = (size + 31) / 32
             init_code_cost = 2 * minimum_word_size
