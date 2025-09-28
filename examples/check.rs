@@ -1,22 +1,20 @@
+use crossterm::{event::{read, KeyCode}, terminal::{disable_raw_mode, enable_raw_mode}};
 use evm_tracer::OpcodeTrace;
 use serde_json::Value;
 
-// cargo run --release --example check -- revm.log sole.log
-
-fn main() {
+fn main() -> eyre::Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
-    let revm_path = if let Some(path) = args.first().cloned() {
-        path
-    } else {
-        println!("NOTE: revm path: revm.log");
-        "revm.log".to_string()
-    };
-    let sole_path = if let Some(path) = args.get(1).cloned() {
-        path
-    } else {
-        println!("NOTE: sole path: sole.log");
-        "sole.log".to_string()
-    };
+
+    let block_number = args.first()
+        .and_then(|number| number.parse::<u64>().ok())
+        .unwrap_or(23027350);
+
+    let skip = args.get(1)
+        .and_then(|number| number.parse::<usize>().ok())
+        .unwrap_or(0);
+
+    let revm_path = format!("revm.{block_number}.{skip}.log");
+    let sole_path = format!("sole.{block_number}.{skip}.log");
 
     let overrides = args.get(2).cloned().unwrap_or_else(|| "{}".to_string());
     let overrides: Value = serde_json::from_str(&overrides).expect("overrides:json");
@@ -67,18 +65,30 @@ fn main() {
         });
 
         line += 1;
-        if r.is_err() {
+        let is_failed = r.is_err();
+        if is_failed {
             eprintln!("LINE: {line}");
             failed = true;
-            break;
         }
 
         // TODO: wait for input to continue, like interactive analysis?
+        if is_failed {
+            enable_raw_mode()?;
+            let event = read()?;
+            disable_raw_mode()?;
+            if let Some(event) = event.as_key_press_event() {
+                match event.code {
+                    KeyCode::Char('n') => continue,
+                    _ => break
+                }
+            }
+        }
     }
 
     if !failed {
         println!("OK");
     }
+    Ok(())
 }
 
 fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
