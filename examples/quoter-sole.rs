@@ -134,7 +134,7 @@ fn decode_quoter_output(output: &[u8], amount_in: Word) {
             "  🎯 Initialized Ticks Crossed: {}",
             initialized_ticks_crossed
         );
-        println!("  ⛽ Gas Estimate: {}", gas_estimate);
+        println!("  ⛽ Gas Estimate: {}", gas_estimate.as_u64());
     } else {
         println!(
             "⚠️  Unexpected return data length: {} bytes (expected at least 128)",
