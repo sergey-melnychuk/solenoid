@@ -13,6 +13,7 @@ use crate::{
     },
     decoder::{Bytecode, Decoder, Instruction},
     ext::Ext,
+    precompiles,
     tracer::{AccountEvent, CallType, Event, EventData, EventTracer, HashAlg, StateEvent},
 };
 
@@ -165,13 +166,6 @@ impl Evm {
         match ext.put(addr, key, val).await {
             Ok(_) => Ok(()),
             Err(e) => self.error(e),
-        }
-    }
-
-    pub async fn code(&mut self, ext: &mut Ext, addr: &Address) -> eyre::Result<(Vec<u8>, Word)> {
-        match ext.code(addr).await {
-            Ok(ret) => Ok(ret),
-            Err(e) => self.error(e).map(|_| Default::default()),
         }
     }
 
@@ -1616,27 +1610,6 @@ impl<T: EventTracer> Executor<T> {
         let ret_offset = evm.pop()?.as_usize();
         let ret_size = evm.pop()?.as_usize();
 
-        // TODO: Add handling of precompiled methods for dedicated addresses
-
-        // Calculate address access cost (EIP-2929)
-        let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
-        if args_size == 0 && access_cost > 100 {
-            // value-transfer only call (empty calldata)
-            access_cost -= 2500;
-        }
-
-        let (bytecode, codehash) = evm.code(ext, &address).await?;
-        let code = Decoder::decode(bytecode);
-        self.tracer.push(Event {
-            data: EventData::Account(AccountEvent::GetCode {
-                address,
-                codehash,
-                bytecode: code.bytecode.clone().into(),
-            }),
-            depth: ctx.depth,
-            reverted: false,
-        });
-
         // Handle memory expansion for arguments
         if args_offset + args_size > evm.memory.len() {
             if args_offset + args_size > ALLOCATION_SANITY_LIMIT {
@@ -1646,6 +1619,13 @@ impl<T: EventTracer> Executor<T> {
             evm.memory.resize(args_offset + args_size + padding % 32, 0);
         }
         let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
+
+        // Calculate address access cost (EIP-2929)
+        let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
+        if (args_size == 0 && access_cost > 100) || precompiles::is_precompile(&address) {
+            // value-transfer only call (empty calldata) OR precompile call
+            access_cost -= 2500;
+        }
 
         // Calculate base gas cost
         let mut base_gas_cost = access_cost + memory_expansion_cost;
@@ -1660,14 +1640,67 @@ impl<T: EventTracer> Executor<T> {
 
         // Calculate available gas for forwarding using "all but one 64th" rule
         let remaining_gas = evm.gas.remaining().saturating_sub(base_gas_cost);
-        let all_but_one_64th = remaining_gas.saturating_sub(remaining_gas / 64);
+        let all_but_one_64th = remaining_gas - remaining_gas / 64;
         let gas_to_forward = call_gas.as_i64().min(all_but_one_64th) + gas_stipend_adjustment;
 
         // For EVM accounting: only charge the outer EVM for base cost
         // (forwarded gas was already "spent" by allocating it to inner call)
         *gas = (base_gas_cost.abs() as u64).into();
 
+        // For tracing: report the total cost including forwarded gas (to match REVM)
+        let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward - gas_stipend_adjustment;
+
         let data = &evm.memory[args_offset..args_offset + args_size];
+
+        // Handle precompile call
+        if precompiles::is_precompile(&address) {
+            let gas_cost = precompiles::gas_cost(&address, data);
+            let value = match precompiles::execute(&address, data) {
+                Ok(ret) => {
+                    self.ret = ret;
+                    Word::one()
+                }
+                Err(_) => {
+                    Word::zero()
+                }
+            };
+
+            self.tracer.push(Event {
+                depth: ctx.depth,
+                reverted: false,
+                data: EventData::OpCode {
+                    pc: instruction.offset,
+                    op: instruction.opcode.code,
+                    name: instruction.opcode.name(),
+                    data: instruction.argument.clone().map(Into::into),
+                    gas_cost: total_gas_cost_for_tracing,
+                    gas_used: evm.gas.used + total_gas_cost_for_tracing,
+                    gas_left: evm.gas.remaining() - total_gas_cost_for_tracing,
+                    stack: evm.stack.clone(),
+                    memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                    gas_back: 0,
+                    extra: json!({
+                        "is_call": "precompile",
+                        "gas_left": evm.gas.remaining() - base_gas_cost,
+                        "gas_cost": total_gas_cost_for_tracing,
+                        "evm.gas.used": evm.gas.used,
+                        "evm.gas.refund": evm.gas.refund,
+                        "call.address": address,
+                        "call.input": hex::encode(&evm.memory[args_offset..args_offset + args_size]),
+                        "call.value": value,
+                        "call.gas": call_gas.as_u64(),
+                        "access_cost": access_cost,
+                    }),
+                },
+            });
+
+            evm.memory[ret_offset..ret_offset+ret_size].copy_from_slice(&self.ret);
+
+            evm.push(value)?;
+            evm.gas(gas_cost)?;
+            return Ok(());
+        }
+
         let inner_call = Call {
             data: data.to_vec(),
             value,
@@ -1704,16 +1737,24 @@ impl<T: EventTracer> Executor<T> {
             ..ctx
         };
 
+        let (bytecode, codehash) = ext.code(&address).await?;
+        let code = Decoder::decode(bytecode);
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::GetCode {
+                address,
+                codehash,
+                bytecode: code.bytecode.clone().into(),
+            }),
+            depth: ctx.depth,
+            reverted: false,
+        });
+
         let mut executor =
             Executor::<T>::with_tracer(self.tracer.fork()).with_header(self.header.clone());
         executor.set_log(self.log);
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, ret) = Box::pin(future).await;
-
-        // For tracing: report the total cost including forwarded gas (to match REVM)
-        let total_gas_cost_for_tracing = base_gas_cost 
-            + gas_to_forward.saturating_sub(gas_stipend_adjustment);
 
         // HERE: TODO: remove this label
         self.tracer.push(Event {
@@ -1724,12 +1765,12 @@ impl<T: EventTracer> Executor<T> {
                 op: instruction.opcode.code,
                 name: instruction.opcode.name(),
                 data: instruction.argument.clone().map(Into::into),
-                gas_cost: total_gas_cost_for_tracing,
-                gas_used: evm.gas.used + total_gas_cost_for_tracing,
-                gas_left: evm.gas.remaining() - total_gas_cost_for_tracing,
                 stack: evm.stack.clone(),
                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                 gas_back: 0,
+                gas_cost: total_gas_cost_for_tracing,
+                gas_used: evm.gas.used + total_gas_cost_for_tracing,
+                gas_left: evm.gas.remaining() - total_gas_cost_for_tracing,
                 extra: json!({
                     "is_call": true,
                     "gas_left": evm.gas.remaining() - base_gas_cost,

@@ -49,7 +49,7 @@ async fn main() -> eyre::Result<()> {
         patch(&mut ext, &addr("0x0fc7cb62247151faf5e7a948471308145f020d2e"), "0x7af6c7f2728a1bef0").await?; // TX:3
         patch(&mut ext, &addr("0x8a14ce0fecbefdcc612f340be3324655718ce1c1"), "0x7af6c7f2728a0e4f0").await?; // TX:4
         patch(&mut ext, &addr("0x8778f133d11e81a05f5210b317fb56115b95c7bc"), "0x7af6c7f27291f2ff0").await?; // TX:5
-        // TODO: (TX:7) precompile 0x1 (ecrecover) is needed
+        patch(&mut ext, &addr("0xbb318a1ab8e46dfd93b3b0bca3d0ebf7d00187b9"), "0x").await?; // TX:7
 
         // eprintln!("TX: {tx:#?}");
         // eprintln!("TX hash: {}", tx.hash);
