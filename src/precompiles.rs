@@ -1,6 +1,6 @@
 use eyre::{eyre, Result};
 
-use secp256k1::{ecdsa::RecoverableSignature, Message, Secp256k1};
+use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 use ripemd::{Ripemd160};
 use num_bigint::BigUint;
@@ -65,32 +65,30 @@ fn ecrecover(input: &[u8]) -> eyre::Result<Vec<u8>> {
     if v_byte != 27 && v_byte != 28 {
         return Ok(vec![0u8; 32]);
     }
-    let recovery_id = v_byte - 27;
+    let recovery_id_byte = v_byte - 27;
 
-    // Create secp256k1 context
-    let secp = Secp256k1::verification_only();
-
-    // Create message from hash
-    let mut hash_array = [0u8; 32];
-    hash_array.copy_from_slice(msg_hash);
-    let message = Message::from_digest(hash_array);
-
-    // Create recoverable signature
+    // Create signature from r and s
     let mut signature_bytes = [0u8; 64];
     signature_bytes[0..32].copy_from_slice(r_bytes);
     signature_bytes[32..64].copy_from_slice(s_bytes);
 
-    let recoverable_sig = RecoverableSignature::from_compact(
-        &signature_bytes,
-        secp256k1::ecdsa::RecoveryId::from_u8_masked(recovery_id)
-    )?;
+    let signature = Signature::from_slice(&signature_bytes)
+        .map_err(|_| eyre!("Invalid signature"))?;
+
+    // Create recovery ID
+    let recovery_id = RecoveryId::from_byte(recovery_id_byte)
+        .ok_or_else(|| eyre!("Invalid recovery ID"))?;
 
     // Recover public key
-    let public_key = secp.recover_ecdsa(message, &recoverable_sig)?;
+    let verifying_key = VerifyingKey::recover_from_prehash(msg_hash, &signature, recovery_id)
+        .map_err(|_| eyre!("Failed to recover public key"))?;
 
-    // Convert to Ethereum address
-    let pubkey_bytes = public_key.serialize_uncompressed();
-    let pubkey_hash = keccak256(&pubkey_bytes[1..]);
+    // Convert to uncompressed public key format (65 bytes: 0x04 + x + y)
+    let pubkey_bytes = verifying_key.to_encoded_point(false);
+    let pubkey_slice = pubkey_bytes.as_bytes();
+
+    // Hash the public key (without the 0x04 prefix) to get the Ethereum address
+    let pubkey_hash = keccak256(&pubkey_slice[1..]);
 
     // Return address padded to 32 bytes (12 zeros + 20 address bytes)
     let mut result = vec![0u8; 32];
@@ -680,11 +678,12 @@ mod tests {
     // 0x01: ECRecover tests
     #[test]
     fn test_ecrecover_valid() {
+        // Valid signature from a real transaction
         let input = hex_to_bytes(
-            "18c547e4f7b0f325ad1e56f57e26c745b09a3e503d86e00e5255ff7f715d3d1c\
+            "acee28ed6d5eff643274a2abd164fec12cc75f1ea78a87922304c04e2424bc88\
             000000000000000000000000000000000000000000000000000000000000001c\
-            73b1693892219d736caba55bdb67216e485557ea6b6af75f37096c9aa6a5a75f\
-            eeb940b1d03b21e36b0e47e79769f095fe2ab855bd91e3a38756b7d75a9c4549"
+            08da09260614b31b17af2ac76eaa7d50172b6d0cec03fe706748e2d532c0d309\
+            7e7a201aaefc664515b3a28a0bdd2fffdd58f3bff5fb639bf01f049c47648b3f"
         );
 
         let result = ecrecover(&input).unwrap();
@@ -692,6 +691,10 @@ mod tests {
 
         // Should not be all zeros for valid input
         assert_ne!(result, vec![0u8; 32]);
+
+        // Expected address: 0xd148c7f37b346a4bd8e14f8c1f181f5f640481c8
+        let expected_address = hex_to_bytes("000000000000000000000000d148c7f37b346a4bd8e14f8c1f181f5f640481c8");
+        assert_eq!(result, expected_address);
     }
 
     #[test]

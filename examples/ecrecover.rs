@@ -1,5 +1,5 @@
 use eyre::Result;
-use secp256k1::{ecdsa::RecoverableSignature, Message, Secp256k1};
+use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 use solenoid::common::hash;
 
 fn main() -> Result<()> {
@@ -28,34 +28,28 @@ fn main() -> Result<()> {
     if v_byte != 27 && v_byte != 28 {
         eyre::bail!("Invalid v parameter: {}, expected 27 or 28", v_byte);
     }
-    let recovery_id = v_byte - 27;
+    let recovery_id_byte = v_byte - 27;
 
-    println!("Recovery ID: {}", recovery_id);
+    println!("Recovery ID: {}", recovery_id_byte);
 
-    // Create secp256k1 context
-    let secp = Secp256k1::verification_only();
-
-    // Create message from hash
-    let mut hash_array = [0u8; 32];
-    hash_array.copy_from_slice(msg_hash);
-    let message = Message::from_digest(hash_array);
-
-    // Create recoverable signature from r, s, and recovery_id
+    // Create signature from r and s
     let mut signature_bytes = [0u8; 64];
     signature_bytes[0..32].copy_from_slice(r_bytes);
     signature_bytes[32..64].copy_from_slice(s_bytes);
 
-    let recoverable_sig = RecoverableSignature::from_compact(
-        &signature_bytes,
-        secp256k1::ecdsa::RecoveryId::from_u8_masked(recovery_id)
-    )?;
+    let signature = Signature::from_slice(&signature_bytes)?;
+
+    // Create recovery ID
+    let recovery_id = RecoveryId::from_byte(recovery_id_byte)
+        .ok_or_else(|| eyre::eyre!("Invalid recovery ID"))?;
 
     // Recover the public key
-    let public_key = secp.recover_ecdsa(message, &recoverable_sig)?;
+    let verifying_key = VerifyingKey::recover_from_prehash(msg_hash, &signature, recovery_id)?;
 
     // Convert public key to uncompressed format (65 bytes: 0x04 + 32 bytes x + 32 bytes y)
-    let pubkey_bytes = public_key.serialize_uncompressed();
-    println!("Recovered public key: 0x{}", hex::encode(&pubkey_bytes));
+    let pubkey_encoded = verifying_key.to_encoded_point(false);
+    let pubkey_bytes = pubkey_encoded.as_bytes();
+    println!("Recovered public key: 0x{}", hex::encode(pubkey_bytes));
 
     // Hash the public key (without the 0x04 prefix) to get the Ethereum address
     let pubkey_hash = hash::keccak256(&pubkey_bytes[1..]);

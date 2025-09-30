@@ -2380,6 +2380,7 @@ dependencies = [
  "once_cell",
  "serdect",
  "sha2 0.10.9",
+ "signature",
 ]
 
 [[package]]
@@ -4049,6 +4050,7 @@ dependencies = [
  "getrandom 0.3.3",
  "hex",
  "i256",
+ "k256",
  "num-bigint",
  "num-traits",
  "once_cell",
@@ -4056,7 +4058,6 @@ dependencies = [
  "primitive-types 0.13.1",
  "reqwest",
  "ripemd",
- "secp256k1 0.31.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
