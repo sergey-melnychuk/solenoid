@@ -87,7 +87,8 @@ impl Word {
     }
 
     pub fn pow(&self, exp: Self) -> Self {
-        Self(self.0.pow(exp.0))
+        let (ret, _) = self.0.overflowing_pow(exp.0);
+        Self(ret)
     }
 
     pub fn saturating_sub(&self, rhs: Self) -> Self {
