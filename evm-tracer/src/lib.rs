@@ -30,6 +30,7 @@ pub use revm;
 use serde_json::{json, Value};
 
 pub mod aux;
+pub mod run;
 
 pub async fn trace_all(
     txs: impl Iterator<Item = Tx>,
@@ -62,6 +63,7 @@ pub async fn trace_all(
 
     let mut ret = Vec::new();
     for tx in txs {
+        eprintln!("TX hash={} index={}", tx.inner.hash(), tx.transaction_index.unwrap_or_default());
         // eprintln!("GAS LIMIT: {}", tx.gas_limit());
         let tx_env = TxEnv::builder()
             .caller(tx.inner.signer())
@@ -165,8 +167,8 @@ pub struct OpcodeTrace {
     pub gas_left: i64,
     pub gas_cost: i64,
     pub gas_back: i64,
-    pub stack: Vec<U256>,
-    pub memory: Vec<U256>,
+    pub stack: Vec<String>,
+    pub memory: Vec<String>,
     pub depth: usize,
 
     pub extra: Extra,
@@ -284,14 +286,17 @@ where
             gas_left: interp.gas.remaining() as i64,
             gas_cost,
             gas_back: refund,
-            stack,
+            stack: stack.iter()
+                .map(|x| hex::encode(&x.to_be_bytes::<32>()))
+                .collect(),
             memory: memory
                 .chunks(32)
-                .map(|chunk| U256::from_be_slice(chunk))
+                .map(|chunk| hex::encode(chunk))
                 .collect(),
             depth: self.aux.depth,
             extra: Extra::new(json!({
-                "gas_left": interp.gas.remaining()
+                "gas_left": interp.gas.remaining(),
+                "evm.gas.back": interp.gas.refunded()
             })),
         });
     }
