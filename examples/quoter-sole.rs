@@ -35,7 +35,8 @@ async fn main() -> eyre::Result<()> {
     // SOURCE: https://github.com/Uniswap/v3-periphery/blob/main/contracts/interfaces/IQuoterV2.sol
 
     let method = "quoteExactInputSingle((address,address,uint256,uint24,uint160))";
-    eprintln!("{}", hex::encode(&keccak256(method.as_bytes())[..4]));
+    let selector = &keccak256(method.as_bytes())[..4];
+    eprintln!("{}", hex::encode(selector));
 
     let amount_in = Word::from(1_000_000_000_000_000_000u128);
 
@@ -82,18 +83,18 @@ async fn main() -> eyre::Result<()> {
 
     let call_cost = 21000i64;
     let data_cost = {
-        let total_calldata_len = args.len();
-        let nonzero_bytes_count = args.iter().filter(|byte| *byte != &0).count();
+        let total_calldata_len = args.len() + selector.len();
+        let nonzero_bytes_count = 
+            args.iter().filter(|byte| *byte != &0).count() +
+            selector.iter().filter(|byte| *byte != &0).count();
         nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
     } as i64;
-    let exec_cost = result.evm.gas.finalized();
-    let total_gas = call_cost + data_cost + exec_cost;
-    eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
+    let total_gas = result.evm.gas.finalized(call_cost + data_cost);
+    // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}");
 
     println!("✅ Transaction executed successfully!");
     println!("🔄 Reverted: {}", result.evm.reverted);
     println!("⛽ Gas used: {total_gas}");
-    // TODO: FIXME: 4064 gas still missing ¯\_(ツ)_/¯ (revm=123290 sole=119226)
 
     let path = "quoter-sole.log";
     let traces = result
