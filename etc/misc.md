@@ -9,3 +9,17 @@ curl -X POST \
   }' \
   https://eth.llamarpc.com | jq .result > 23027350.json
 ```
+
+curl -s -X POST -H "Content-Type: application/json" --data '{
+    "jsonrpc": "2.0",
+    "method": "eth_getStorageAt",
+    "params": ["0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8","0x0","0x165c93d"],
+    "id":1
+}' http://127.0.0.1:8080
+
+export HASH=0x073c6e8b5b748dff4d58bdb59fa2705f7ce9e32682678ca0aa541ace3b7eee52 && curl -s -X POST -H "Content-Type: application/json" --data '{
+    "jsonrpc": "2.0",
+    "method": "eth_getTransactionByHash",
+    "params": ["$HASH"],
+    "id": 1
+}' http://127.0.0.1:8080 | jq > $HASH.json
