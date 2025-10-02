@@ -84,12 +84,14 @@ async fn main() -> eyre::Result<()> {
     println!("---");
     evm.state
         .iter()
-        .for_each(|StateTouch(addr, key, val, new, _)| {
-            if let Some(new) = new {
+        .for_each(|st| match st {
+            StateTouch::Put(addr, key, val, new, _) => {
                 println!("W:{addr}[0x{key:0x}]=0x{val:0x}->0x{new:0x}");
-            } else {
+            }
+            StateTouch::Get(addr, key, val, _) => {
                 println!("R:{addr}[0x{key:0x}]=0x{val:0x}");
             }
+            _ => ()
         });
     println!("---");
     evm.account.iter().for_each(|acc| {

@@ -66,22 +66,22 @@ async fn test_deploy() -> eyre::Result<()> {
     pretty_assertions::assert_eq!(
         evm.state,
         vec![
-            StateTouch(created1, Word::zero(), Word::zero(), None, 0),
-            StateTouch(
+            StateTouch::Get(created1, Word::zero(), Word::zero(), false),
+            StateTouch::Put(
                 created1,
                 Word::zero(),
                 Word::zero(),
-                Some((&from).into()),
-                0
+                (&from).into(),
+                true,
             ),
-            StateTouch(created2, Word::zero(), Word::zero(), Some(word("0x42")), 0),
-            StateTouch(created1, Word::one(), Word::zero(), None, 0),
-            StateTouch(
+            StateTouch::Put(created2, Word::zero(), Word::zero(), word("0x42"), false),
+            StateTouch::Get(created1, Word::one(), Word::zero(), false),
+            StateTouch::Put(
                 created1,
                 Word::one(),
                 Word::zero(),
-                Some((&created2).into()),
-                0
+                (&created2).into(),
+                true,
             ),
         ]
     );

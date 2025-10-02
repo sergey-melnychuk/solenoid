@@ -92,7 +92,7 @@ async fn test_get() -> eyre::Result<()> {
     assert_eq!(ret, vec![0u8; 32]);
     assert_eq!(
         evm.state,
-        vec![StateTouch(to, Word::zero(), Word::zero(), None, 0)]
+        vec![StateTouch::Get(to, Word::zero(), Word::zero(), false)]
     );
     Ok(())
 }
@@ -118,7 +118,7 @@ async fn test_get_with_override() -> eyre::Result<()> {
     );
     assert_eq!(
         evm.state,
-        vec![StateTouch(to, Word::zero(), Word::one(), None, 0)]
+        vec![StateTouch::Get(to, Word::zero(), Word::one(), true)]
     );
     Ok(())
 }
@@ -135,7 +135,7 @@ async fn test_dec() -> eyre::Result<()> {
     );
     assert_eq!(
         evm.state,
-        vec![StateTouch(to, Word::zero(), Word::zero(), None, 0)]
+        vec![StateTouch::Get(to, Word::zero(), Word::zero(), false)]
     );
     Ok(())
 }
@@ -159,8 +159,8 @@ async fn test_dec_with_override() -> eyre::Result<()> {
     assert_eq!(
         evm.state,
         vec![
-            StateTouch(to, Word::zero(), Word::one(), None, 0),
-            StateTouch(to, Word::zero(), Word::one(), Some(Word::zero()), 19900,),
+            StateTouch::Get(to, Word::zero(), Word::one(), true),
+            StateTouch::Put(to, Word::zero(), Word::one(), Word::zero(), true),
         ]
     );
     Ok(())
@@ -176,8 +176,8 @@ async fn test_inc() -> eyre::Result<()> {
     assert_eq!(
         evm.state,
         vec![
-            StateTouch(to, Word::zero(), Word::zero(), None, 0),
-            StateTouch(to, Word::zero(), Word::zero(), Some(Word::one()), 0),
+            StateTouch::Get(to, Word::zero(), Word::zero(), false),
+            StateTouch::Put(to, Word::zero(), Word::zero(), Word::one(), true),
         ]
     );
     Ok(())
@@ -195,7 +195,7 @@ async fn test_set() -> eyre::Result<()> {
 
     assert_eq!(
         evm.state,
-        vec![StateTouch(to, Word::zero(), Word::zero(), Some(val), 0)]
+        vec![StateTouch::Put(to, Word::zero(), Word::zero(), val, false)]
     );
     assert_eq!(evm.gas.used, 22309);
     Ok(())

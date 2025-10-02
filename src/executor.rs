@@ -55,18 +55,17 @@ const CALL_DEPTH_LIMIT: usize = 1024;
 const ALLOCATION_SANITY_LIMIT: usize = 1024 * 1024 * 10;
 
 #[derive(Debug, Default, Eq, PartialEq)]
-pub struct StateTouch(pub Address, pub Word, pub Word, pub Option<Word>, pub i64);
-
-impl StateTouch {
-    pub fn is_write(&self) -> bool {
-        matches!(self, Self(_, _, _, Some(_), _))
-    }
+pub enum StateTouch {
+    #[default]
+    Noop,
+    Get(Address, Word, Word, bool),
+    Put(Address, Word, Word, Word, bool),
 }
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub enum AccountTouch {
     #[default]
-    Empty,
+    Noop,
     GetNonce(Address, u64),
     GetValue(Address, Word),
     GetCode(Address, Word, Vec<u8>),
@@ -170,11 +169,29 @@ impl Evm {
     }
 
     pub async fn revert(&mut self, ext: &mut Ext) -> eyre::Result<()> {
-        for StateTouch(address, key, val, _, _) in self.state.iter().filter(|st| st.is_write()) {
-            ext.put(address, *key, *val).await?;
+        for st in self.state.iter().rev() {
+            match st {
+                StateTouch::Put(address, key, val, _, is_warm) => {
+                    if *is_warm {
+                        ext.put(address, *key, *val).await?
+                    } else {
+                        if let Some(state) = ext.state.get_mut(address) {
+                            state.data.remove(key);
+                        }
+                    }
+                }
+                StateTouch::Get(address, key, _, is_warm) => {
+                    if !*is_warm {
+                        if let Some(state) = ext.state.get_mut(address) {
+                            state.data.remove(key);
+                        }
+                    }
+                }
+                _ => ()
+            }
         }
-        for ac in self.account.iter() {
-            match ac {
+        for at in self.account.iter().rev() {
+            match at {
                 AccountTouch::SetNonce(addr, val, _new) => {
                     ext.acc_mut(addr).nonce = (*val).into();
                 }
@@ -211,9 +228,12 @@ impl Gas {
         self.limit - self.used
     }
 
-    pub fn finalized(&self) -> i64 {
-        let cap = self.refund.min(self.used / 5);
-        self.used.saturating_sub(cap)
+    pub fn finalized(&self, call_cost: i64) -> i64 {
+        let used = self.used + call_cost;
+        let cap = self.refund.min(used / 5);
+        let ret = used.saturating_sub(cap);
+        // eprintln!("DEBUG: gas.used={} gas.refund={} refund.cap={cap} gas.final={ret}", self.used, self.refund);
+        ret
     }
 
     pub fn fork(&self, limit: i64) -> Self {
@@ -539,7 +559,7 @@ impl<T: EventTracer> Executor<T> {
 
         let opcode = instruction.opcode.code;
         match opcode {
-            // 0x00: STOP
+            // STOP
             0x00 => {
                 evm.pc = code.instructions.len();
                 evm.stopped = true;
@@ -549,7 +569,7 @@ impl<T: EventTracer> Executor<T> {
                 self.tracer.push(Event {
                     data: EventData::Return {
                         ok: true,
-                        data: self.ret.clone().into(),
+                        data: vec![].into(),
                         error: None,
                         gas_used: evm.gas.used,
                     },
@@ -1147,7 +1167,7 @@ impl<T: EventTracer> Executor<T> {
                     .unwrap_or_default();
                 let val = evm.get(ext, &this, &key).await?;
                 evm.push(val)?;
-                evm.state.push(StateTouch(this, key, val, None, 0));
+                evm.state.push(StateTouch::Get(this, key, val, is_warm));
                 self.tracer.push(Event {
                     data: EventData::State(StateEvent::Get {
                         address: this,
@@ -1167,6 +1187,7 @@ impl<T: EventTracer> Executor<T> {
                 sload.insert("address".to_owned(), this.to_string().into());
                 sload.insert("key".to_owned(), hex::encode(key.into_bytes()).into());
                 sload.insert("val".to_owned(), hex::encode(val.into_bytes()).into());
+                sload.insert("is_warm".to_owned(), is_warm.into());
                 self.debug
                     .insert("SLOAD".to_owned(), serde_json::Value::Object(sload));
             }
@@ -1305,7 +1326,7 @@ impl<T: EventTracer> Executor<T> {
                     reverted: false,
                 });
                 evm.state
-                    .push(StateTouch(this, key, val, Some(new), gas_refund));
+                    .push(StateTouch::Put(this, key, val, new, is_warm));
             }
             0x56 => {
                 // JUMP
@@ -1425,7 +1446,7 @@ impl<T: EventTracer> Executor<T> {
                 gas = 3.into();
             }
 
-            0xa0..0xa4 => {
+            0xa0..=0xa4 => {
                 // LOG0..LOG4
                 if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
@@ -1610,13 +1631,14 @@ impl<T: EventTracer> Executor<T> {
         let ret_offset = evm.pop()?.as_usize();
         let ret_size = evm.pop()?.as_usize();
 
-        // Handle memory expansion for arguments
-        if args_offset + args_size > evm.memory.len() {
-            if args_offset + args_size > ALLOCATION_SANITY_LIMIT {
-                return Err(ExecutorError::InvalidAllocation(args_offset + args_size).into());
+        // Handle memory expansion for arguments and return data
+        let size = (args_offset + args_size).max(ret_offset + ret_size);
+        if size > evm.memory.len() {
+            if size > ALLOCATION_SANITY_LIMIT {
+                return Err(ExecutorError::InvalidAllocation(size).into());
             }
-            let padding = 32 - (args_offset + args_size) % 32;
-            evm.memory.resize(args_offset + args_size + padding % 32, 0);
+            let size = size.div_ceil(32) * 32;
+            evm.memory.resize(size, 0);
         }
         let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
 
@@ -1694,7 +1716,8 @@ impl<T: EventTracer> Executor<T> {
                 },
             });
 
-            evm.memory[ret_offset..ret_offset+ret_size].copy_from_slice(&self.ret);
+            let copy_len = self.ret.len().min(ret_size);
+            evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&self.ret[..copy_len]);
 
             evm.push(value)?;
             evm.gas(gas_cost)?;
@@ -1782,6 +1805,7 @@ impl<T: EventTracer> Executor<T> {
                     "call.value": value,
                     "call.gas": call_gas.as_u64(),
                     "access_cost": access_cost,
+                    "inner_evm.reverted": inner_evm.reverted,
                 }),
             },
         });
@@ -1794,42 +1818,25 @@ impl<T: EventTracer> Executor<T> {
         // keep refund reporting differential, not cumulative
         evm.refund = evm.gas.refund;
 
+        let copy_len = ret.len().min(ret_size);
+        evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&ret[..copy_len]);
+
         if inner_evm.reverted {
             self.ret = ret;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
+            // TODO: remaining value might not be enough for full revert!
+            // BLOCK=23027350 INDEX=11 (TX=0xf4ba30862cbab5fbb0daadd28b8818c5f11489bccdc5b85b0de5ebb84a704dd1)
             if transferred {
-                let sender_address = call.from;
-                let recipient_address = address;
-                ext.acc_mut(&sender_address).value += value;
-                ext.acc_mut(&recipient_address).value -= value;
+                ext.acc_mut(&address).value -= value;
+                ext.acc_mut(&call.from).value += value;
             }
             return Ok(());
         }
 
-        // Copy only up to the returned data length, zero-fill the remainder
-        let copy_len = ret.len().min(ret_size);
-        let size = ret_offset + ret_size;
-        if size > evm.memory.len() {
-            if size > ALLOCATION_SANITY_LIMIT {
-                return Err(ExecutorError::InvalidAllocation(size).into());
-            }
-            let padding = 32 - size % 32;
-            evm.memory.resize(size + padding % 32, 0);
-            *gas += evm.memory_expansion_cost();
-        }
-        if ret_size > 0 {
-            if copy_len > 0 {
-                evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&ret[..copy_len]);
-            }
-            if copy_len < ret_size {
-                for b in &mut evm.memory[ret_offset + copy_len..ret_offset + ret_size] {
-                    *b = 0;
-                }
-            }
-        }
         // Preserve the actual return data as-is for RETURNDATA* opcodes
         self.ret = ret;
+
         for entry in inner_evm.account {
             evm.account.push(entry);
         }
