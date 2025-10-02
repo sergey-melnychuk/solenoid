@@ -41,11 +41,10 @@ getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 
 [features]
-default = ["testkit", "delay"]
+default = ["testkit"]
 testkit = []
 account = []
 tracing = []
-delay = []
 
 [dev-dependencies]
 crossterm = "0.29.0"

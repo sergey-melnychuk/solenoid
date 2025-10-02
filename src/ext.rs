@@ -10,10 +10,6 @@ use crate::{
     eth::EthClient,
 };
 
-#[cfg(feature = "delay")]
-#[cfg(not(target_arch = "wasm32"))]
-const DELAY: std::time::Duration = std::time::Duration::from_millis(200);
-
 #[derive(Default)]
 pub struct State {
     pub account: Account,
@@ -60,24 +56,19 @@ impl Ext {
 
     pub async fn get(&mut self, addr: &Address, key: &Word) -> eyre::Result<Word> {
         if let Some(val) = self.state.get(addr).and_then(|s| s.data.get(key)).copied() {
+            tracing::debug!("GET: {addr}[{key:#x}]={val:#064x} [cached value]");
             Ok(val)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let now = Instant::now();
-            let hex = format!("0x{key:064x}");
+            let hex = format!("{key:#064x}");
             let address = format!("0x{}", hex::encode(addr.0));
-
-            #[cfg(feature = "delay")]
-            #[cfg(not(target_arch = "wasm32"))]
-            tokio::time::sleep(DELAY).await;
-
             let val = eth.get_storage_at(block_hash, &address, &hex).await?;
             let ms = now.elapsed().as_millis();
 
             self.state.entry(*addr).or_default().data.insert(*key, val);
             self.original.entry((*addr, *key)).or_insert(val);
 
-            let addr = hex::encode(addr.0);
-            tracing::debug!("GET: 0x{addr}[{key:#x}]={val:#x} [took {ms} ms]");
+            tracing::debug!("GET: {addr:#}[{key:#x}]={val:#064x} [took {ms} ms]");
             Ok(val)
         } else {
             Ok(Word::zero())
@@ -87,7 +78,7 @@ impl Ext {
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
         let state = self.state.entry(*addr).or_default();
         state.data.insert(key, val);
-        tracing::debug!("PUT: {addr}[{key:#x}]={val:#x}");
+        tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}");
         Ok(())
     }
 
@@ -109,11 +100,6 @@ impl Ext {
             Ok(code)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));
-
-            #[cfg(feature = "delay")]
-            #[cfg(not(target_arch = "wasm32"))]
-            tokio::time::sleep(DELAY).await;
-
             let code = eth.get_code(block_hash, &address).await?;
             let state = self.state.entry(*addr).or_default();
             let hash = Word::from_bytes(&keccak256(&code));
@@ -129,11 +115,6 @@ impl Ext {
             Ok(value)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));
-
-            #[cfg(feature = "delay")]
-            #[cfg(not(target_arch = "wasm32"))]
-            tokio::time::sleep(DELAY).await;
-
             let balance = eth.get_balance(block_hash, &address).await?;
             let state = self.state.entry(*addr).or_default();
             state.account.value = balance;
@@ -148,11 +129,6 @@ impl Ext {
             Ok(nonce)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));
-
-            #[cfg(feature = "delay")]
-            #[cfg(not(target_arch = "wasm32"))]
-            tokio::time::sleep(DELAY).await;
-
             let nonce = eth.get_nonce(block_hash, &address).await?;
             let state = self.state.entry(*addr).or_default();
             state.account.nonce = nonce;
