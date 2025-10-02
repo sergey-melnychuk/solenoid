@@ -36,8 +36,8 @@ pub fn execute(address: &Address, input: &[u8]) -> eyre::Result<Vec<u8>> {
 pub fn gas_cost(address: &Address, input: &[u8]) -> i64 {
     (match address.0[19] {
         1 => 3000,                                         // ecrecover
-        2 => 60 + 12 * ((input.len() + 31) / 32) as u64,   // sha256
-        3 => 600 + 120 * ((input.len() + 31) / 32) as u64, // ripemd160
+        2 => 60 + 12 * input.len().div_ceil(32) as u64,   // sha256
+        3 => 600 + 120 * input.len().div_ceil(32) as u64, // ripemd160
         4 => 15 + 3 * input.len() as u64,                  // identity
         5 => modexp_gas_cost(input),                       // modexp
         6 => 150,                                          // bn128_add
@@ -304,7 +304,7 @@ fn bn128_mul(input: &[u8]) -> eyre::Result<Vec<u8>> {
 
 // 0x08: BN128 pairing check
 fn bn128_pairing(input: &[u8]) -> eyre::Result<Vec<u8>> {
-    if input.len() % 192 != 0 {
+    if !input.len().is_multiple_of(192) {
         return Err(eyre!("Invalid input length for pairing"));
     }
 
@@ -381,9 +381,9 @@ fn blake2f(input: &[u8]) -> eyre::Result<Vec<u8>> {
     let mut t = [0u64; 2];
 
     // Parse state vector h (64 bytes = 8 u64 words)
-    for i in 0..8 {
+    for (i, h) in h.iter_mut().enumerate() {
         let start = 4 + i * 8;
-        h[i] = u64::from_le_bytes([
+        *h = u64::from_le_bytes([
             input[start],
             input[start + 1],
             input[start + 2],
@@ -396,9 +396,9 @@ fn blake2f(input: &[u8]) -> eyre::Result<Vec<u8>> {
     }
 
     // Parse message block m (128 bytes = 16 u64 words)
-    for i in 0..16 {
+    for (i, m) in m.iter_mut().enumerate() {
         let start = 68 + i * 8;
-        m[i] = u64::from_le_bytes([
+        *m = u64::from_le_bytes([
             input[start],
             input[start + 1],
             input[start + 2],
@@ -411,9 +411,9 @@ fn blake2f(input: &[u8]) -> eyre::Result<Vec<u8>> {
     }
 
     // Parse counter t (16 bytes = 2 u64 words)
-    for i in 0..2 {
+    for (i, t) in t.iter_mut().enumerate() {
         let start = 196 + i * 8;
-        t[i] = u64::from_le_bytes([
+        *t = u64::from_le_bytes([
             input[start],
             input[start + 1],
             input[start + 2],
@@ -569,10 +569,10 @@ fn verify_kzg_proof(commitment: &[u8], z: &[u8], y: &[u8], proof: &[u8]) -> eyre
     use ark_serialize::CanonicalDeserialize;
 
     // Parse commitment and proof points (48 bytes compressed G1 points)
-    let commitment_point = G1Affine::deserialize_compressed(&commitment[..])
+    let commitment_point = G1Affine::deserialize_compressed(commitment)
         .map_err(|_| eyre!("Invalid commitment point"))?;
     let proof_point =
-        G1Affine::deserialize_compressed(&proof[..]).map_err(|_| eyre!("Invalid proof point"))?;
+        G1Affine::deserialize_compressed(proof).map_err(|_| eyre!("Invalid proof point"))?;
 
     // Convert z and y to field elements
     let z_fr = Fr::from_be_bytes_mod_order(z);

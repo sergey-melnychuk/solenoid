@@ -174,18 +174,15 @@ impl Evm {
                 StateTouch::Put(address, key, val, _, is_warm) => {
                     if *is_warm {
                         ext.put(address, *key, *val).await?
-                    } else {
-                        if let Some(state) = ext.state.get_mut(address) {
-                            state.data.remove(key);
-                        }
+                    } else if let Some(state) = ext.state.get_mut(address) {
+                        state.data.remove(key);
                     }
                 }
                 StateTouch::Get(address, key, _, is_warm) => {
-                    if !*is_warm {
-                        if let Some(state) = ext.state.get_mut(address) {
+                    if !*is_warm
+                        && let Some(state) = ext.state.get_mut(address) {
                             state.data.remove(key);
                         }
-                    }
                 }
                 _ => (),
             }
@@ -231,9 +228,9 @@ impl Gas {
     pub fn finalized(&self, call_cost: i64) -> i64 {
         let used = self.used + call_cost;
         let cap = self.refund.min(used / 5);
-        let ret = used.saturating_sub(cap);
+        
         // eprintln!("DEBUG: gas.used={} gas.refund={} refund.cap={cap} gas.final={ret}", self.used, self.refund);
-        ret
+        used.saturating_sub(cap)
     }
 
     pub fn fork(&self, limit: i64) -> Self {
@@ -1664,7 +1661,7 @@ impl<T: EventTracer> Executor<T> {
 
         // For EVM accounting: only charge the outer EVM for base cost
         // (forwarded gas was already "spent" by allocating it to inner call)
-        *gas = (base_gas_cost.abs() as u64).into();
+        *gas = base_gas_cost.unsigned_abs().into();
 
         // For tracing: report the total cost including forwarded gas (to match REVM)
         let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward - gas_stipend_adjustment;
@@ -1898,7 +1895,7 @@ impl<T: EventTracer> Executor<T> {
             value,
             from: this,
             to: Address::zero(),
-            gas: (evm.gas.remaining().abs() as u64).into(),
+            gas: evm.gas.remaining().unsigned_abs().into(),
         };
         let mut inner_evm = Evm {
             gas: Gas::new(evm.gas.remaining()),

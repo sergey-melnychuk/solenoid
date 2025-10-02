@@ -223,11 +223,11 @@ impl TryFrom<Event> for OpcodeTrace {
                 gas_back,
                 stack: stack
                     .into_iter()
-                    .map(|x| hex::encode(&x.into_bytes()))
+                    .map(|x| hex::encode(x.into_bytes()))
                     .collect(),
                 memory: memory
                     .into_iter()
-                    .map(|x| hex::encode(&x.into_bytes()))
+                    .map(|x| hex::encode(x.into_bytes()))
                     .collect(),
                 depth,
                 extra: Extra::new(extra),
