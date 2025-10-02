@@ -50,9 +50,12 @@ async fn main() -> eyre::Result<()> {
         patch(&mut ext, &addr("0x8a14ce0fecbefdcc612f340be3324655718ce1c1"), "0x7af6c7f2728a0e4f0").await?; // TX:4
         patch(&mut ext, &addr("0x8778f133d11e81a05f5210b317fb56115b95c7bc"), "0x7af6c7f27291f2ff0").await?; // TX:5
         patch(&mut ext, &addr("0xbb318a1ab8e46dfd93b3b0bca3d0ebf7d00187b9"), "0x").await?; // TX:7
+        patch(&mut ext, &addr("0xdf7c26aaa9903f91ad1a719af2231edc33e131ed"), "0x").await?; // TX:8
+        patch(&mut ext, &addr("0x34976e84a6b6febb8800118dedd708ce2be2d95f"), "0x8bc93020944b6ead").await?; // TX:9
+        patch(&mut ext, &addr("0x881d40237659c251811cec9c364ef91dc08d300c"), "0x2f40478f834000").await?; // TX:11
 
         // eprintln!("TX: {tx:#?}");
-        // eprintln!("TX hash: {}", tx.hash);
+        eprintln!("TX hash={:#064x} index={}", tx.hash, tx.index.as_usize());
         // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
         // eprintln!("GAS LIMIT: {}", tx.gas.as_u64());
 
@@ -87,9 +90,8 @@ async fn main() -> eyre::Result<()> {
                 let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
                 nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
             } as i64;
-            let exec_cost = result.evm.gas.finalized();
-            let total_gas = call_cost + data_cost + exec_cost;
-            // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
+            let total_gas = result.evm.gas.finalized(call_cost + data_cost);
+            // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}");
             eprintln!("GAS: {total_gas}");
         } else {
             /*
@@ -114,12 +116,10 @@ async fn main() -> eyre::Result<()> {
             } as i64;
             let create_cost = 32000i64;
             let init_code_cost = 2 * tx.input.as_ref().len().div_ceil(32) as i64;
-
-            let exec_cost = result.evm.gas.finalized();
             let deployed_code_cost = 200 * result.ret.len() as i64;
 
-            let total_gas = call_cost + data_cost + create_cost + init_code_cost + exec_cost + deployed_code_cost;
-            // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}, exec_cost={exec_cost}");
+            let total_gas = result.evm.gas.finalized(call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost);
+            // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}");
             // eprintln!("DEBUG: create_cost={create_cost}, init_code_cost={init_code_cost}, deployed_code_cost={deployed_code_cost}");
             eprintln!("GAS: {total_gas} [created={}]", result.created.expect("contract should have been created"));
         }
