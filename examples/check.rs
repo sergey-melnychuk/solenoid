@@ -1,15 +1,20 @@
-use crossterm::{event::{read, KeyCode}, terminal::{disable_raw_mode, enable_raw_mode}};
+use crossterm::{
+    event::{KeyCode, read},
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
 use evm_tracer::OpcodeTrace;
 use serde_json::Value;
 
 fn main() -> eyre::Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
 
-    let block_number = args.first()
+    let block_number = args
+        .first()
         .and_then(|number| number.parse::<u64>().ok())
         .unwrap_or(23027350);
 
-    let skip = args.get(1)
+    let skip = args
+        .get(1)
         .and_then(|number| number.parse::<usize>().ok())
         .unwrap_or(0);
 
@@ -78,7 +83,7 @@ fn main() -> eyre::Result<()> {
             if let Some(event) = event.as_key_press_event() {
                 match event.code {
                     KeyCode::Char('n') => continue,
-                    _ => break
+                    _ => break,
                 }
             }
         }

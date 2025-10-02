@@ -45,7 +45,11 @@ async fn main() -> Result<()> {
         if ret.len() <= 512 {
             eprintln!("RET: {}", hex::encode(ret));
         } else {
-            eprintln!("RET: len={} hash={}", ret.len(), Word::from_bytes(&hash::keccak256(ret)));
+            eprintln!(
+                "RET: len={} hash={}",
+                ret.len(),
+                Word::from_bytes(&hash::keccak256(ret))
+            );
         }
         eprintln!("GAS: {}", result.result.gas_used());
         eprintln!("OK: {}", !result.result.is_halt());

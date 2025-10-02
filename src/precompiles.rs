@@ -1,13 +1,13 @@
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 
-use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
-use sha2::{Digest, Sha256};
-use ripemd::{Ripemd160};
-use num_bigint::BigUint;
-use num_traits::Zero;
-use ark_bn254::{Bn254, G1Affine, G2Affine, Fq, Fq2, G1Projective};
+use ark_bn254::{Bn254, Fq, Fq2, G1Affine, G1Projective, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_ff::PrimeField;
+use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
+use num_bigint::BigUint;
+use num_traits::Zero;
+use ripemd::Ripemd160;
+use sha2::{Digest, Sha256};
 use tiny_keccak::{Hasher, Keccak};
 
 use crate::common::address::Address;
@@ -35,16 +35,16 @@ pub fn execute(address: &Address, input: &[u8]) -> eyre::Result<Vec<u8>> {
 
 pub fn gas_cost(address: &Address, input: &[u8]) -> i64 {
     (match address.0[19] {
-        1 => 3000, // ecrecover
-        2 => 60 + 12 * ((input.len() + 31) / 32) as u64, // sha256
+        1 => 3000,                                         // ecrecover
+        2 => 60 + 12 * ((input.len() + 31) / 32) as u64,   // sha256
         3 => 600 + 120 * ((input.len() + 31) / 32) as u64, // ripemd160
-        4 => 15 + 3 * input.len() as u64, // identity
-        5 => modexp_gas_cost(input), // modexp
-        6 => 150, // bn128_add
-        7 => 6000, // bn128_mul
-        8 => 45000 + 34000 * (input.len() / 192) as u64, // bn128_pairing
-        9 => blake2f_gas_cost(input), // blake2f
-        10 => 50000, // kzg_point_evaluation (fixed cost)
+        4 => 15 + 3 * input.len() as u64,                  // identity
+        5 => modexp_gas_cost(input),                       // modexp
+        6 => 150,                                          // bn128_add
+        7 => 6000,                                         // bn128_mul
+        8 => 45000 + 34000 * (input.len() / 192) as u64,   // bn128_pairing
+        9 => blake2f_gas_cost(input),                      // blake2f
+        10 => 50000,                                       // kzg_point_evaluation (fixed cost)
         _ => 0,
     }) as i64
 }
@@ -72,12 +72,12 @@ fn ecrecover(input: &[u8]) -> eyre::Result<Vec<u8>> {
     signature_bytes[0..32].copy_from_slice(r_bytes);
     signature_bytes[32..64].copy_from_slice(s_bytes);
 
-    let signature = Signature::from_slice(&signature_bytes)
-        .map_err(|_| eyre!("Invalid signature"))?;
+    let signature =
+        Signature::from_slice(&signature_bytes).map_err(|_| eyre!("Invalid signature"))?;
 
     // Create recovery ID
-    let recovery_id = RecoveryId::from_byte(recovery_id_byte)
-        .ok_or_else(|| eyre!("Invalid recovery ID"))?;
+    let recovery_id =
+        RecoveryId::from_byte(recovery_id_byte).ok_or_else(|| eyre!("Invalid recovery ID"))?;
 
     // Recover public key
     let verifying_key = VerifyingKey::recover_from_prehash(msg_hash, &signature, recovery_id)
@@ -126,9 +126,15 @@ fn modexp(input: &[u8]) -> eyre::Result<Vec<u8>> {
         return Ok(vec![]);
     }
 
-    let base_len = BigUint::from_bytes_be(&input[0..32]).try_into().unwrap_or(0usize);
-    let exp_len = BigUint::from_bytes_be(&input[32..64]).try_into().unwrap_or(0usize);
-    let mod_len = BigUint::from_bytes_be(&input[64..96]).try_into().unwrap_or(0usize);
+    let base_len = BigUint::from_bytes_be(&input[0..32])
+        .try_into()
+        .unwrap_or(0usize);
+    let exp_len = BigUint::from_bytes_be(&input[32..64])
+        .try_into()
+        .unwrap_or(0usize);
+    let mod_len = BigUint::from_bytes_be(&input[64..96])
+        .try_into()
+        .unwrap_or(0usize);
 
     if base_len + exp_len + mod_len + 96 > input.len() {
         return Ok(vec![]);
@@ -136,7 +142,8 @@ fn modexp(input: &[u8]) -> eyre::Result<Vec<u8>> {
 
     let base = BigUint::from_bytes_be(&input[96..96 + base_len]);
     let exp = BigUint::from_bytes_be(&input[96 + base_len..96 + base_len + exp_len]);
-    let modulus = BigUint::from_bytes_be(&input[96 + base_len + exp_len..96 + base_len + exp_len + mod_len]);
+    let modulus =
+        BigUint::from_bytes_be(&input[96 + base_len + exp_len..96 + base_len + exp_len + mod_len]);
 
     if modulus.is_zero() {
         return Ok(vec![0u8; mod_len]);
@@ -160,9 +167,15 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
         return 200;
     }
 
-    let base_len = BigUint::from_bytes_be(&input[0..32]).try_into().unwrap_or(0u64);
-    let exp_len = BigUint::from_bytes_be(&input[32..64]).try_into().unwrap_or(0u64);
-    let mod_len = BigUint::from_bytes_be(&input[64..96]).try_into().unwrap_or(0u64);
+    let base_len = BigUint::from_bytes_be(&input[0..32])
+        .try_into()
+        .unwrap_or(0u64);
+    let exp_len = BigUint::from_bytes_be(&input[32..64])
+        .try_into()
+        .unwrap_or(0u64);
+    let mod_len = BigUint::from_bytes_be(&input[64..96])
+        .try_into()
+        .unwrap_or(0u64);
 
     // EIP-2565 gas calculation
     let max_len = base_len.max(mod_len);
@@ -175,27 +188,29 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
     };
 
     // Calculate iteration count
-    let iteration_count = if exp_len <= 32 && input.len() >= 96 + base_len as usize + exp_len as usize {
-        let exp_start = 96 + base_len as usize;
-        let exp_bytes = &input[exp_start..exp_start + exp_len as usize];
+    let iteration_count =
+        if exp_len <= 32 && input.len() >= 96 + base_len as usize + exp_len as usize {
+            let exp_start = 96 + base_len as usize;
+            let exp_bytes = &input[exp_start..exp_start + exp_len as usize];
 
-        if exp_bytes.iter().all(|&b| b == 0) {
-            0
-        } else {
-            let mut adjusted_exp_len = exp_len;
-            // Find first non-zero byte
-            for &byte in exp_bytes {
-                if byte == 0 {
-                    adjusted_exp_len = adjusted_exp_len.saturating_sub(1);
-                } else {
-                    break;
+            if exp_bytes.iter().all(|&b| b == 0) {
+                0
+            } else {
+                let mut adjusted_exp_len = exp_len;
+                // Find first non-zero byte
+                for &byte in exp_bytes {
+                    if byte == 0 {
+                        adjusted_exp_len = adjusted_exp_len.saturating_sub(1);
+                    } else {
+                        break;
+                    }
                 }
+                adjusted_exp_len * 8
+                    + (exp_bytes.last().unwrap_or(&0).leading_zeros() as u64).saturating_sub(1)
             }
-            adjusted_exp_len * 8 + (exp_bytes.last().unwrap_or(&0).leading_zeros() as u64).saturating_sub(1)
-        }
-    } else {
-        8 * exp_len.saturating_sub(32).max(1)
-    };
+        } else {
+            8 * exp_len.saturating_sub(32).max(1)
+        };
 
     let gas = (multiplication_complexity * iteration_count.max(1)) / 3;
     gas.max(200)
@@ -369,8 +384,14 @@ fn blake2f(input: &[u8]) -> eyre::Result<Vec<u8>> {
     for i in 0..8 {
         let start = 4 + i * 8;
         h[i] = u64::from_le_bytes([
-            input[start], input[start + 1], input[start + 2], input[start + 3],
-            input[start + 4], input[start + 5], input[start + 6], input[start + 7],
+            input[start],
+            input[start + 1],
+            input[start + 2],
+            input[start + 3],
+            input[start + 4],
+            input[start + 5],
+            input[start + 6],
+            input[start + 7],
         ]);
     }
 
@@ -378,8 +399,14 @@ fn blake2f(input: &[u8]) -> eyre::Result<Vec<u8>> {
     for i in 0..16 {
         let start = 68 + i * 8;
         m[i] = u64::from_le_bytes([
-            input[start], input[start + 1], input[start + 2], input[start + 3],
-            input[start + 4], input[start + 5], input[start + 6], input[start + 7],
+            input[start],
+            input[start + 1],
+            input[start + 2],
+            input[start + 3],
+            input[start + 4],
+            input[start + 5],
+            input[start + 6],
+            input[start + 7],
         ]);
     }
 
@@ -387,8 +414,14 @@ fn blake2f(input: &[u8]) -> eyre::Result<Vec<u8>> {
     for i in 0..2 {
         let start = 196 + i * 8;
         t[i] = u64::from_le_bytes([
-            input[start], input[start + 1], input[start + 2], input[start + 3],
-            input[start + 4], input[start + 5], input[start + 6], input[start + 7],
+            input[start],
+            input[start + 1],
+            input[start + 2],
+            input[start + 3],
+            input[start + 4],
+            input[start + 5],
+            input[start + 6],
+            input[start + 7],
         ]);
     }
 
@@ -407,11 +440,23 @@ fn blake2f(input: &[u8]) -> eyre::Result<Vec<u8>> {
     Ok(output)
 }
 
-fn blake2f_compression(mut h: [u64; 8], m: [u64; 16], t: [u64; 2], f: bool, rounds: u32) -> [u64; 8] {
+fn blake2f_compression(
+    mut h: [u64; 8],
+    m: [u64; 16],
+    t: [u64; 2],
+    f: bool,
+    rounds: u32,
+) -> [u64; 8] {
     // Blake2b constants
     const IV: [u64; 8] = [
-        0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
-        0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
+        0x6a09e667f3bcc908,
+        0xbb67ae8584caa73b,
+        0x3c6ef372fe94f82b,
+        0xa54ff53a5f1d36f1,
+        0x510e527fade682d1,
+        0x9b05688c2b3e6c1f,
+        0x1f83d9abfb41bd6b,
+        0x5be0cd19137e2179,
     ];
 
     const SIGMA: [[usize; 16]; 12] = [
@@ -518,16 +563,16 @@ fn kzg_point_evaluation(input: &[u8]) -> eyre::Result<Vec<u8>> {
 }
 
 fn verify_kzg_proof(commitment: &[u8], z: &[u8], y: &[u8], proof: &[u8]) -> eyre::Result<bool> {
-    use ark_bls12_381::{Bls12_381, Fr, G1Affine, G2Affine, G1Projective, G2Projective};
-    use ark_ec::{pairing::Pairing, CurveGroup};
+    use ark_bls12_381::{Bls12_381, Fr, G1Affine, G1Projective, G2Affine, G2Projective};
+    use ark_ec::{CurveGroup, pairing::Pairing};
     use ark_ff::PrimeField;
     use ark_serialize::CanonicalDeserialize;
 
     // Parse commitment and proof points (48 bytes compressed G1 points)
     let commitment_point = G1Affine::deserialize_compressed(&commitment[..])
         .map_err(|_| eyre!("Invalid commitment point"))?;
-    let proof_point = G1Affine::deserialize_compressed(&proof[..])
-        .map_err(|_| eyre!("Invalid proof point"))?;
+    let proof_point =
+        G1Affine::deserialize_compressed(&proof[..]).map_err(|_| eyre!("Invalid proof point"))?;
 
     // Convert z and y to field elements
     let z_fr = Fr::from_be_bytes_mod_order(z);
@@ -617,21 +662,34 @@ mod tests {
             let mut addr_bytes = [0u8; 20];
             addr_bytes[19] = i;
             let address = Address(addr_bytes);
-            assert!(is_precompile(&address), "Address 0x{:02x} should be a precompile", i);
+            assert!(
+                is_precompile(&address),
+                "Address 0x{:02x} should be a precompile",
+                i
+            );
         }
 
         // Test invalid addresses
         let mut addr_bytes = [0u8; 20];
         addr_bytes[19] = 0;
-        assert!(!is_precompile(&Address(addr_bytes)), "Address 0x00 should not be a precompile");
+        assert!(
+            !is_precompile(&Address(addr_bytes)),
+            "Address 0x00 should not be a precompile"
+        );
 
         addr_bytes[19] = 11;
-        assert!(!is_precompile(&Address(addr_bytes)), "Address 0x0B should not be a precompile");
+        assert!(
+            !is_precompile(&Address(addr_bytes)),
+            "Address 0x0B should not be a precompile"
+        );
 
         // Test non-zero prefix
         addr_bytes[0] = 1;
         addr_bytes[19] = 1;
-        assert!(!is_precompile(&Address(addr_bytes)), "Address with non-zero prefix should not be a precompile");
+        assert!(
+            !is_precompile(&Address(addr_bytes)),
+            "Address with non-zero prefix should not be a precompile"
+        );
     }
 
     #[test]
@@ -683,7 +741,7 @@ mod tests {
             "acee28ed6d5eff643274a2abd164fec12cc75f1ea78a87922304c04e2424bc88\
             000000000000000000000000000000000000000000000000000000000000001c\
             08da09260614b31b17af2ac76eaa7d50172b6d0cec03fe706748e2d532c0d309\
-            7e7a201aaefc664515b3a28a0bdd2fffdd58f3bff5fb639bf01f049c47648b3f"
+            7e7a201aaefc664515b3a28a0bdd2fffdd58f3bff5fb639bf01f049c47648b3f",
         );
 
         let result = ecrecover(&input).unwrap();
@@ -693,7 +751,8 @@ mod tests {
         assert_ne!(result, vec![0u8; 32]);
 
         // Expected address: 0xd148c7f37b346a4bd8e14f8c1f181f5f640481c8
-        let expected_address = hex_to_bytes("000000000000000000000000d148c7f37b346a4bd8e14f8c1f181f5f640481c8");
+        let expected_address =
+            hex_to_bytes("000000000000000000000000d148c7f37b346a4bd8e14f8c1f181f5f640481c8");
         assert_eq!(result, expected_address);
     }
 
@@ -720,7 +779,8 @@ mod tests {
         assert_eq!(result.len(), 32);
 
         // Empty string SHA-256 hash
-        let expected = hex_to_bytes("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        let expected =
+            hex_to_bytes("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
         assert_eq!(result, expected);
     }
 
@@ -730,7 +790,8 @@ mod tests {
         let result = sha256(&input).unwrap();
 
         // "abc" SHA-256 hash
-        let expected = hex_to_bytes("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        let expected =
+            hex_to_bytes("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
         assert_eq!(result, expected);
     }
 
@@ -989,8 +1050,14 @@ mod tests {
 
         // h - Blake2b IV (64 bytes, little-endian u64s)
         let h_values = [
-            0x6a09e667f3bcc908u64, 0xbb67ae8584caa73bu64, 0x3c6ef372fe94f82bu64, 0xa54ff53a5f1d36f1u64,
-            0x510e527fade682d1u64, 0x9b05688c2b3e6c1fu64, 0x1f83d9abfb41bd6bu64, 0x5be0cd19137e2179u64,
+            0x6a09e667f3bcc908u64,
+            0xbb67ae8584caa73bu64,
+            0x3c6ef372fe94f82bu64,
+            0xa54ff53a5f1d36f1u64,
+            0x510e527fade682d1u64,
+            0x9b05688c2b3e6c1fu64,
+            0x1f83d9abfb41bd6bu64,
+            0x5be0cd19137e2179u64,
         ];
         for h in h_values {
             input.extend_from_slice(&h.to_le_bytes());
@@ -1012,9 +1079,14 @@ mod tests {
         let result = blake2f(&input).unwrap();
 
         // Expected output for Blake2f compression of IV with "abc" message
-        let expected = hex_to_bytes("d3284c32b0abb2e548df19c4f7740c20f0771d6bcaf176482dd645e9133a9544210b29bb41a2af4bfbe5a5fabf854b997c8f40aaf818c0411a53d63aff481cc4");
+        let expected = hex_to_bytes(
+            "d3284c32b0abb2e548df19c4f7740c20f0771d6bcaf176482dd645e9133a9544210b29bb41a2af4bfbe5a5fabf854b997c8f40aaf818c0411a53d63aff481cc4",
+        );
 
-        assert_eq!(result, expected, "Blake2f output doesn't match expected value for IV + 'abc' test");
+        assert_eq!(
+            result, expected,
+            "Blake2f output doesn't match expected value for IV + 'abc' test"
+        );
     }
 
     #[test]
@@ -1192,7 +1264,8 @@ mod tests {
         let result = keccak256(input);
 
         // Empty string Keccak-256 hash
-        let expected = hex_to_bytes("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
+        let expected =
+            hex_to_bytes("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470");
         assert_eq!(result.to_vec(), expected);
     }
 

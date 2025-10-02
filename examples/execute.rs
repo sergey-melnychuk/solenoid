@@ -82,17 +82,15 @@ async fn main() -> eyre::Result<()> {
 
     println!("GAS: {}", evm.gas.used);
     println!("---");
-    evm.state
-        .iter()
-        .for_each(|st| match st {
-            StateTouch::Put(addr, key, val, new, _) => {
-                println!("W:{addr}[0x{key:0x}]=0x{val:0x}->0x{new:0x}");
-            }
-            StateTouch::Get(addr, key, val, _) => {
-                println!("R:{addr}[0x{key:0x}]=0x{val:0x}");
-            }
-            _ => ()
-        });
+    evm.state.iter().for_each(|st| match st {
+        StateTouch::Put(addr, key, val, new, _) => {
+            println!("W:{addr}[0x{key:0x}]=0x{val:0x}->0x{new:0x}");
+        }
+        StateTouch::Get(addr, key, val, _) => {
+            println!("R:{addr}[0x{key:0x}]=0x{val:0x}");
+        }
+        _ => (),
+    });
     println!("---");
     evm.account.iter().for_each(|acc| {
         use solenoid::executor::AccountTouch;

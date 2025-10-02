@@ -84,9 +84,8 @@ async fn main() -> eyre::Result<()> {
     let call_cost = 21000i64;
     let data_cost = {
         let total_calldata_len = args.len() + selector.len();
-        let nonzero_bytes_count = 
-            args.iter().filter(|byte| *byte != &0).count() +
-            selector.iter().filter(|byte| *byte != &0).count();
+        let nonzero_bytes_count = args.iter().filter(|byte| *byte != &0).count()
+            + selector.iter().filter(|byte| *byte != &0).count();
         nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
     } as i64;
     let total_gas = result.evm.gas.finalized(call_cost + data_cost);

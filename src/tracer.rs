@@ -221,8 +221,14 @@ impl TryFrom<Event> for OpcodeTrace {
                 gas_left,
                 gas_cost,
                 gas_back,
-                stack: stack.into_iter().map(|x| hex::encode(&x.into_bytes())).collect(),
-                memory: memory.into_iter().map(|x| hex::encode(&x.into_bytes())).collect(),
+                stack: stack
+                    .into_iter()
+                    .map(|x| hex::encode(&x.into_bytes()))
+                    .collect(),
+                memory: memory
+                    .into_iter()
+                    .map(|x| hex::encode(&x.into_bytes()))
+                    .collect(),
                 depth,
                 extra: Extra::new(extra),
             }),

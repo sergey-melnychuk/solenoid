@@ -187,7 +187,7 @@ impl Evm {
                         }
                     }
                 }
-                _ => ()
+                _ => (),
             }
         }
         for at in self.account.iter().rev() {
@@ -466,12 +466,9 @@ impl<T: EventTracer> Executor<T> {
                     evm.refund = evm.gas.refund;
 
                     self.debug.insert("is_call".to_string(), false.into());
-                    self.debug.insert(
-                        "gas_left".to_string(),
-                        (evm.gas.remaining() - cost).into(),
-                    );
                     self.debug
-                        .insert("gas_cost".to_string(), cost.into());
+                        .insert("gas_left".to_string(), (evm.gas.remaining() - cost).into());
+                    self.debug.insert("gas_cost".to_string(), cost.into());
                     self.debug
                         .insert("evm.gas.used".to_string(), evm.gas.used.into());
                     self.debug
@@ -1682,9 +1679,7 @@ impl<T: EventTracer> Executor<T> {
                     self.ret = ret;
                     Word::one()
                 }
-                Err(_) => {
-                    Word::zero()
-                }
+                Err(_) => Word::zero(),
             };
 
             self.tracer.push(Event {

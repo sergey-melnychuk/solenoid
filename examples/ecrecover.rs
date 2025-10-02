@@ -10,7 +10,10 @@ fn main() -> Result<()> {
     let input_bytes = hex::decode(input_hex)?;
 
     if input_bytes.len() != 128 {
-        eyre::bail!("Invalid input length: expected 128 bytes, got {}", input_bytes.len());
+        eyre::bail!(
+            "Invalid input length: expected 128 bytes, got {}",
+            input_bytes.len()
+        );
     }
 
     let msg_hash = &input_bytes[0..32];

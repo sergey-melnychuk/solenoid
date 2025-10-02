@@ -67,13 +67,7 @@ async fn test_deploy() -> eyre::Result<()> {
         evm.state,
         vec![
             StateTouch::Get(created1, Word::zero(), Word::zero(), false),
-            StateTouch::Put(
-                created1,
-                Word::zero(),
-                Word::zero(),
-                (&from).into(),
-                true,
-            ),
+            StateTouch::Put(created1, Word::zero(), Word::zero(), (&from).into(), true,),
             StateTouch::Put(created2, Word::zero(), Word::zero(), word("0x42"), false),
             StateTouch::Get(created1, Word::one(), Word::zero(), false),
             StateTouch::Put(
