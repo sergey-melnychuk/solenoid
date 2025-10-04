@@ -179,10 +179,9 @@ impl Evm {
                     }
                 }
                 StateTouch::Get(address, key, _, is_warm) => {
-                    if !*is_warm
-                        && let Some(state) = ext.state.get_mut(address) {
-                            state.data.remove(key);
-                        }
+                    if !*is_warm && let Some(state) = ext.state.get_mut(address) {
+                        state.data.remove(key);
+                    }
                 }
                 _ => (),
             }
@@ -228,7 +227,7 @@ impl Gas {
     pub fn finalized(&self, call_cost: i64) -> i64 {
         let used = self.used + call_cost;
         let cap = self.refund.min(used / 5);
-        
+
         // eprintln!("DEBUG: gas.used={} gas.refund={} refund.cap={cap} gas.final={ret}", self.used, self.refund);
         used.saturating_sub(cap)
     }

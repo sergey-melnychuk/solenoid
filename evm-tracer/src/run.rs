@@ -12,12 +12,28 @@ use revm::{
 };
 use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
 
-use crate::TxTrace;
+use crate::{OpcodeTrace, TxTrace};
+
+pub struct TxResult {
+    pub gas: u64,
+    pub ret: Vec<u8>,
+    pub rev: bool,
+}
+
+impl From<ExecResultAndState<ExecutionResult>> for TxResult {
+    fn from(value: ExecResultAndState<ExecutionResult>) -> Self {
+        Self {
+            gas: value.result.gas_used(),
+            ret: value.result.output().map(|bytes| bytes.to_vec()).unwrap_or_default(),
+            rev: !value.result.is_success(),
+        }
+    }
+}
 
 pub fn runner(
     header: Header,
     client: impl Provider + 'static,
-) -> impl FnMut(Tx) -> Result<(ExecResultAndState<ExecutionResult>, TxTrace)>
+) -> impl FnMut(Tx) -> Result<(TxResult, Vec<OpcodeTrace>)>
 {
     let prev_id: BlockId = (header.number - 1).into();
     let state_db =
@@ -53,7 +69,7 @@ pub fn runner(
             .nonce(tx.nonce())
             .gas_price(tx.gas_price().unwrap_or(tx.inner.max_fee_per_gas()))
             .gas_priority_fee(tx.max_priority_fee_per_gas())
-            .access_list(tx.access_list().cloned().unwrap_or_default())
+            // .access_list(tx.access_list().cloned().unwrap_or_default())
             .kind(match tx.to() {
                 Some(to_address) => TxKind::Call(to_address),
                 None => TxKind::Create,
@@ -61,20 +77,14 @@ pub fn runner(
             .build()
             .expect("tx env");
 
-        evm.inspector.setup(
-            tx.info().hash.unwrap_or_default(),
-            tx.inner.signer(),
-            tx.to().unwrap_or_default(),
-            tx.value(),
-        );
+        evm.inspector.setup(tx.info().hash.unwrap_or_default());
 
         let result = evm.inspect_tx(tx_env)?;
         if result.result.is_success() {
             evm.commit(result.state.clone());
         }
-        let tracer = evm.inspector.reset();
-
-        Ok((result, tracer))
+        let (_, traces) = evm.inspector.reset();
+        Ok((result.into(), traces))
     }
 }
 

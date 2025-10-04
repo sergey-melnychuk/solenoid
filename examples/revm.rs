@@ -55,8 +55,8 @@ async fn main() -> Result<()> {
         eprintln!("OK: {}", !result.result.is_halt());
 
         let path = format!("revm.{block_number}.{skip}.log");
-        evm_tracer::aux::dump(&path, &traces.traces)?;
-        println!("TRACES: {} in {path}", traces.traces.len());
+        evm_tracer::aux::dump(&path, &traces)?;
+        println!("TRACES: {} in {path}", traces.len());
     }
     Ok(())
 }

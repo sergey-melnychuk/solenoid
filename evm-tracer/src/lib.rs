@@ -4,7 +4,7 @@ use alloy_provider::Provider;
 use alloy_rpc_types::{Header, Transaction as Tx};
 use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
-use revm::context::{ContextTr, JournalTr};
+use revm::context::ContextTr;
 use revm::inspector::Inspector;
 use revm::interpreter::{
     interpreter_types::{Jumps, MemoryTr, StackTr},
@@ -14,7 +14,7 @@ use revm::interpreter::{
 use revm::{
     context::{Context, TxEnv},
     database::{AlloyDB, CacheDB, StateBuilder, WrapDatabaseAsync},
-    primitives::{Address, Bytes, Log, TxKind, B256, U256},
+    primitives::{Log, TxKind, B256, U256},
     MainBuilder,
 };
 use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
@@ -36,7 +36,7 @@ pub async fn trace_all(
     txs: impl Iterator<Item = Tx>,
     header: &Header,
     client: impl Provider + Clone,
-) -> Result<Vec<(ExecResultAndState<ExecutionResult>, TxTrace)>> {
+) -> Result<Vec<(ExecResultAndState<ExecutionResult>, Vec<OpcodeTrace>)>> {
     let prev_id: BlockId = (header.number - 1).into();
     let state_db =
         WrapDatabaseAsync::new(AlloyDB::new(client.clone(), prev_id))
@@ -83,20 +83,15 @@ pub async fn trace_all(
             .build()
             .unwrap();
 
-        evm.inspector.setup(
-            tx.info().hash.unwrap_or_default(),
-            tx.inner.signer(),
-            tx.to().unwrap_or_default(),
-            tx.value(),
-        );
+        evm.inspector.setup(tx.info().hash.unwrap_or_default());
 
         let result = evm.inspect_tx(tx_env)?;
         if result.result.is_success() {
             evm.commit(result.state.clone());
         }
 
-        let tracer = evm.inspector.reset();
-        ret.push((result, tracer));
+        let (_, traces) = evm.inspector.reset();
+        ret.push((result, traces));
     }
 
     Ok(ret)
@@ -146,15 +141,12 @@ pub async fn trace_one(
         .unwrap();
 
     let mut tracer = TxTrace::default();
-    tracer.setup(
-        tx.info().hash.unwrap_or_default(),
-        tx.inner.signer(),
-        tx.to().unwrap_or_default(),
-        tx.value(),
-    );
+    tracer.setup(tx.info().hash.unwrap_or_default());
 
     let mut evm = ctx.build_mainnet_with_inspector(&mut tracer);
     let result = evm.inspect_tx(tx_env)?;
+
+
     Ok((result, tracer))
 }
 
@@ -197,11 +189,6 @@ impl Eq for Extra {}
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TxTrace {
     pub hash: B256,
-    pub from: Address,
-    pub to: Address,
-    pub value: U256,
-    pub success: bool,
-    pub return_data: Bytes,
     pub traces: Vec<OpcodeTrace>,
 
     #[serde(skip)]
@@ -225,26 +212,18 @@ impl TxTrace {
     pub fn setup(
         &mut self,
         hash: B256,
-        from: Address,
-        to: Address,
-        value: U256,
     ) {
         *self = Self {
             hash,
-            from,
-            to,
-            value,
-            success: false,
-            return_data: Bytes::new(),
             traces: Vec::new(),
             aux: Aux::default(),
         }
     }
 
-    pub fn reset(&mut self) -> Self {
+    pub fn reset(&mut self) -> (B256, Vec<OpcodeTrace>) {
         let ret = self.clone();
         *self = Self::default();
-        ret
+        (ret.hash, ret.traces)
     }
 }
 
@@ -312,29 +291,23 @@ where
 
     fn call_end(
         &mut self,
-        context: &mut CTX,
+        _context: &mut CTX,
         _inputs: &CallInputs,
-        outcome: &mut CallOutcome,
+        _outcome: &mut CallOutcome,
     ) {
-        self.aux.depth -= 1;
-        if context.journal_mut().depth() == 0 {
-            // This is the top-level call ending
-            self.success = outcome.result.is_ok();
-            self.return_data = outcome.result.output.clone();
+        if self.aux.depth > 0 {
+            self.aux.depth -= 1;
         }
     }
 
     fn create_end(
         &mut self,
-        context: &mut CTX,
+        _context: &mut CTX,
         _inputs: &CreateInputs,
-        outcome: &mut CreateOutcome,
+        _outcome: &mut CreateOutcome,
     ) {
-        self.aux.depth -= 1;
-        if context.journal_mut().depth() == 0 {
-            // This is the top-level create ending
-            self.success = outcome.result.is_ok();
-            self.return_data = outcome.result.output.clone();
+        if self.aux.depth > 0 {
+            self.aux.depth -= 1;
         }
     }
 

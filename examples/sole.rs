@@ -99,7 +99,7 @@ async fn main() -> eyre::Result<()> {
         .await?; // TX:11
 
         // eprintln!("TX: {tx:#?}");
-        eprintln!("TX hash={:#064x} index={}", tx.hash, tx.index.as_usize());
+        // eprintln!("TX hash={:#064x} index={}", tx.hash, tx.index.as_usize());
         // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
         // eprintln!("GAS LIMIT: {}", tx.gas.as_u64());
 

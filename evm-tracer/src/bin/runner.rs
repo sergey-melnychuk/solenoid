@@ -35,12 +35,12 @@ async fn main() -> Result<()> {
     for tx in txs {
         let idx = tx.transaction_index.unwrap_or_default();
         let now = Instant::now();
-        let (result, tracer) = f(tx)?;
+        let (result, traces) = f(tx)?;
         let ms = now.elapsed().as_millis();
         eprintln!("TX \tindex={idx} \tOK={} \tGAS={} \tTRACES={} \tms={ms}", 
-            result.result.is_success(), 
-            result.result.gas_used(),
-            tracer.traces.len());
+            !result.rev, 
+            result.gas,
+            traces.len());
     }
     
     Ok(())

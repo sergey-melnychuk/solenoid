@@ -35,16 +35,16 @@ pub fn execute(address: &Address, input: &[u8]) -> eyre::Result<Vec<u8>> {
 
 pub fn gas_cost(address: &Address, input: &[u8]) -> i64 {
     (match address.0[19] {
-        1 => 3000,                                         // ecrecover
+        1 => 3000,                                        // ecrecover
         2 => 60 + 12 * input.len().div_ceil(32) as u64,   // sha256
         3 => 600 + 120 * input.len().div_ceil(32) as u64, // ripemd160
-        4 => 15 + 3 * input.len() as u64,                  // identity
-        5 => modexp_gas_cost(input),                       // modexp
-        6 => 150,                                          // bn128_add
-        7 => 6000,                                         // bn128_mul
-        8 => 45000 + 34000 * (input.len() / 192) as u64,   // bn128_pairing
-        9 => blake2f_gas_cost(input),                      // blake2f
-        10 => 50000,                                       // kzg_point_evaluation (fixed cost)
+        4 => 15 + 3 * input.len() as u64,                 // identity
+        5 => modexp_gas_cost(input),                      // modexp
+        6 => 150,                                         // bn128_add
+        7 => 6000,                                        // bn128_mul
+        8 => 45000 + 34000 * (input.len() / 192) as u64,  // bn128_pairing
+        9 => blake2f_gas_cost(input),                     // blake2f
+        10 => 50000,                                      // kzg_point_evaluation (fixed cost)
         _ => 0,
     }) as i64
 }
