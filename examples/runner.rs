@@ -17,6 +17,7 @@ async fn main() -> eyre::Result<()> {
         .unwrap_or(23027350); // https://xkcd.com/221/
 
     let Block{ header, transactions } = eth.get_full_block(Word::from(block_number)).await?;
+    eprintln!("📦 Fetched block number: {} [with {} txs]", header.number.as_usize(), transactions.len());
 
     let ext = Ext::at_number(Word::from(block_number - 1), eth).await?;
 

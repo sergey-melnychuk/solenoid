@@ -13,7 +13,7 @@ async fn main() -> eyre::Result<()> {
 
     let url = std::env::var("URL")?;
     let eth = eth::EthClient::new(&url);
-    let mut ext = Ext::at_latest(eth).await?;
+    let mut ext = Ext::at_number(Word::from(23505042), eth).await?;
     /* Uncomment lines below to avoid JSON-RPC requests */
     // ext.data_mut(&addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"))
     //     .insert(Word::zero(), Word::zero()); // Call.owner

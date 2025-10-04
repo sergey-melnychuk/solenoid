@@ -67,7 +67,7 @@ async fn main() -> eyre::Result<()> {
 
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
-    let mut ext = Ext::at_latest(eth).await?;
+    let mut ext = Ext::at_number(Word::from(23505042), eth).await?;
     ext.acc_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
 
     println!("\nEXECUTION:");
