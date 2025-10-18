@@ -226,7 +226,7 @@ impl Runner {
         evm.gas = Gas::new(self.call.gas.as_i64() - upfront_gas_reduction);
 
         ext.pull(&self.call.from).await?;
-        let nonce = ext.acc_mut(&self.call.from).nonce;
+        let nonce = ext.account_mut(&self.call.from).nonce;
         let address: Address = self.call.from.of_smart_contract(nonce);
 
         if !self.call.to.is_zero() {
@@ -248,9 +248,12 @@ impl Runner {
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
             .await;
 
+        ext.pull(&address).await?;
+        ext.pull(&self.call.from).await?;
+
         let hash = Word::from_bytes(&keccak256(&ret));
         *ext.code_mut(&address) = (ret.clone(), hash);
-        ext.acc_mut(&self.call.from).nonce += Word::one();
+        ext.account_mut(&self.call.from).nonce += Word::one();
 
         Ok(CallResult {
             evm,

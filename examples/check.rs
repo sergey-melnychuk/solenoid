@@ -53,13 +53,16 @@ fn main() -> eyre::Result<()> {
     }
 
     let mut failed = false;
-    let mut line = 0;
-    let pairs = revm.into_iter().zip(sole);
-    for (trace, block) in pairs {
+    let mut explore = false;
+    let len = sole.len().min(revm.len());
+    let mut i = 0;
+    while i < len {
+        let (trace, block) = (revm[i], sole[i]);
         if trace.is_empty() ^ block.is_empty() {
             break;
         }
         if trace.starts_with('#') && block.starts_with('#') {
+            i += 1;
             continue;
         }
 
@@ -69,24 +72,37 @@ fn main() -> eyre::Result<()> {
             pretty_assertions::assert_eq!(block, trace);
         });
 
-        line += 1;
         let is_failed = r.is_err();
         if is_failed {
-            eprintln!("LINE: {line}");
+            eprintln!("LINE: {i}");
             failed = true;
+        } else if explore {
+            eprintln!("{}", serde_json::to_string_pretty(&trace).unwrap());
+            eprintln!("\nLINE: {i} [explore]");
         }
 
-        if is_failed {
+        if is_failed || explore {
+            explore = false;
             enable_raw_mode()?;
             let event = read()?;
             disable_raw_mode()?;
             if let Some(event) = event.as_key_press_event() {
                 match event.code {
-                    KeyCode::Char('n') => continue,
+                    KeyCode::Char('n') => {
+                        i += 1;
+                        continue
+                    },
+                    KeyCode::Char('p') => {
+                        i -= 1;
+                        explore = true;
+                        continue
+                    },
                     _ => break,
                 }
             }
         }
+
+        i += 1;
     }
 
     if !failed {

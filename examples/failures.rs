@@ -16,8 +16,10 @@ async fn main() -> eyre::Result<()> {
     let from = addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512");
 
     let mut ext = Ext::local();
-    ext.acc_mut(&from).value = Word::from(100_000_000_000_000_000u64);
-    ext.data_mut(&from.of_smart_contract(Word::zero()))
+    ext.state.entry(from).or_default().value = Word::from(100_000_000_000_000_000u64);
+    ext.state.entry(from.of_smart_contract(Word::zero()))
+        .or_default()
+        .state
         .insert(Word::zero(), Word::zero()); // Fail.owner
 
     let code = include_str!("../etc/fail/Fail.bin");

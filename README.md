@@ -74,3 +74,9 @@ NOTE: len match: 9019
 OK
 ./target/release/examples/quoter-check quoter-revm.log quoter-sole.log  0,08s user 0,02s system 20% cpu 0,479 total
 ```
+
+---
+
+```
+cargo build --target wasm32-unknown-unknown
+```

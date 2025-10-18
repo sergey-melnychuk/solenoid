@@ -2,19 +2,20 @@ use std::{collections::HashMap, time::Instant};
 
 use crate::{
     common::{
-        account::Account,
         address::Address,
-        hash::{self, keccak256},
+        hash::keccak256,
         word::Word,
     },
     eth::EthClient,
 };
 
-#[derive(Default)]
-pub struct State {
-    pub account: Account,
-    pub data: HashMap<Word, Word>,
+#[derive(Debug, Default)]
+pub struct Account {
+    pub value: Word,
+    pub nonce: Word,
+    pub root: Word,
     pub code: (Vec<u8>, Word),
+    pub state: HashMap<Word, Word>,
 }
 
 struct Remote {
@@ -25,7 +26,7 @@ struct Remote {
 #[derive(Default)]
 pub struct Ext {
     remote: Option<Remote>,
-    pub state: HashMap<Address, State>,
+    pub state: HashMap<Address, Account>,
     pub original: HashMap<(Address, Word), Word>,
     pub transient: HashMap<Word, Word>,
 }
@@ -55,7 +56,10 @@ impl Ext {
     }
 
     pub async fn get(&mut self, addr: &Address, key: &Word) -> eyre::Result<Word> {
-        if let Some(val) = self.state.get(addr).and_then(|s| s.data.get(key)).copied() {
+        if !self.state.contains_key(addr) {
+            self.pull(addr).await?;
+        }
+        if let Some(val) = self.state.get(addr).and_then(|s| s.state.get(key)).copied() {
             tracing::debug!("GET: {addr}[{key:#x}]={val:#064x} [cached value]");
             Ok(val)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
@@ -65,7 +69,7 @@ impl Ext {
             let val = eth.get_storage_at(block_hash, &address, &hex).await?;
             let ms = now.elapsed().as_millis();
 
-            self.state.entry(*addr).or_default().data.insert(*key, val);
+            self.state.entry(*addr).or_default().state.insert(*key, val);
             self.original.entry((*addr, *key)).or_insert(val);
 
             tracing::debug!("GET: {addr:#}[{key:#x}]={val:#064x} [took {ms} ms]");
@@ -77,7 +81,7 @@ impl Ext {
 
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
         let state = self.state.entry(*addr).or_default();
-        state.data.insert(key, val);
+        state.state.insert(key, val);
         tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}");
         Ok(())
     }
@@ -98,66 +102,63 @@ impl Ext {
     pub async fn code(&mut self, addr: &Address) -> eyre::Result<(Vec<u8>, Word)> {
         if let Some(code) = self.state.get(addr).map(|s| s.code.clone()) {
             Ok(code)
-        } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
-            let address = format!("0x{}", hex::encode(addr.0));
-            let code = eth.get_code(block_hash, &address).await?;
-            let state = self.state.entry(*addr).or_default();
-            let hash = Word::from_bytes(&keccak256(&code));
-            state.code = (code.clone(), hash);
-            Ok((code, hash))
         } else {
-            Ok((vec![], Word::from_bytes(&hash::empty())))
+            Ok(self.pull(addr).await?.code.clone())
         }
     }
 
     pub async fn balance(&mut self, addr: &Address) -> eyre::Result<Word> {
-        if let Some(value) = self.state.get(addr).map(|s| s.account.value) {
+        if let Some(value) = self.state.get(addr).map(|s| s.value) {
             Ok(value)
-        } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
-            let address = format!("0x{}", hex::encode(addr.0));
-            let balance = eth.get_balance(block_hash, &address).await?;
-            let state = self.state.entry(*addr).or_default();
-            state.account.value = balance;
-            Ok(balance)
         } else {
-            Ok(Word::zero())
+            Ok(self.pull(addr).await?.value)
         }
     }
 
     pub async fn nonce(&mut self, addr: &Address) -> eyre::Result<Word> {
-        if let Some(nonce) = self.state.get(addr).map(|s| s.account.nonce) {
-            Ok(nonce)
-        } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
-            let address = format!("0x{}", hex::encode(addr.0));
-            let nonce = eth.get_nonce(block_hash, &address).await?;
-            let state = self.state.entry(*addr).or_default();
-            state.account.nonce = nonce;
+        if let Some(nonce) = self.state.get(addr).map(|s| s.nonce) {
             Ok(nonce)
         } else {
-            Ok(Word::zero())
+            Ok(self.pull(addr).await?.nonce)
         }
     }
 
-    pub async fn pull(&mut self, addr: &Address) -> eyre::Result<Account> {
-        let (_code, _hash) = self.code(addr).await?;
-        let value = self.balance(addr).await?;
-        let nonce = self.nonce(addr).await?;
-        Ok(Account {
-            value,
-            nonce,
-            root: Word::zero(),
-        })
+    pub async fn pull(&mut self, addr: &Address) -> eyre::Result<&Account> {
+        if self.state.contains_key(addr) {
+            return Ok(self.state.get(addr).expect("must be present"))
+        }
+        if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
+            let address = format!("0x{}", hex::encode(addr.0));
+            let value = eth.get_balance(block_hash, &address).await?;
+            let nonce = eth.get_nonce(block_hash, &address).await?;
+            let code = eth.get_code(block_hash, &address).await?;
+            let hash = Word::from_bytes(&keccak256(&code));
+            let account = Account {
+                value,
+                nonce,
+                code: (code, hash),
+                root: Word::zero(),
+                state: Default::default(),
+            };
+            self.state.insert(*addr, account);
+            Ok(self.state.get(addr).expect("must always be present"))
+        } else {
+            eyre::bail!("failed to pull account {addr}")
+        }
     }
 
-    pub fn acc_mut(&mut self, addr: &Address) -> &mut Account {
-        &mut self.state.entry(*addr).or_default().account
+    pub fn account_mut(&mut self, addr: &Address) -> &mut Account {
+        if let Some(account) = self.state.get_mut(addr) {
+            return account;
+        }
+        panic!("missing account {addr}")
+    }
+
+    pub fn state_mut(&mut self, addr: &Address) -> &mut HashMap<Word, Word> {
+        &mut self.account_mut(addr).state
     }
 
     pub fn code_mut(&mut self, addr: &Address) -> &mut (Vec<u8>, Word) {
-        &mut self.state.entry(*addr).or_default().code
-    }
-
-    pub fn data_mut(&mut self, addr: &Address) -> &mut HashMap<Word, Word> {
-        &mut self.state.entry(*addr).or_default().data
+        &mut self.account_mut(addr).code
     }
 }

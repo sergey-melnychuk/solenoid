@@ -1,7 +1,7 @@
 use eyre::{Context, eyre};
 use solenoid::{
     common::{
-        address::{Address, addr},
+        address::Address,
         hash,
         word::Word,
     },
@@ -11,11 +11,12 @@ use solenoid::{
     tracer::EventTracer,
 };
 
+#[allow(dead_code)]
 async fn patch(ext: &mut Ext, acc: &Address, val: &str) -> eyre::Result<()> {
     ext.pull(&acc).await?;
-    let old = ext.acc_mut(&acc).value;
+    let old = ext.account_mut(&acc).value;
     let val = Word::from_hex(val)?;
-    ext.acc_mut(&acc).value = val;
+    ext.account_mut(&acc).value = val;
     eprintln!("PATCH: {acc} balance {old} -> {val}");
     Ok(())
 }
@@ -48,6 +49,7 @@ async fn main() -> eyre::Result<()> {
     for tx in txs {
         let idx = tx.index.as_u64();
 
+        /*
         patch(&mut ext, &tx.from, "0x90a4a345dbae6ead").await?; // TX:1
         patch(
             &mut ext,
@@ -97,6 +99,7 @@ async fn main() -> eyre::Result<()> {
             "0x2f40478f834000",
         )
         .await?; // TX:11
+        */
 
         // eprintln!("TX: {tx:#?}");
         // eprintln!("TX hash={:#064x} index={}", tx.hash, tx.index.as_usize());

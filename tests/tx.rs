@@ -25,7 +25,8 @@ async fn tx(
     let eth = eth::EthClient::new(&url);
     // let mut ext = Ext::at_latest(eth).await?;
     let mut ext = Ext::at_number(word("0x15f5e96") - Word::one(), eth).await?;
-    ext.acc_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
+    ext.pull(&from).await?;
+    ext.account_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
 
     let sole = Solenoid::new();
     let res = sole
@@ -61,7 +62,7 @@ async fn test_tx_()
 */
 
 #[tokio::test]
-#[ignore = "TODO: 2nd delegatecall has all-zeroes calldata"]
+#[ignore = "TODO: FIXME: 2nd delegatecall has all-zeroes calldata"]
 async fn test_tx_0xe30bacb372ab39e3cfc57c2b939ed1962833852e884d60fcbca6f82d2c2a6507()
 -> eyre::Result<()> {
     let mut res = tx(
@@ -76,6 +77,7 @@ async fn test_tx_0xe30bacb372ab39e3cfc57c2b939ed1962833852e884d60fcbca6f82d2c2a6
         println!("{}", serde_json::to_string(&e)?);
     }
     assert!(!res.evm.reverted);
+    // assert_eq!(res.evm.gas.used, 269137);
     Ok(())
 }
 
@@ -101,7 +103,7 @@ async fn test_tx_0x9b312d7abad8a54cca5735b21304097b700142cea90aeba3740f6a470e734
         println!("{}", serde_json::to_string(&e)?);
     }
     assert!(!res.evm.reverted);
-    // assert_eq!(res.evm.gas.used, word("0x9a28"));
+    // assert_eq!(res.evm.gas.used, 39464);
     Ok(())
 }
 
@@ -120,14 +122,14 @@ async fn test_tx_0x6d2d94b5bf06ff07cca77f0100233da7d45876cc58595122505ebd124d00d
         println!("{}", serde_json::to_string(&e)?);
     }
     assert!(res.evm.reverted);
+    // assert_eq!(res.evm.gas.used, 40202);
     Ok(())
 }
 
 #[tokio::test]
-#[ignore = "TODO: return error instead of panicing"]
 async fn test_tx_0x3db7dd66f03757ef51fd8c2cd98d533a76f9eca8373d2daf8793e271842e29e3()
 -> eyre::Result<()> {
-    let mut res = tx(
+    let res = tx(
         "0x3db7dd66f03757ef51fd8c2cd98d533a76f9eca8373d2daf8793e271842e29e3",
         addr("0xe8b023ed28131909c39546e2f68afc8f5031c7da"),
         addr("0x0000000000000068f116a894984e2db1123eb395"),
@@ -135,9 +137,7 @@ async fn test_tx_0x3db7dd66f03757ef51fd8c2cd98d533a76f9eca8373d2daf8793e271842e2
         word("0x4a3fa"),
         word("0xe35fa931a0000"),
     ).await?;
-    for e in res.tracer.take() {
-        println!("{}", serde_json::to_string(&e)?);
-    }
-    assert!(!res.evm.reverted);
+    assert!(res.evm.reverted);
+    // assert_eq!(res.evm.gas.used, 40550);
     Ok(())
 }

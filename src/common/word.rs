@@ -131,6 +131,12 @@ impl From<i32> for Word {
     }
 }
 
+impl From<i64> for Word {
+    fn from(value: i64) -> Self {
+        Self(primitive_types::U256::from(value))
+    }
+}
+
 impl From<u64> for Word {
     fn from(value: u64) -> Self {
         Self(primitive_types::U256::from(value))

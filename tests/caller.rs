@@ -2,7 +2,7 @@ use solenoid::{
     common::{
         address::{Address, addr},
         call::Call,
-        hash::keccak256,
+        hash::{self, keccak256},
         word::{Word, word},
     },
     decoder::Decoder,
@@ -41,7 +41,8 @@ async fn test_deploy() -> eyre::Result<()> {
         gas: Word::from(1_000_000),
     };
 
-    ext.acc_mut(&from).nonce = Word::zero();
+    ext.pull(&from).await?;
+    ext.account_mut(&from).nonce = Word::zero();
     let created1 = from.of_smart_contract(Word::zero());
     let created2 = created1.of_smart_contract(Word::zero());
 
@@ -57,7 +58,7 @@ async fn test_deploy() -> eyre::Result<()> {
         vec![
             AccountTouch::SetCode(
                 created2,
-                (Word::zero(), vec![]),
+                (Word::from_bytes(&hash::empty()), vec![]),
                 (Word::from_bytes(&keccak256(&code)), code)
             ),
             AccountTouch::SetNonce(from, 0, 1)
