@@ -54,6 +54,7 @@ pub fn runner(
         })
         .modify_cfg_chained(|c| {
             c.chain_id = 1;
+            c.disable_nonce_check = true;
         });
 
     let tracer = TxTrace::new();
