@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Instant};
+use std::{collections::{HashMap, HashSet}, time::Instant};
 
 use crate::{
     common::{
@@ -29,6 +29,10 @@ pub struct Ext {
     pub state: HashMap<Address, Account>,
     pub original: HashMap<(Address, Word), Word>,
     pub transient: HashMap<Word, Word>,
+
+    // EIP-2929: Per-transaction access tracking
+    pub accessed_addresses: HashSet<Address>,
+    pub accessed_storage: HashSet<(Address, Word)>,
 }
 
 impl Ext {
@@ -42,6 +46,8 @@ impl Ext {
             state: Default::default(),
             original: HashMap::default(),
             transient: HashMap::default(),
+            accessed_addresses: HashSet::default(),
+            accessed_storage: HashSet::default(),
         }
     }
 
@@ -53,6 +59,45 @@ impl Ext {
     pub async fn at_latest(eth: EthClient) -> eyre::Result<Self> {
         let (_, block_hash) = eth.get_latest_block().await?;
         Ok(Self::at_hash(block_hash, eth))
+    }
+
+    pub fn reset(&mut self) {
+        // Clear EIP-2929 access tracking (you need to add this tracking first!)
+        // Clear transient storage (EIP-1153)
+        self.transient.clear();
+
+        // Clear EIP-2929 access tracking
+        self.accessed_addresses.clear();
+        self.accessed_storage.clear();
+        
+        // Update 'original' to reflect current state as new baseline
+        // This is tricky - you need to snapshot current state values
+        for ((addr, key), original) in self.original.iter_mut() {
+            if let Some(current) = self.state.get(addr)
+                .and_then(|s| s.state.get(key)) {
+                *original = *current;
+            }
+        }
+    }
+
+    /// Check if an address has been accessed in the current transaction (EIP-2929)
+    pub fn is_address_warm(&self, addr: &Address) -> bool {
+        self.accessed_addresses.contains(addr)
+    }
+
+    /// Mark an address as accessed in the current transaction (EIP-2929)
+    pub fn warm_address(&mut self, addr: &Address) {
+        self.accessed_addresses.insert(*addr);
+    }
+
+    /// Check if a storage slot has been accessed in the current transaction (EIP-2929)
+    pub fn is_storage_warm(&self, addr: &Address, key: &Word) -> bool {
+        self.accessed_storage.contains(&(*addr, *key))
+    }
+
+    /// Mark a storage slot as accessed in the current transaction (EIP-2929)
+    pub fn warm_storage(&mut self, addr: &Address, key: &Word) {
+        self.accessed_storage.insert((*addr, *key));
     }
 
     pub async fn get(&mut self, addr: &Address, key: &Word) -> eyre::Result<Word> {

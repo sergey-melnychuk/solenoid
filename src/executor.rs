@@ -108,9 +108,12 @@ impl Evm {
         exp_cost
     }
 
-    pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &Ext) -> Word {
+    pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &mut Ext) -> Word {
         // EIP-2929: Check if address has been accessed during this transaction
-        let is_warm = ext.state.contains_key(address);
+        let is_warm = ext.is_address_warm(address);
+        if !is_warm {
+            ext.warm_address(address);
+        }
         if is_warm {
             Word::from(100) // warm access
         } else {
@@ -303,7 +306,7 @@ impl<T: EventTracer> Executor<T> {
         evm: &mut Evm,
         ext: &mut Ext,
     ) -> eyre::Result<(T, Vec<u8>)> {
-        ext.transient.clear();
+        ext.reset();
 
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
@@ -422,7 +425,9 @@ impl<T: EventTracer> Executor<T> {
         // EIP-2929: Pre-warm sender and target addresses at transaction start
         if ctx.depth == 1 {
             ext.pull(&call.from).await.expect("pre-warm:from");
+            ext.warm_address(&call.from);
             ext.pull(&call.to).await.expect("pre-warm:to");
+            ext.warm_address(&call.to);
         }
 
         self.tracer.push(Event {
@@ -653,6 +658,7 @@ impl<T: EventTracer> Executor<T> {
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let m = evm.pop()?;
+                // TODO: FIXME: addition might overflow
                 let res = ((a % m) + (b % m)) % m;
                 evm.push(res)?;
                 gas = 8.into();
@@ -1153,11 +1159,10 @@ impl<T: EventTracer> Executor<T> {
             0x54 => {
                 // SLOAD
                 let key = evm.pop()?;
-                let is_warm = ext
-                    .state
-                    .get(&this)
-                    .map(|s| s.state.contains_key(&key))
-                    .unwrap_or_default();
+                let is_warm = ext.is_storage_warm(&this, &key);
+                if !is_warm {
+                    ext.warm_storage(&this, &key);
+                }
                 let val = evm.get(ext, &this, &key).await?;
                 evm.push(val)?;
                 evm.state.push(StateTouch::Get(this, key, val, is_warm));
@@ -1191,11 +1196,10 @@ impl<T: EventTracer> Executor<T> {
                 }
                 let key = evm.pop()?;
 
-                let is_warm = ext
-                    .state
-                    .get(&this)
-                    .map(|s| s.state.contains_key(&key))
-                    .unwrap_or_default();
+                let is_warm = ext.is_storage_warm(&this, &key);
+                if !is_warm {
+                    ext.warm_storage(&this, &key);
+                }
 
                 let val = evm.get(ext, &this, &key).await?;
                 let original = ext.original.get(&(this, key)).cloned().unwrap_or_default();
