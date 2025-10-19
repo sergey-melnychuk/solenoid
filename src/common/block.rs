@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::{Hex, address::Address, word::Word};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tx {
     pub hash: Word,
     #[serde(rename = "transactionIndex")]
