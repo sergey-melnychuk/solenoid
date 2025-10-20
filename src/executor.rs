@@ -51,8 +51,8 @@ const STACK_LIMIT: usize = 1024;
 
 const CALL_DEPTH_LIMIT: usize = 1024;
 
-// 10Mb: opinionated allocation sanity check limit
-const ALLOCATION_SANITY_LIMIT: usize = 1024 * 1024 * 10;
+// 1MB: opinionated allocation sanity check limit
+const ALLOCATION_SANITY_LIMIT: usize = 1024 * 1024;
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub enum StateTouch {
@@ -321,11 +321,11 @@ impl<T: EventTracer> Executor<T> {
 
         evm.gas = Gas::new(gas);
 
-        let is_create = call.to.is_zero();
-        let is_transfer = code.bytecode.is_empty() || call.data.is_empty() && !is_create;
-        if is_transfer && !call.value.is_zero() {
-            let src = ext.balance(&call.from).await?;
-            let dst = ext.balance(&call.to).await?;
+        // TODO: sort out value transfer!
+        /*
+        let src = ext.balance(&call.from).await?;
+        let dst = ext.balance(&call.to).await?;
+        if !call.value.is_zero() {
             if src < call.value {
                 return Err(ExecutorError::InsufficientFunds {
                     have: src,
@@ -334,45 +334,17 @@ impl<T: EventTracer> Executor<T> {
                 .into());
             }
 
-            // TODO: EIP-1559 (see: https://www.blocknative.com/blog/eip-1559-fees)
-            let gas_price = Word::from(1_000_000);
-            let gas_fee = Word::from(evm.gas.used) * gas_price;
-            if src < call.value + gas_fee {
-                return Err(ExecutorError::InsufficientFunds {
-                    have: src,
-                    need: call.value + gas_fee.into(),
-                }
-                .into());
-            }
-
-            let nonce = ext.account_mut(&call.from).nonce;
-            ext.account_mut(&call.from).nonce = nonce + Word::one();
-            evm.account.push(AccountTouch::SetNonce(
-                call.from,
-                nonce.as_u64(),
-                nonce.as_u64() + 1,
-            ));
-            self.tracer.push(Event {
-                data: EventData::Account(AccountEvent::SetNonce {
-                    address: call.from,
-                    val: nonce.as_u64(),
-                    new: nonce.as_u64() + 1,
-                }),
-                depth: 0,
-                reverted: false,
-            });
-
-            ext.account_mut(&call.from).value -= call.value + gas_fee.into();
+            ext.account_mut(&call.from).value -= call.value;
             evm.account.push(AccountTouch::SetValue(
                 call.from,
                 src,
-                src - call.value - gas_fee.into(),
+                src - call.value,
             ));
             self.tracer.push(Event {
                 data: EventData::Account(AccountEvent::SetValue {
                     address: call.from,
                     val: src,
-                    new: src - call.value - gas_fee.into(),
+                    new: src - call.value,
                 }),
                 depth: 0,
                 reverted: false,
@@ -390,28 +362,82 @@ impl<T: EventTracer> Executor<T> {
                 depth: 0,
                 reverted: false,
             });
+        }
 
+        let nonce = ext.nonce(&call.from).await?;
+        ext.account_mut(&call.from).nonce = nonce + Word::one();
+        evm.account.push(AccountTouch::SetNonce(
+            call.from,
+            nonce.as_u64(),
+            nonce.as_u64() + 1,
+        ));
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::SetNonce {
+                address: call.from,
+                val: nonce.as_u64(),
+                new: nonce.as_u64() + 1,
+            }),
+            depth: 0,
+            reverted: false,
+        });
+        */
+
+        let is_transfer_only = code.bytecode.is_empty() && call.data.is_empty() && !call.to.is_zero();
+        if is_transfer_only {
             evm.stopped = true;
             evm.reverted = false;
-            Ok((self.tracer, vec![]))
-        } else {
-            let nonce = ext.nonce(&call.from).await?;
-            let address = call.from.of_smart_contract(nonce);
-            let ctx = Context {
-                created: address,
-                origin: call.from,
-                depth: 1,
-                ..Context::default()
-            };
-            let tracer = self.tracer.fork();
-            let mut executor = Executor::<T>::with_tracer(tracer).with_header(self.header);
-            executor.set_log(self.log);
-            let (tracer, ret) = executor
-                .execute_with_context(code, call, evm, ext, ctx)
-                .await;
-            self.tracer.join(tracer, evm.reverted);
-            Ok((self.tracer, ret))
+            return Ok((self.tracer, vec![]));
         }
+
+        let nonce = ext.nonce(&call.from).await?;
+        let address = call.from.of_smart_contract(nonce);
+        let ctx = Context {
+            created: address,
+            origin: call.from,
+            depth: 1,
+            ..Context::default()
+        };
+
+        let tracer = self.tracer.fork();
+        let mut executor = Executor::<T>::with_tracer(tracer).with_header(self.header);
+        executor.set_log(self.log);
+        let (tracer, ret) = executor
+            .execute_with_context(code, call, evm, ext, ctx)
+            .await;
+        self.tracer.join(tracer, evm.reverted);
+
+        // TODO: sort out gas fee value reduction!
+        // (see: https://www.blocknative.com/blog/eip-1559-fees)
+        /*
+        let gas_price = Word::from(1_000_000_000);
+        let gas_final = evm.gas.finalized(0); // TODO: use finalised gas
+        let gas_fee = Word::from(gas_final) * gas_price;
+        let src = ext.balance(&call.from).await?;
+        if src < gas_fee {
+            return Err(ExecutorError::InsufficientFunds {
+                have: src,
+                need: gas_fee,
+            }
+            .into());
+        }
+        ext.account_mut(&call.from).value -= gas_fee;
+        evm.account.push(AccountTouch::SetValue(
+            call.from,
+            src,
+            src - gas_fee,
+        ));
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::SetValue {
+                address: call.from,
+                val: src,
+                new: src - gas_fee
+            }),
+            depth: 0,
+            reverted: false,
+        });
+         */
+
+        Ok((self.tracer, ret))
     }
 
     pub async fn execute_with_context(
@@ -944,8 +970,12 @@ impl<T: EventTracer> Executor<T> {
                     let padding = 32 - (dest_offset + size) % 32;
                     evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
+                let mut code = code.bytecode.clone();
+                if code.len() < offset + size {
+                    code.resize(offset + size, 0);
+                }
                 evm.memory[dest_offset..dest_offset + size]
-                    .copy_from_slice(&code.bytecode[offset..offset + size]);
+                    .copy_from_slice(&code[offset..offset + size]);
                 gas = (3 + 3 * size.div_ceil(32)).into();
                 gas += evm.memory_expansion_cost();
             }
@@ -1478,7 +1508,7 @@ impl<T: EventTracer> Executor<T> {
                 if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
-                self.create(this, call, &mut gas, evm, ext, ctx).await?;
+                self.create(instruction, this, call, &mut gas, evm, ext, ctx).await?;
             }
             0xf1 => {
                 // CALL
@@ -1570,7 +1600,7 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Create2,
                     ..ctx
                 };
-                self.create(this, call, &mut gas, evm, ext, ctx).await?;
+                self.create(instruction, this, call, &mut gas, evm, ext, ctx).await?;
             }
             0xfa => {
                 // STATICCALL
@@ -1605,7 +1635,7 @@ impl<T: EventTracer> Executor<T> {
         Ok(gas)
     }
 
-    #[allow(clippy::too_many_arguments)] // oh, piss off clippy!
+    #[allow(clippy::too_many_arguments)]
     async fn call(
         &mut self,
         instruction: &Instruction,
@@ -1842,6 +1872,7 @@ impl<T: EventTracer> Executor<T> {
 
     async fn create(
         &mut self,
+        instruction: &Instruction,
         this: Address,
         call: &Call,
         gas: &mut Word,
@@ -1867,8 +1898,8 @@ impl<T: EventTracer> Executor<T> {
             let padding = 32 - (offset + size) % 32;
             evm.memory.resize(offset + size + padding % 32, 0);
         }
-        *gas = evm.memory_expansion_cost() + Word::from(32000);
-        evm.gas(gas.as_i64())?;
+
+        let total_gas_cost = evm.memory_expansion_cost().as_i64() + 32000;
 
         let bytecode = evm.memory[offset..offset + size].to_vec();
         let code = Decoder::decode(bytecode);
@@ -1912,7 +1943,35 @@ impl<T: EventTracer> Executor<T> {
         let future =
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, code) = Box::pin(future).await;
+
+        // HERE: TODO: remove this label
+        self.tracer.push(Event {
+            depth: ctx.depth,
+            reverted: false,
+            data: EventData::OpCode {
+                pc: instruction.offset,
+                op: instruction.opcode.code,
+                name: instruction.opcode.name(),
+                data: instruction.argument.clone().map(Into::into),
+                stack: evm.stack.clone(),
+                memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                gas_back: 0,
+                gas_cost: total_gas_cost,
+                gas_used: evm.gas.used + total_gas_cost,
+                gas_left: evm.gas.remaining() - total_gas_cost,
+                extra: json!({
+                    "is_call": true,
+                    "evm.gas.used": evm.gas.used,
+                    "evm.gas.refund": evm.gas.refund,
+                    "call.address": address,
+                    "call.value": value,
+                    "inner_evm.reverted": inner_evm.reverted,
+                }),
+            },
+        });
+
         self.tracer.join(tracer, inner_evm.reverted);
+        *gas = total_gas_cost.into();
 
         // Don't add inner_evm.gas.used to outer call cost!
         // The outer EVM should only pay the base cost for making the call.
@@ -1924,7 +1983,7 @@ impl<T: EventTracer> Executor<T> {
         }
 
         let hash = keccak256(&code);
-        let (old_code, old_hash) = ext.code_mut(&address).clone();
+        let (old_code, old_hash) = ext.code(&address).await?;
         *ext.code_mut(&address) = (code.clone(), Word::from_bytes(&hash));
         ext.account_mut(&call.from).nonce += Word::one();
         evm.account.push(AccountTouch::SetCode(
