@@ -121,37 +121,54 @@ async fn main() -> eyre::Result<()> {
     let len = transactions.len();
     assert_eq!(txs.len(), len);
 
+    let mut matched = 0;
     for idx in 0..len {
-        println!("---\n### block={block_number} index={idx} hash={}", txs[idx].info().hash.unwrap_or_default());
-
         let tx = txs[idx].clone();
         let now = Instant::now();
-        let (result, traces) = g(tx)?;
-        let ms = now.elapsed().as_millis();
-        println!("REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={ms}", 
-            !result.rev,
-            true,
-            result.gas,
-            traces.len());
-        let ret = result.ret;
+        let (revm_result, revm_traces) = g(tx)?;
+        let revm_ms = now.elapsed().as_millis();
 
         let tx = transactions[idx].clone();
         let now = Instant::now();
-        let r = f(tx).await;
-        let ms = now.elapsed().as_millis();
-        match r {
-            Ok((result, traces)) => {
-                println!("sole \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={ms}", 
-                    !result.rev,
-                    result.ret == ret,
-                    result.gas,
-                    traces.len());
+        let result = f(tx).await;
+        let sole_ms = now.elapsed().as_millis();
+        match result {
+            Ok((sole_result, sole_traces)) => {
+                let rev_ok = revm_result.rev == sole_result.rev;
+                let ret_ok = revm_result.ret == sole_result.ret;
+                let gas_ok = revm_result.gas == sole_result.gas;
+                let traces_ok = revm_traces.len() == sole_traces.len();
+
+                let ok = rev_ok && ret_ok && gas_ok && traces_ok;
+                if ok {
+                    matched += 1;
+                    continue;
+                }
+
+                println!("---\n### block={block_number} index={idx} hash={}", txs[idx].info().hash.unwrap_or_default());
+                println!("REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}", 
+                    !revm_result.rev,
+                    true,
+                    revm_result.gas,
+                    revm_traces.len());
+                println!("sole \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={sole_ms}", 
+                    !sole_result.rev,
+                    sole_result.ret == revm_result.ret,
+                    sole_result.gas,
+                    sole_traces.len());
             }
             Err(e) => {
+                println!("---\n### block={block_number} index={idx} hash={}", txs[idx].info().hash.unwrap_or_default());
+                println!("REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}", 
+                    !revm_result.rev,
+                    true,
+                    revm_result.gas,
+                    revm_traces.len());
                 println!("sole \tPANIC: '{e}'"); 
             }
         }
     }
 
+    println!("\n(total: {len}, matched: {matched}, invalid: {})", len - matched);
     Ok(())
 }
