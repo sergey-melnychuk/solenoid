@@ -118,7 +118,7 @@ async fn test_get_with_override() -> eyre::Result<()> {
     );
     assert_eq!(
         evm.state,
-        vec![StateTouch::Get(to, Word::zero(), Word::one(), true)]
+        vec![StateTouch::Get(to, Word::zero(), Word::one(), false)]
     );
     Ok(())
 }
@@ -159,7 +159,7 @@ async fn test_dec_with_override() -> eyre::Result<()> {
     assert_eq!(
         evm.state,
         vec![
-            StateTouch::Get(to, Word::zero(), Word::one(), true),
+            StateTouch::Get(to, Word::zero(), Word::one(), false),
             StateTouch::Put(to, Word::zero(), Word::one(), Word::zero(), true),
         ]
     );
