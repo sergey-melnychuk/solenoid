@@ -6,7 +6,7 @@ description = "EVM transaction tracer"
 
 [dependencies]
 # revm crates
-revm = { version = "29.0.0", features = ["alloydb"] }
+revm = { version = "30.0.0", features = ["alloydb"] }
 
 # alloy
 alloy-eips = "1.0.27"
