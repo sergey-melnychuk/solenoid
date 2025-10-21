@@ -15,7 +15,7 @@ use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
 use crate::{OpcodeTrace, TxTrace};
 
 pub struct TxResult {
-    pub gas: u64,
+    pub gas: i64,
     pub ret: Vec<u8>,
     pub rev: bool,
 }
@@ -23,7 +23,7 @@ pub struct TxResult {
 impl From<ExecResultAndState<ExecutionResult>> for TxResult {
     fn from(value: ExecResultAndState<ExecutionResult>) -> Self {
         Self {
-            gas: value.result.gas_used(),
+            gas: value.result.gas_used() as i64,
             ret: value.result.output().map(|bytes| bytes.to_vec()).unwrap_or_default(),
             rev: !value.result.is_success(),
         }

@@ -17,7 +17,7 @@ use evm_tracer::{OpcodeTrace, run::TxResult};
 
 fn as_tx_result(gas_costs: i64, value: CallResult<LoggingTracer>) -> TxResult {
     TxResult {
-        gas: value.evm.gas.finalized(gas_costs) as u64,
+        gas: value.evm.gas.finalized(gas_costs),
         ret: value.ret,
         rev: value.evm.reverted,
     }
@@ -145,16 +145,27 @@ async fn main() -> eyre::Result<()> {
                     continue;
                 }
 
+                let ret = if revm_result.ret.is_empty() {
+                    "empty".to_string()
+                } else {
+                    format!("<{}>", revm_result.ret.len())
+                };
                 println!("---\n### block={block_number} index={idx} hash={}", txs[idx].info().hash.unwrap_or_default());
                 println!("REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}", 
                     !revm_result.rev,
-                    true,
+                    ret,
                     revm_result.gas,
                     revm_traces.len());
+
+                let gas_diff = if revm_result.gas == sole_result.gas {
+                    "OK".to_string()
+                } else {
+                    format!("{:+5}", revm_result.gas - sole_result.gas)
+                };
                 println!("sole \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={sole_ms}", 
                     !sole_result.rev,
                     sole_result.ret == revm_result.ret,
-                    sole_result.gas,
+                    gas_diff,
                     sole_traces.len());
             }
             Err(e) => {
