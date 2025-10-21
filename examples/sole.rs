@@ -49,58 +49,6 @@ async fn main() -> eyre::Result<()> {
     for tx in txs {
         let idx = tx.index.as_u64();
 
-        /*
-        patch(&mut ext, &tx.from, "0x90a4a345dbae6ead").await?; // TX:1
-        patch(
-            &mut ext,
-            &addr("0x042523db4f3effc33d2742022b2490258494f8b3"),
-            "0x7af6c7f2729115eee",
-        )
-        .await?; // TX:2
-        patch(
-            &mut ext,
-            &addr("0x0fc7cb62247151faf5e7a948471308145f020d2e"),
-            "0x7af6c7f2728a1bef0",
-        )
-        .await?; // TX:3
-        patch(
-            &mut ext,
-            &addr("0x8a14ce0fecbefdcc612f340be3324655718ce1c1"),
-            "0x7af6c7f2728a0e4f0",
-        )
-        .await?; // TX:4
-        patch(
-            &mut ext,
-            &addr("0x8778f133d11e81a05f5210b317fb56115b95c7bc"),
-            "0x7af6c7f27291f2ff0",
-        )
-        .await?; // TX:5
-        patch(
-            &mut ext,
-            &addr("0xbb318a1ab8e46dfd93b3b0bca3d0ebf7d00187b9"),
-            "0x",
-        )
-        .await?; // TX:7
-        patch(
-            &mut ext,
-            &addr("0xdf7c26aaa9903f91ad1a719af2231edc33e131ed"),
-            "0x",
-        )
-        .await?; // TX:8
-        patch(
-            &mut ext,
-            &addr("0x34976e84a6b6febb8800118dedd708ce2be2d95f"),
-            "0x8bc93020944b6ead",
-        )
-        .await?; // TX:9
-        patch(
-            &mut ext,
-            &addr("0x881d40237659c251811cec9c364ef91dc08d300c"),
-            "0x2f40478f834000",
-        )
-        .await?; // TX:11
-        */
-
         // eprintln!("TX: {tx:#?}");
         // eprintln!("TX hash={:#064x} index={}", tx.hash, tx.index.as_usize());
         // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
