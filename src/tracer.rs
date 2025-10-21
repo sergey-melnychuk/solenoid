@@ -224,6 +224,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 stack: stack
                     .into_iter()
                     .map(|x| hex::encode(x.into_bytes()))
+                    .rev()
                     .collect(),
                 memory: memory
                     .into_iter()

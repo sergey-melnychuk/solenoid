@@ -268,6 +268,7 @@ where
             gas_back: refund,
             stack: stack.iter()
                 .map(|x| hex::encode(&x.to_be_bytes::<32>()))
+                .rev()
                 .collect(),
             memory: memory
                 .chunks(32)
