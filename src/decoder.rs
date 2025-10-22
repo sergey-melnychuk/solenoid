@@ -24,18 +24,6 @@ pub struct Bytecode {
 }
 
 impl Bytecode {
-    pub fn new(
-        bytecode: Vec<u8>,
-        instructions: Vec<Instruction>,
-        jumptable: Vec<(usize, usize)>,
-    ) -> Self {
-        Self {
-            bytecode,
-            instructions,
-            jumptable,
-        }
-    }
-
     pub fn resolve_jump(&self, offset: usize) -> Option<usize> {
         let index = self
             .jumptable
