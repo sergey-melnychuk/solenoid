@@ -66,6 +66,7 @@ pub enum StateTouch {
 pub enum AccountTouch {
     #[default]
     Noop,
+    WarmUp(Address),
     GetNonce(Address, u64),
     GetValue(Address, Word),
     GetCode(Address, Word, Vec<u8>),
@@ -110,9 +111,13 @@ impl Evm {
 
     pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &mut Ext) -> Word {
         // EIP-2929: Check if address has been accessed during this transaction
+        if precompiles::is_precompile(address) {
+            return Word::from(100);
+        }
         let is_warm = ext.is_address_warm(address);
         if !is_warm {
             ext.warm_address(address);
+            self.account.push(AccountTouch::WarmUp(*address));
         }
         if is_warm {
             Word::from(100) // warm access
@@ -177,13 +182,21 @@ impl Evm {
                 StateTouch::Put(address, key, val, _, is_warm) => {
                     if *is_warm {
                         ext.put(address, *key, *val).await?
-                    } else if let Some(state) = ext.state.get_mut(address) {
-                        state.state.remove(key);
+                    } else {
+                        ext.accessed_storage.remove(&(*address, *key));
+                        if let Some(state) = ext.state.get_mut(address) {
+                            state.state.remove(key);
+                        }
                     }
                 }
                 StateTouch::Get(address, key, _, is_warm) => {
-                    if !*is_warm && let Some(state) = ext.state.get_mut(address) {
-                        state.state.remove(key);
+                    if *is_warm {
+                        // nothing to do
+                    } else {
+                        ext.accessed_storage.remove(&(*address, *key));
+                        if let Some(state) = ext.state.get_mut(address) {
+                            state.state.remove(key);
+                        }
                     }
                 }
                 _ => (),
@@ -199,6 +212,9 @@ impl Evm {
                 }
                 AccountTouch::SetCode(addr, _hash, _code) => {
                     *ext.code_mut(addr) = (vec![], Word::from_bytes(&hash::empty()));
+                }
+                AccountTouch::WarmUp(addr) => {
+                    ext.accessed_addresses.remove(addr);
                 }
                 _ => (),
             }
@@ -230,8 +246,6 @@ impl Gas {
     pub fn finalized(&self, call_cost: i64) -> i64 {
         let used = self.used + call_cost;
         let cap = self.refund.min(used / 5);
-
-        // eprintln!("DEBUG: gas.used={} gas.refund={} refund.cap={cap} gas.final={ret}", self.used, self.refund);
         used.saturating_sub(cap)
     }
 
@@ -322,17 +336,16 @@ impl<T: EventTracer> Executor<T> {
         evm.gas = Gas::new(gas);
 
         // TODO: sort out value transfer!
-        /*
         let src = ext.balance(&call.from).await?;
         let dst = ext.balance(&call.to).await?;
         if !call.value.is_zero() {
-            if src < call.value {
-                return Err(ExecutorError::InsufficientFunds {
-                    have: src,
-                    need: call.value,
-                }
-                .into());
-            }
+            // if src < call.value {
+            //     return Err(ExecutorError::InsufficientFunds {
+            //         have: src,
+            //         need: call.value,
+            //     }
+            //     .into());
+            // }
 
             ext.account_mut(&call.from).value -= call.value;
             evm.account.push(AccountTouch::SetValue(
@@ -380,7 +393,6 @@ impl<T: EventTracer> Executor<T> {
             depth: 0,
             reverted: false,
         });
-        */
 
         let is_transfer_only = code.bytecode.is_empty() && call.data.is_empty() && !call.to.is_zero();
         if is_transfer_only {
@@ -389,7 +401,6 @@ impl<T: EventTracer> Executor<T> {
             return Ok((self.tracer, vec![]));
         }
 
-        let nonce = ext.nonce(&call.from).await?;
         let address = call.from.of_smart_contract(nonce);
         let ctx = Context {
             created: address,
@@ -408,8 +419,7 @@ impl<T: EventTracer> Executor<T> {
 
         // TODO: sort out gas fee value reduction!
         // (see: https://www.blocknative.com/blog/eip-1559-fees)
-        /*
-        let gas_price = Word::from(1_000_000_000);
+        /*let gas_price = Word::from(1_000_000_000);
         let gas_final = evm.gas.finalized(0); // TODO: use finalised gas
         let gas_fee = Word::from(gas_final) * gas_price;
         let src = ext.balance(&call.from).await?;
@@ -434,8 +444,7 @@ impl<T: EventTracer> Executor<T> {
             }),
             depth: 0,
             reverted: false,
-        });
-         */
+        });*/
 
         Ok((self.tracer, ret))
     }
@@ -452,8 +461,11 @@ impl<T: EventTracer> Executor<T> {
         if ctx.depth == 1 {
             ext.pull(&call.from).await.expect("pre-warm:from");
             ext.warm_address(&call.from);
+            evm.account.push(AccountTouch::WarmUp(call.from));
+
             ext.pull(&call.to).await.expect("pre-warm:to");
             ext.warm_address(&call.to);
+            evm.account.push(AccountTouch::WarmUp(call.to));
         }
 
         self.tracer.push(Event {
@@ -518,6 +530,12 @@ impl<T: EventTracer> Executor<T> {
                             extra: json!(self.debug),
                         },
                     });
+                }
+                if instruction.opcode.code == 0xfe { // INVALID
+                    evm.gas.sub(evm.gas.remaining()).expect("must succeed");
+                    evm.stopped = true;
+                    evm.reverted = true;
+                    return (self.tracer, vec![]);
                 }
                 if evm.gas(cost).is_err() {
                     // eprintln!("out of gas");
@@ -1056,7 +1074,7 @@ impl<T: EventTracer> Executor<T> {
                     let (_, hash) = ext.code(&address).await?;
                     evm.push(hash)?;
                 }
-                gas += evm.address_access_cost(&address, ext);
+                gas = evm.address_access_cost(&address, ext);
             }
 
             // 40-4a
@@ -1098,11 +1116,11 @@ impl<T: EventTracer> Executor<T> {
             }
             0x47 => {
                 // SELFBALANCE
-                let balance = ext.balance(&call.from).await?;
+                let balance = ext.balance(&this).await?;
 
                 let mut selfbalance: serde_json::Map<String, serde_json::Value> =
                     serde_json::Map::new();
-                selfbalance.insert("address".to_string(), call.from.to_string().into());
+                selfbalance.insert("address".to_string(), this.to_string().into());
                 selfbalance.insert("balance".to_string(), balance.to_string().into());
                 self.debug
                     .insert("SELFBALANCE".to_string(), selfbalance.into());
@@ -1225,7 +1243,6 @@ impl<T: EventTracer> Executor<T> {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
                 let key = evm.pop()?;
-
                 let is_warm = ext.is_storage_warm(&this, &key);
                 if !is_warm {
                     ext.warm_storage(&this, &key);
@@ -1488,14 +1505,13 @@ impl<T: EventTracer> Executor<T> {
                 }
                 topics.reverse();
 
-                if offset + size > evm.memory.len() {
-                    if offset + size > ALLOCATION_SANITY_LIMIT {
-                        return Err(ExecutorError::InvalidAllocation(offset + size).into());
-                    }
-                    let padding = 32 - (offset + size) % 32;
-                    evm.memory.resize(offset + size + padding % 32, 0);
-                }
-                let data = evm.memory[offset..offset + size].to_vec();
+                let data = if offset + size > evm.memory.len() {
+                    let mut data = evm.memory.clone();
+                    data.resize(offset + size, 0);
+                    data
+                } else {
+                    evm.memory[offset..offset + size].to_vec()
+                };
                 evm.logs.push(Log(this, topics, data));
 
                 gas = 375.into();
@@ -1612,9 +1628,7 @@ impl<T: EventTracer> Executor<T> {
                     .await?;
             }
             0xfe => {
-                // INVALID
-                evm.gas.sub(evm.gas.remaining())?;
-                evm.error(ExecutorError::InvalidOpcode(0xfe).into())?;
+                // INVALID: handled outside of `execute_instruction`
             }
             0xff => {
                 // SELFDESTRUCT
@@ -1671,9 +1685,9 @@ impl<T: EventTracer> Executor<T> {
 
         // Calculate address access cost (EIP-2929)
         let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
-        if (args_size == 0 && access_cost > 100) || precompiles::is_precompile(&address) {
-            // value-transfer only call (empty calldata) OR precompile call
-            access_cost -= 2500;
+        if args_size == 0 && !value.is_zero() {
+            // value-transfer only call (empty calldata)
+            access_cost = 100;
         }
 
         // Calculate base gas cost
@@ -1704,7 +1718,7 @@ impl<T: EventTracer> Executor<T> {
         // Handle precompile call
         if precompiles::is_precompile(&address) {
             let gas_cost = precompiles::gas_cost(&address, data);
-            let value = match precompiles::execute(&address, data) {
+            let result = match precompiles::execute(&address, data) {
                 Ok(ret) => {
                     self.ret = ret;
                     Word::one()
@@ -1734,7 +1748,7 @@ impl<T: EventTracer> Executor<T> {
                         "evm.gas.refund": evm.gas.refund,
                         "call.address": address,
                         "call.input": hex::encode(&evm.memory[args_offset..args_offset + args_size]),
-                        "call.value": value,
+                        "call.result": result,
                         "call.gas": call_gas.as_u64(),
                         "access_cost": access_cost,
                     }),
@@ -1744,7 +1758,7 @@ impl<T: EventTracer> Executor<T> {
             let copy_len = self.ret.len().min(ret_size);
             evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&self.ret[..copy_len]);
 
-            evm.push(value)?;
+            evm.push(result)?;
             evm.gas(gas_cost)?;
             return Ok(());
         }
@@ -1771,11 +1785,11 @@ impl<T: EventTracer> Executor<T> {
 
         // Apply value transfer BEFORE call execution
         let mut transferred = false;
-        let sender_balance = ext.balance(&call.from).await?;
+        let sender_balance = ext.balance(&this).await?;
         let receiver_balance = ext.balance(&address).await?;
         if !value.is_zero() && !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             if sender_balance >= value {
-                ext.account_mut(&call.from).value = sender_balance - value;
+                ext.account_mut(&this).value = sender_balance - value;
                 ext.account_mut(&address).value = receiver_balance + value;
                 transferred = true;
             } else {
@@ -1854,7 +1868,7 @@ impl<T: EventTracer> Executor<T> {
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
             if transferred {
-                ext.account_mut(&call.from).value = sender_balance;
+                ext.account_mut(&this).value = sender_balance;
                 ext.account_mut(&address).value = receiver_balance;
             }
             return Ok(());
