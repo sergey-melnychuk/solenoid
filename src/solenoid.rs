@@ -201,12 +201,22 @@ impl Runner {
         let exe = exe.with_header(self.header);
 
         let code = if self.call.to.is_zero() {
-            Decoder::decode(self.call.data.clone())
+            self.call.data.clone()
         } else {
             let (code, _) = ext.code(&self.call.to).await?;
-            Decoder::decode(code)
+            code
         };
 
+        // TODO: RESEARCH: Investigate this weird delegation: <0xef0100> + <20 bytes address>
+        let code = if code.len() == 23 && code.starts_with(&[0xef,0x01,0x00]) {
+            let target = Address::try_from(&code[3..]).expect("address");
+            let (code, _) = ext.code(&target).await?;
+            code
+        } else {
+            code
+        };
+
+        let code = Decoder::decode(code);
         let mut evm = Evm::new();
 
         let upfront_gas_reduction = if self.call.to.is_zero() {
