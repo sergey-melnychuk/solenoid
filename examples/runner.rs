@@ -158,9 +158,9 @@ async fn main() -> eyre::Result<()> {
                     revm_traces.len());
 
                 let gas_diff = if revm_result.gas == sole_result.gas {
-                    "OK".to_string()
+                    "match".to_string()
                 } else {
-                    format!("{:+5}", revm_result.gas - sole_result.gas)
+                    format!("{:+5}", sole_result.gas - revm_result.gas)
                 };
                 println!("sole \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={sole_ms}", 
                     !sole_result.rev,
