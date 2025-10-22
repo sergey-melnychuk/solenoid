@@ -320,8 +320,6 @@ impl<T: EventTracer> Executor<T> {
         evm: &mut Evm,
         ext: &mut Ext,
     ) -> eyre::Result<(T, Vec<u8>)> {
-        ext.reset();
-
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
         gas -= call_cost;
@@ -999,8 +997,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3a => {
                 // GASPRICE
-                // todo!("GASPRICE") // TODO: From TX
-                evm.push(Word::from(1359585713u64))?;
+                evm.push(ext.gas_price)?;
                 gas = 2.into();
             }
             0x3b => {
@@ -1136,8 +1133,14 @@ impl<T: EventTracer> Executor<T> {
             }
             0x49 => {
                 // BLOBHASH
-                evm.push(self.header.extra_data)?;
-                gas = 2.into();
+                let _index = evm.pop()?;
+                // evm.push(self.header.extra_data)?;
+                evm.push(Word::zero())?;
+                // TODO: make it work properly?
+                // > tx.blob_versioned_hashes[index] if index < len(tx.blob_versioned_hashes), 
+                // > and otherwise with a zeroed bytes32 value."
+                // (See: https://www.evm.codes/?fork=prague#49)
+                gas = 3.into();
             }
             0x4a => {
                 // BLOBBASEFEE
@@ -1674,7 +1677,7 @@ impl<T: EventTracer> Executor<T> {
 
         // Handle memory expansion for arguments and return data
         let size = (args_offset + args_size).max(ret_offset + ret_size);
-        if size > evm.memory.len() {
+        if (ret_size > 0 || args_size > 0) && size > evm.memory.len() {
             if size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(size).into());
             }
@@ -1713,7 +1716,11 @@ impl<T: EventTracer> Executor<T> {
         // For tracing: report the total cost including forwarded gas (to match REVM)
         let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward - gas_stipend_adjustment;
 
-        let data = &evm.memory[args_offset..args_offset + args_size];
+        let data = if args_size > 0 {
+            &evm.memory[args_offset..args_offset + args_size]
+        } else {
+            &[]
+        };
 
         // Handle precompile call
         if precompiles::is_precompile(&address) {
@@ -1842,8 +1849,13 @@ impl<T: EventTracer> Executor<T> {
                     "gas_cost": total_gas_cost_for_tracing,
                     "evm.gas.used": evm.gas.used,
                     "evm.gas.refund": evm.gas.refund,
+                    "args_offset": args_offset,
+                    "args_size": args_size,
+                    "ret_offset": ret_offset,
+                    "ret_size": ret_size,
+                    "memory.len": evm.memory.len(),
                     "call.address": address,
-                    "call.input": hex::encode(&evm.memory[args_offset..args_offset + args_size]),
+                    "call.input": hex::encode(&data),
                     "call.value": value,
                     "call.gas": call_gas.as_u64(),
                     "access_cost": access_cost,
@@ -1861,7 +1873,9 @@ impl<T: EventTracer> Executor<T> {
         evm.refund = evm.gas.refund;
 
         let copy_len = ret.len().min(ret_size);
-        evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&ret[..copy_len]);
+        if copy_len > 0 {
+            evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&ret[..copy_len]);
+        }
 
         if inner_evm.reverted {
             self.ret = ret;

@@ -44,6 +44,7 @@ pub fn runner(
         Box::pin(async move {
             let mut result = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
+                guard.reset(tx.gas_price);
                 let result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
                     .with_header(header.clone())

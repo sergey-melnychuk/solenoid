@@ -33,6 +33,8 @@ pub struct Ext {
     // EIP-2929: Per-transaction access tracking
     pub accessed_addresses: HashSet<Address>,
     pub accessed_storage: HashSet<(Address, Word)>,
+
+    pub gas_price: Word,
 }
 
 impl Ext {
@@ -48,6 +50,7 @@ impl Ext {
             transient: HashMap::default(),
             accessed_addresses: HashSet::default(),
             accessed_storage: HashSet::default(),
+            gas_price: Word::zero(),
         }
     }
 
@@ -61,7 +64,9 @@ impl Ext {
         Ok(Self::at_hash(block_hash, eth))
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, gas_price: Word) {
+        self.gas_price = gas_price;
+
         // Clear EIP-2929 access tracking (you need to add this tracking first!)
         // Clear transient storage (EIP-1153)
         self.transient.clear();

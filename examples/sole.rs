@@ -54,6 +54,7 @@ async fn main() -> eyre::Result<()> {
         // eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
         // eprintln!("GAS LIMIT: {}", tx.gas.as_u64());
 
+        ext.reset(tx.gas_price);
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
             .with_header(block.header.clone())
