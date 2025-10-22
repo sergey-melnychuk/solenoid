@@ -52,6 +52,7 @@ pub fn opcode_name(opcode: u8) -> &'static str {
         0x46 => "CHAINID",
         0x47 => "SELFBALANCE",
         0x48 => "BASEFEE",
+        0x49 => "BLOBHASH",
         0x50 => "POP",
         0x51 => "MLOAD",
         0x52 => "MSTORE",
