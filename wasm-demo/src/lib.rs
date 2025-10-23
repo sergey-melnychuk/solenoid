@@ -1,13 +1,13 @@
 use wasm_bindgen::prelude::*;
 use solenoid::{
     common::{
-        address::{Address, addr},
+        address::{addr, Address},
         hash::keccak256,
         word::Word,
     },
     eth::EthClient,
     ext::Ext,
-    solenoid::{Builder, Solenoid},
+    solenoid::{Builder, Solenoid}, tracer::EventTracer,
 };
 
 #[wasm_bindgen(start)]
@@ -186,7 +186,7 @@ pub async fn quote_weth_to_usdc_solenoid(
     web_sys::console::log_1(&"Debug - Runner ready, starting execution...".into());
 
     // Execute
-    let result = runner
+    let mut result = runner
         .apply(&mut ext)
         .await
         .map_err(|e| {
@@ -196,6 +196,13 @@ pub async fn quote_weth_to_usdc_solenoid(
         })?;
 
     web_sys::console::log_1(&format!("Debug - Got {} bytes of return data", result.ret.len()).into());
+
+    let traces = result.tracer.take();
+    web_sys::console::log_1(&format!("Solenoid - traces: {}", traces.len()).into());
+    for event in traces.iter().take(10) {
+        let json = serde_json_wasm::to_string(&event).unwrap();
+        web_sys::console::log_1(&json.into());
+    }
 
     // Decode the result
     if result.ret.len() >= 128 {
