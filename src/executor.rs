@@ -892,6 +892,7 @@ impl<T: EventTracer> Executor<T> {
                     depth: ctx.depth,
                     reverted: false,
                 });
+                #[cfg(feature = "tracing")]
                 tracing::debug!(
                     preimage = hex::encode(data),
                     keccak256 = hex::encode(sha3),
@@ -957,7 +958,7 @@ impl<T: EventTracer> Executor<T> {
                 let dest_offset = evm.pop()?.as_usize();
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
-                if dest_offset + size > evm.memory.len() {
+                if size > 0 && dest_offset + size > evm.memory.len() {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
                     }
@@ -965,15 +966,17 @@ impl<T: EventTracer> Executor<T> {
                     evm.memory.resize(dest_offset + size + padding % 32, 0);
                 }
                 let mut buffer = call.data.clone();
-                if offset + size > buffer.len() {
+                if size > 0 && offset + size > buffer.len() {
                     if offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + size).into());
                     }
                     let padding = 32 - (offset + size) % 32;
                     buffer.resize(offset + size + padding % 32, 0);
                 }
-                evm.memory[dest_offset..dest_offset + size]
-                    .copy_from_slice(&buffer[offset..offset + size]);
+                if size > 0 {
+                    evm.memory[dest_offset..dest_offset + size]
+                        .copy_from_slice(&buffer[offset..offset + size]);
+                }
                 gas = (3 + 3 * size.div_ceil(32)).into();
                 gas += evm.memory_expansion_cost();
             }
@@ -1674,6 +1677,7 @@ impl<T: EventTracer> Executor<T> {
         ctx: Context,
     ) -> eyre::Result<()> {
         let call_gas = evm.pop()?;
+        let call_gas = call_gas.min(i64::MAX.into()); // avoid possible i64 overflow
         let address: Address = (&evm.pop()?).into();
         let value = if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             evm.pop()?
@@ -1705,7 +1709,7 @@ impl<T: EventTracer> Executor<T> {
 
         let (code, codehash) = ext.code(&address).await?;
 
-        // TODO: RESEARCH: Investigate this weird delegation: <0xef0100> + <20 bytes address>
+        // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
         let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
             let target = Address::try_from(&code[3..]).expect("address");
             access_cost += evm.address_access_cost(&target, ext).as_i64();
