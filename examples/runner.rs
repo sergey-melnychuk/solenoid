@@ -16,8 +16,9 @@ use solenoid::{
 use evm_tracer::{OpcodeTrace, run::TxResult};
 
 fn as_tx_result(gas_costs: i64, value: CallResult<LoggingTracer>) -> TxResult {
+    let gas = value.evm.gas.finalized(gas_costs);
     TxResult {
-        gas: value.evm.gas.finalized(gas_costs),
+        gas,
         ret: value.ret,
         rev: value.evm.reverted,
     }

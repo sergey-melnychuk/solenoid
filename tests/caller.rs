@@ -53,15 +53,16 @@ async fn test_deploy() -> eyre::Result<()> {
     assert_eq!(ret, hex::decode(CALL.trim_start_matches("0x"))?);
 
     let code = hex::decode(CELL.trim_start_matches("0x"))?;
-    assert_eq!(
+    pretty_assertions::assert_eq!(
         evm.account,
         vec![
+            AccountTouch::SetNonce(from, 0, 1),
+            AccountTouch::WarmUp(from),
             AccountTouch::SetCode(
                 created2,
                 (Word::from_bytes(&hash::empty()), vec![]),
                 (Word::from_bytes(&keccak256(&code)), code)
             ),
-            AccountTouch::SetNonce(from, 0, 1)
         ]
     );
     pretty_assertions::assert_eq!(

@@ -208,7 +208,7 @@ impl Runner {
         };
 
         // TODO: RESEARCH: Investigate this weird delegation: <0xef0100> + <20 bytes address>
-        let code = if code.len() == 23 && code.starts_with(&[0xef,0x01,0x00]) {
+        let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
             let target = Address::try_from(&code[3..]).expect("address");
             let (code, _) = ext.code(&target).await?;
             code

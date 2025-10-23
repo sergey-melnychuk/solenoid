@@ -1,25 +1,13 @@
 📦 Fetched block number: 23634227 [with 268 txs]
 📦 Fetched block number: 23634227 [with 268 txs]
 ---
-### block=23634227 index=11 hash=0x819a07c37c6b83e5a939ada49e94d04cc3bb3211ca157892dd62acf0dadaaf6f
-REVM 	OK=true 	RET=empty 	GAS=42973 	TRACES=568 	ms=2
-sole 	OK=true 	RET=true 	GAS=-7500 	TRACES=568 	ms=2
----
 ### block=23634227 index=33 hash=0xeff61a8f3f1fec5f10fb9ff27fed619daa55cabf1c37216244252c3b101f42bf
 REVM 	OK=true 	RET=empty 	GAS=22280 	TRACES=0 	ms=0
 sole 	OK=true 	RET=true 	GAS= -768 	TRACES=0 	ms=0
 ---
-### block=23634227 index=50 hash=0xcc195a22c6f90a9f15377610d5d14f200b384ffea47a83a4dcd71649e7479de6
-REVM 	OK=true 	RET=<32> 	GAS=162165 	TRACES=5708 	ms=21
-sole 	OK=true 	RET=true 	GAS=-2500 	TRACES=5708 	ms=21
----
-### block=23634227 index=55 hash=0xccbe3cf17d2f32d4cfd987bacb53dc595d886e17050e13c194ddbb8feb2b55c2
-REVM 	OK=true 	RET=empty 	GAS=32650 	TRACES=91 	ms=0
-sole 	OK=true 	RET=true 	GAS=-2500 	TRACES=91 	ms=0
----
 ### block=23634227 index=59 hash=0xe00b20075d996d1d20f6353430151b1212eefdaa617d08d72cd14bc38a916101
-REVM 	OK=true 	RET=<32> 	GAS=274756 	TRACES=16634 	ms=88
-sole 	OK=true 	RET=false 	GAS=-4000 	TRACES=16634 	ms=83
+REVM 	OK=true 	RET=<32> 	GAS=274756 	TRACES=16634 	ms=87
+sole 	OK=true 	RET=false 	GAS=match 	TRACES=16634 	ms=83
 ---
 ### block=23634227 index=67 hash=0x92d32c3641e0a2f41cbbd4e031f48a692c04b585d29692cc9a471696ac4d058b
 REVM 	OK=false 	RET=<4> 	GAS=46160 	TRACES=1288 	ms=4
@@ -27,7 +15,7 @@ sole 	OK=false 	RET=true 	GAS=-8406 	TRACES=1288 	ms=4
 ---
 ### block=23634227 index=88 hash=0xdb10da398fa0d5d9de781a4cacdd954f5cb656bd686112b7dae06b7b579ee786
 REVM 	OK=true 	RET=<32> 	GAS=184866 	TRACES=10430 	ms=53
-sole 	OK=true 	RET=false 	GAS=-2000 	TRACES=10430 	ms=50
+sole 	OK=true 	RET=false 	GAS=match 	TRACES=10430 	ms=51
 ---
 ### block=23634227 index=90 hash=0xb25be6e8c22af1df452d24bfcf144c809a09f049072941cd3d340a42bcb0b84f
 REVM 	OK=true 	RET=empty 	GAS=184900 	TRACES=7896 	ms=54
@@ -35,26 +23,22 @@ sole 	OK=false 	RET=false 	GAS=-28184 	TRACES=5959 	ms=37
 ---
 ### block=23634227 index=92 hash=0x185e8ddc3ac947b48a1c7a518596af6a8497430a826257a3b31e498feca8a284
 REVM 	OK=true 	RET=<32> 	GAS=197680 	TRACES=6928 	ms=24
-sole 	OK=true 	RET=false 	GAS=-2000 	TRACES=6928 	ms=24
+sole 	OK=true 	RET=false 	GAS=match 	TRACES=6928 	ms=24
 ---
 ### block=23634227 index=231 hash=0x85e33507dec57b119d4e1978cc45dc68b467eef23619a7225f407c895f68db59
-REVM 	OK=true 	RET=empty 	GAS=2601836 	TRACES=136862 	ms=2922
-sole 	OK=true 	RET=true 	GAS=+7644 	TRACES=136862 	ms=2549
+REVM 	OK=true 	RET=empty 	GAS=2601836 	TRACES=136862 	ms=2846
+sole 	OK=true 	RET=true 	GAS=+7644 	TRACES=136862 	ms=2814
 ---
 ### block=23634227 index=238 hash=0x9a05ba4381458a6be7cb88249fc8a4acd891c33c03a6c82e4f6f875949e97f94
 REVM 	OK=false 	RET=empty 	GAS=174996 	TRACES=6084 	ms=23
-sole 	OK=true 	RET=true 	GAS=-26164 	TRACES=6640 	ms=26
+sole 	OK=true 	RET=true 	GAS=-23664 	TRACES=6640 	ms=26
 ---
 ### block=23634227 index=256 hash=0x388659506f1eb4bc3359724d0ad49459ca4871e2141163683e3079685140b7b3
-REVM 	OK=true 	RET=empty 	GAS=194775 	TRACES=10182 	ms=127
+REVM 	OK=true 	RET=empty 	GAS=194775 	TRACES=10182 	ms=130
 sole 	OK=false 	RET=true 	GAS=-130063 	TRACES=1371 	ms=6
 ---
-### block=23634227 index=260 hash=0x7986cc349fc9af377847a5b2aeaf1118301619ff747b96a6d6b1f33110ca6f97
-REVM 	OK=false 	RET=<132> 	GAS=31570 	TRACES=911 	ms=3
-sole 	OK=false 	RET=true 	GAS=+907112 	TRACES=872 	ms=2
----
 ### block=23634227 index=261 hash=0xdac167ab6a47328a063a7aa1c4d66b879d2ac752084a1d49c491249936da65cc
-REVM 	OK=true 	RET=empty 	GAS=622927 	TRACES=141188 	ms=1459
-sole 	OK=false 	RET=true 	GAS=-516237 	TRACES=3743 	ms=17
+REVM 	OK=true 	RET=empty 	GAS=622927 	TRACES=141188 	ms=1485
+sole 	OK=false 	RET=true 	GAS=-516237 	TRACES=3743 	ms=18
 
-(total: 268, matched: 254, invalid: 14)
+(total: 268, matched: 258, invalid: 10)

@@ -461,9 +461,19 @@ impl<T: EventTracer> Executor<T> {
             ext.warm_address(&call.from);
             evm.account.push(AccountTouch::WarmUp(call.from));
 
-            ext.pull(&call.to).await.expect("pre-warm:to");
-            ext.warm_address(&call.to);
-            evm.account.push(AccountTouch::WarmUp(call.to));
+            if !call.to.is_zero() {
+                ext.pull(&call.to).await.expect("pre-warm:to");
+                ext.warm_address(&call.to);
+                evm.account.push(AccountTouch::WarmUp(call.to));
+            }
+
+            // EIP-3651 (Shanghai): Pre-warm coinbase address
+            let coinbase = self.header.miner;
+            if !coinbase.is_zero() {
+                ext.pull(&coinbase).await.expect("pre-warm:coinbase");
+                ext.warm_address(&coinbase);
+                evm.account.push(AccountTouch::WarmUp(coinbase));
+            }
         }
 
         self.tracer.push(Event {
@@ -1082,8 +1092,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x41 => {
                 // COINBASE
-                // evm.push(Word::zero())?;
-                evm.push(Word::from_hex("0xdadb0d80178819f2319190d340ce9a924f783711").unwrap())?;
+                evm.push((&self.header.miner).into())?;
                 gas = 2.into();
             }
             0x42 => {
@@ -1527,7 +1536,8 @@ impl<T: EventTracer> Executor<T> {
                 if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
-                self.create(instruction, this, call, &mut gas, evm, ext, ctx).await?;
+                self.create(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await?;
             }
             0xf1 => {
                 // CALL
@@ -1619,7 +1629,8 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Create2,
                     ..ctx
                 };
-                self.create(instruction, this, call, &mut gas, evm, ext, ctx).await?;
+                self.create(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await?;
             }
             0xfa => {
                 // STATICCALL
@@ -1688,13 +1699,25 @@ impl<T: EventTracer> Executor<T> {
 
         // Calculate address access cost (EIP-2929)
         let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
-        if args_size == 0 && !value.is_zero() {
-            // value-transfer only call (empty calldata)
-            access_cost = 100;
+        let mut create_cost = 0;
+        if !value.is_zero() && ext.is_empty(&address).await? {
+            create_cost = 25000; // account creation cost
         }
 
+        let (code, codehash) = ext.code(&address).await?;
+
+        // TODO: RESEARCH: Investigate this weird delegation: <0xef0100> + <20 bytes address>
+        let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
+            let target = Address::try_from(&code[3..]).expect("address");
+            access_cost += evm.address_access_cost(&target, ext).as_i64();
+            let (code, _) = ext.code(&target).await?;
+            code
+        } else {
+            code
+        };
+
         // Calculate base gas cost
-        let mut base_gas_cost = access_cost + memory_expansion_cost;
+        let mut base_gas_cost = access_cost + memory_expansion_cost + create_cost;
 
         let mut gas_stipend_adjustment = 0;
 
@@ -1809,8 +1832,7 @@ impl<T: EventTracer> Executor<T> {
             ..ctx
         };
 
-        let (bytecode, codehash) = ext.code(&address).await?;
-        let code = Decoder::decode(bytecode);
+        let code = Decoder::decode(code);
         self.tracer.push(Event {
             data: EventData::Account(AccountEvent::GetCode {
                 address,
@@ -1855,7 +1877,7 @@ impl<T: EventTracer> Executor<T> {
                     "ret_size": ret_size,
                     "memory.len": evm.memory.len(),
                     "call.address": address,
-                    "call.input": hex::encode(&data),
+                    "call.input": hex::encode(data),
                     "call.value": value,
                     "call.gas": call_gas.as_u64(),
                     "access_cost": access_cost,
@@ -1898,6 +1920,7 @@ impl<T: EventTracer> Executor<T> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn create(
         &mut self,
         instruction: &Instruction,
@@ -2018,11 +2041,6 @@ impl<T: EventTracer> Executor<T> {
             address,
             (old_hash, old_code),
             (Word::from_bytes(&hash), code.clone()),
-        ));
-        evm.account.push(AccountTouch::SetNonce(
-            call.from,
-            nonce.as_u64(),
-            nonce.as_u64() + 1,
         ));
         self.tracer.push(Event {
             data: EventData::Account(AccountEvent::SetCode {

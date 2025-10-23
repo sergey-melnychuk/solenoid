@@ -1,11 +1,10 @@
-use std::{collections::{HashMap, HashSet}, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Instant,
+};
 
 use crate::{
-    common::{
-        address::Address,
-        hash::keccak256,
-        word::Word,
-    },
+    common::{address::Address, hash::keccak256, word::Word},
     eth::EthClient,
 };
 
@@ -66,6 +65,7 @@ impl Ext {
 
     pub fn reset(&mut self, gas_price: Word) {
         self.gas_price = gas_price;
+        self.original.clear();
 
         // Clear EIP-2929 access tracking (you need to add this tracking first!)
         // Clear transient storage (EIP-1153)
@@ -74,15 +74,6 @@ impl Ext {
         // Clear EIP-2929 access tracking
         self.accessed_addresses.clear();
         self.accessed_storage.clear();
-        
-        // Update 'original' to reflect current state as new baseline
-        // This is tricky - you need to snapshot current state values
-        for ((addr, key), original) in self.original.iter_mut() {
-            if let Some(current) = self.state.get(addr)
-                .and_then(|s| s.state.get(key)) {
-                *original = *current;
-            }
-        }
     }
 
     /// Check if an address has been accessed in the current transaction (EIP-2929)
@@ -111,6 +102,7 @@ impl Ext {
         }
         if let Some(val) = self.state.get(addr).and_then(|s| s.state.get(key)).copied() {
             tracing::debug!("GET: {addr}[{key:#x}]={val:#064x} [cached value]");
+            self.original.entry((*addr, *key)).or_insert(val);
             Ok(val)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let now = Instant::now();
@@ -130,6 +122,7 @@ impl Ext {
     }
 
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
+        let _ = self.get(addr, &key).await?;
         let state = self.state.entry(*addr).or_default();
         state.state.insert(key, val);
         tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}");
@@ -147,6 +140,13 @@ impl Ext {
             state.account = account.clone();
             Ok(account)
         }
+    }
+
+    pub async fn is_empty(&mut self, addr: &Address) -> eyre::Result<bool> {
+        let balance = self.balance(addr).await?;
+        let code = self.code(addr).await?;
+        let is_empty = balance.is_zero() && code.0.is_empty();
+        Ok(is_empty)
     }
 
     pub async fn code(&mut self, addr: &Address) -> eyre::Result<(Vec<u8>, Word)> {
@@ -175,7 +175,7 @@ impl Ext {
 
     pub async fn pull(&mut self, addr: &Address) -> eyre::Result<&Account> {
         if self.state.contains_key(addr) {
-            return Ok(self.state.get(addr).expect("must be present"))
+            return Ok(self.state.get(addr).expect("must be present"));
         }
         if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
             let address = format!("0x{}", hex::encode(addr.0));

@@ -7,3 +7,4 @@ cargo run --release --example revm -- $BLOCK $SKIP
 cargo run --release --example sole -- $BLOCK $SKIP
 # RUST_BACKTRACE=1 cargo run --example sole -- $BLOCK $SKIP
 cargo run --release --example check -- $BLOCK $SKIP
+# cargo run --release --example check -- $BLOCK $SKIP '{}'

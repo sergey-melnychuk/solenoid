@@ -45,4 +45,5 @@ pub struct Header {
     pub blob_gas_used: Word,
     #[serde(rename = "extraData")]
     pub extra_data: Word,
+    pub miner: Address,
 }
