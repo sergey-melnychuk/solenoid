@@ -164,28 +164,28 @@ pub struct OpcodeTrace {
     pub memory: Vec<String>,
     pub depth: usize,
 
-    pub extra: Extra,
+    pub debug: DebugInfo,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Extra {
+pub struct DebugInfo {
     #[serde(flatten)]
     pub value: serde_json::Value,
 }
 
-impl Extra {
+impl DebugInfo {
     pub fn new(value: Value) -> Self {
         Self { value }
     }
 }
 
-impl PartialEq for Extra {
+impl PartialEq for DebugInfo {
     fn eq(&self, _: &Self) -> bool {
         true
     }
 }
 
-impl Eq for Extra {}
+impl Eq for DebugInfo {}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TxTrace {
@@ -275,7 +275,7 @@ where
                 .map(|chunk| hex::encode(chunk))
                 .collect(),
             depth: self.aux.depth,
-            extra: Extra::new(json!({
+            debug: DebugInfo::new(json!({
                 "gas_left": interp.gas.remaining(),
                 "evm.gas.back": interp.gas.refunded()
             })),

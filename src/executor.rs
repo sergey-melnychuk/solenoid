@@ -533,7 +533,7 @@ impl<T: EventTracer> Executor<T> {
                             gas_left: evm.gas.remaining().saturating_sub(cost),
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
-                            extra: json!(self.debug),
+                            debug: json!(self.debug),
                         },
                     });
                 }
@@ -1773,7 +1773,7 @@ impl<T: EventTracer> Executor<T> {
                     stack: evm.stack.clone(),
                     memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                     gas_back: 0,
-                    extra: json!({
+                    debug: json!({
                         "is_call": "precompile",
                         "gas_left": evm.gas.remaining() - base_gas_cost,
                         "gas_cost": total_gas_cost_for_tracing,
@@ -1868,7 +1868,7 @@ impl<T: EventTracer> Executor<T> {
                 gas_cost: total_gas_cost_for_tracing,
                 gas_used: evm.gas.used + total_gas_cost_for_tracing,
                 gas_left: evm.gas.remaining() - total_gas_cost_for_tracing,
-                extra: json!({
+                debug: json!({
                     "is_call": true,
                     "gas_left": evm.gas.remaining() - base_gas_cost,
                     "gas_cost": total_gas_cost_for_tracing,
@@ -2013,7 +2013,7 @@ impl<T: EventTracer> Executor<T> {
                 gas_cost: total_gas_cost,
                 gas_used: evm.gas.used + total_gas_cost,
                 gas_left: evm.gas.remaining() - total_gas_cost,
-                extra: json!({
+                debug: json!({
                     "is_call": true,
                     "evm.gas.used": evm.gas.used,
                     "evm.gas.refund": evm.gas.refund,

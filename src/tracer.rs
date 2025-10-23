@@ -95,7 +95,7 @@ pub enum EventData {
         gas_back: i64,
         stack: Vec<Word>,
         memory: Vec<Word>,
-        extra: Value,
+        debug: Value,
     },
 
     Hash {
@@ -197,7 +197,7 @@ impl TryFrom<Event> for OpcodeTrace {
     type Error = eyre::Error;
 
     fn try_from(value: Event) -> Result<Self, Self::Error> {
-        use evm_tracer::Extra;
+        use evm_tracer::DebugInfo;
 
         let depth = value.depth;
         match value.data {
@@ -212,7 +212,7 @@ impl TryFrom<Event> for OpcodeTrace {
                 stack,
                 memory,
                 gas_back,
-                extra,
+                debug: extra,
             } => Ok(OpcodeTrace {
                 pc: pc as u64,
                 op,
@@ -231,7 +231,7 @@ impl TryFrom<Event> for OpcodeTrace {
                     .map(|x| hex::encode(x.into_bytes()))
                     .collect(),
                 depth,
-                extra: Extra::new(extra),
+                debug: DebugInfo::new(extra),
             }),
             _ => eyre::bail!("Not an opcode"),
         }
