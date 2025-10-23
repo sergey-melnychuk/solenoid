@@ -1,0 +1,48 @@
+📦 Fetched block number: 23642294 [with 304 txs]
+📦 Fetched block number: 23642294 [with 304 txs]
+---
+### block=23642294 index=12 hash=0xbd38e02443bb2338a5603f64590957c4dfc908a4e92cbddab64d8a3cd84e66d6
+REVM 	OK=false 	RET=<100>	GAS=72850	TRACES=981
+sole 	OK=false 	RET=true	GAS=-18251	TRACES=981
+---
+### block=23642294 index=14 hash=0xe1a5c48d126819de3ac1ecc210a65a9b8c71058b6ea2a86cc4359537e06c9ff9
+REVM 	OK=true 	RET=<32>	GAS=142869	TRACES=5835
+sole 	OK=true 	RET=true	GAS= +381	TRACES=5835
+---
+### block=23642294 index=23 hash=0xcc1153bb06a1895030f57e8b492a97b632cbc7fc84fc442e02b935d94fe05742
+REVM 	OK=true 	RET=empty	GAS=114820	TRACES=4816
+sole 	OK=true 	RET=true	GAS=+1223	TRACES=4816
+---
+### block=23642294 index=25 hash=0xb6a83c47c6f00407dd16173dd1144aa68131043ea595e2e7cca5bf848be409ec
+REVM 	OK=true 	RET=empty	GAS=871646	TRACES=62844
+sole 	OK=true 	RET=true	GAS=+5301	TRACES=62844
+---
+### block=23642294 index=27 hash=0xd1d06ab33c12104a084c8bcb4b85ec50cfb043073249fb3a49eb54b9f1b10e29
+REVM 	OK=true 	RET=empty	GAS=594560	TRACES=39370
+sole 	OK=true 	RET=true	GAS=+5301	TRACES=39370
+---
+### block=23642294 index=53 hash=0xaf5bea68c7f24fb411af0a143d159ec51902f4c8e6f5e1a5cf8825c473f19b6c
+REVM 	OK=true 	RET=empty	GAS=209647	TRACES=12213
+sole 	OK=false 	RET=false	GAS=-183452	TRACES=401
+---
+### block=23642294 index=59 hash=0x54b3a107dcc9bd16c4b21e2d99ab1a05c6edadea147646ac40e4a112367c83c1
+REVM 	OK=true 	RET=empty	GAS=177815	TRACES=7820
+sole 	OK=false 	RET=false	GAS=-21123	TRACES=5959
+---
+### block=23642294 index=65 hash=0xdf9eaaa91415a630306cec28bc5705c4de3ebb4672945b751af4e8608bb220f8
+REVM 	OK=true 	RET=<32>	GAS=199625	TRACES=12468
+sole 	OK=false 	RET=false	GAS=-145261	TRACES=2228
+---
+### block=23642294 index=77 hash=0xe956977ef42db5100172d5e6b2f2b9dbc06f4824c01f1211908df446752375be
+REVM 	OK=true 	RET=<32>	GAS=229225	TRACES=12876
+sole 	OK=false 	RET=false	GAS=-114776	TRACES=7968
+---
+### block=23642294 index=248 hash=0x626cb87b7322cf6ae00b859631b3fceb74b64d4e05aa43b0987d7afe03106bd2
+REVM 	OK=false 	RET=<196>	GAS=876874	TRACES=52673
+sole 	OK=false 	RET=true	GAS=-139000	TRACES=52673
+---
+### block=23642294 index=302 hash=0xacdb595ce4a2a3756357c73bf69bac5e9da29fe18712f9b9d3a4b50f947cf688
+REVM 	OK=true 	RET=empty	GAS=21080	TRACES=0
+sole 	OK=true 	RET=true	GAS=  -48	TRACES=0
+
+(total: 304, matched: 293, invalid: 11)

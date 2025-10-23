@@ -2,39 +2,39 @@
 📦 Fetched block number: 23640313 [with 180 txs]
 ---
 ### block=23640313 index=3 hash=0xdf1fe286d2154274becd69e9e23e45735d06e32070029c1b513946248c204a5f
-REVM 	OK=true 	RET=empty 	GAS=364783 	TRACES=2682 	ms=8
-sole 	OK=true 	RET=true 	GAS=+50000 	TRACES=2682 	ms=9
+REVM 	OK=true 	RET=empty	GAS=364783	TRACES=2682
+sole 	OK=true 	RET=true	GAS=+50000	TRACES=2682
 ---
 ### block=23640313 index=7 hash=0x0b3af37617268008fc369e417903b00f117fcc2e76826f902ac1e593d5984f26
-REVM 	OK=true 	RET=empty 	GAS=909028 	TRACES=166087 	ms=260
-sole 	OK=false 	RET=true 	GAS=-878295 	TRACES=322 	ms=2
+REVM 	OK=true 	RET=empty	GAS=909028	TRACES=166087
+sole 	OK=false 	RET=true	GAS=-878295	TRACES=322
 ---
 ### block=23640313 index=29 hash=0xbd5f066767f0855368d4090842a94fd15fcccdf59a2311110283f6bccca28b82
-REVM 	OK=true 	RET=empty 	GAS=342485 	TRACES=25142 	ms=241
-sole 	OK=false 	RET=false 	GAS=-219711 	TRACES=8072 	ms=109
+REVM 	OK=true 	RET=empty	GAS=342485	TRACES=25142
+sole 	OK=false 	RET=false	GAS=-219711	TRACES=8072
 ---
 ### block=23640313 index=56 hash=0xc6599d917ef70246e66a6cb2f8ad01f57c63bb491ca81a8c0392a7882362d888
-REVM 	OK=true 	RET=empty 	GAS=31610 	TRACES=0 	ms=0
-sole 	OK=true 	RET=true 	GAS=-6366 	TRACES=0 	ms=0
+REVM 	OK=true 	RET=empty	GAS=31610	TRACES=0
+sole 	OK=true 	RET=true	GAS=-6366	TRACES=0
 ---
 ### block=23640313 index=58 hash=0x6d1d5fc824e18d836e9a66f367c0ad6739856420d9c1145fab8390867b1d7988
-REVM 	OK=true 	RET=<32> 	GAS=196482 	TRACES=6927 	ms=25
-sole 	OK=false 	RET=false 	GAS=-144541 	TRACES=1876 	ms=7
+REVM 	OK=true 	RET=<32>	GAS=196482	TRACES=6927
+sole 	OK=false 	RET=false	GAS=-144541	TRACES=1876
 ---
 ### block=23640313 index=61 hash=0x885cfa8027dea7454adeae703f50af64b97e82255f3efba49040be2d04db7afb
-REVM 	OK=true 	RET=empty 	GAS=22280 	TRACES=0 	ms=0
-sole 	OK=true 	RET=true 	GAS= -768 	TRACES=0 	ms=0
+REVM 	OK=true 	RET=empty	GAS=22280	TRACES=0
+sole 	OK=true 	RET=true	GAS= -768	TRACES=0
 ---
 ### block=23640313 index=83 hash=0x382aaf01c5e08a17046ec314238894b9fb2238384b1b0b224a96d2099361f687
-REVM 	OK=true 	RET=empty 	GAS=5926746 	TRACES=72638 	ms=490
-sole 	OK=true 	RET=true 	GAS=-3897038 	TRACES=84145 	ms=545
+REVM 	OK=true 	RET=empty	GAS=5926746	TRACES=72638
+sole 	OK=true 	RET=true	GAS=-3897038	TRACES=84145
 ---
 ### block=23640313 index=152 hash=0x44cb0cb57df2c3d009f111bace36b003b1623886c1f2c22a0a9c608cf056d14a
-REVM 	OK=true 	RET=empty 	GAS=121653 	TRACES=1505 	ms=4
-sole 	OK=true 	RET=true 	GAS=-9047 	TRACES=1505 	ms=5
+REVM 	OK=true 	RET=empty	GAS=121653	TRACES=1505
+sole 	OK=true 	RET=true	GAS=-9047	TRACES=1505
 ---
 ### block=23640313 index=170 hash=0x1e703a97ab96bdafb89ed644c15dc6fef4bc3a5eb296be4c71e7fa6a91a2320a
-REVM 	OK=true 	RET=empty 	GAS=306826 	TRACES=12919 	ms=165
-sole 	OK=false 	RET=true 	GAS=+20588 	TRACES=10569 	ms=93
+REVM 	OK=true 	RET=empty	GAS=306826	TRACES=12919
+sole 	OK=false 	RET=true	GAS=+20588	TRACES=10569
 
 (total: 180, matched: 171, invalid: 9)

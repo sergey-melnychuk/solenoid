@@ -52,5 +52,7 @@ $ etc/quoter.sh
 ### WASM support out-of-the-box
 
 ```
-cargo build --target wasm32-unknown-unknown
+cd wasm-demo/
+cargo check --target wasm32-unknown-unknown
+wasm-pack build --target web
 ```
