@@ -6,11 +6,15 @@ use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::alloy_rpc_types::BlockTransactions;
 use tokio::sync::Mutex;
 
-use solenoid::{common::{block::Block, word::Word}, eth, ext::Ext};
 use solenoid::{
     common::block::{Header, Tx},
     solenoid::{Builder as _, CallResult, Solenoid},
     tracer::{EventTracer as _, LoggingTracer},
+};
+use solenoid::{
+    common::{block::Block, word::Word},
+    eth,
+    ext::Ext,
 };
 
 use evm_tracer::{OpcodeTrace, run::TxResult};
@@ -33,8 +37,7 @@ pub fn runner(
         let call_cost = 21000i64;
         let data_cost = {
             let total_calldata_len = tx.input.as_ref().len();
-            let nonzero_bytes_count =
-                tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
+            let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         } as i64;
         let create_cost = 32000i64;
@@ -56,7 +59,8 @@ pub fn runner(
                     .apply(&mut *guard)
                     .await?;
                 Ok::<_, eyre::Report>(result)
-            }).await??;
+            })
+            .await??;
 
             let gas_costs = if tx.to.is_some() {
                 call_cost + data_cost
@@ -95,8 +99,15 @@ async fn main() -> eyre::Result<()> {
             .unwrap_or(23027350) // https://xkcd.com/221/
     };
 
-    let Block{ header, transactions } = eth.get_full_block(Word::from(block_number)).await?;
-    println!("📦 Fetched block number: {} [with {} txs]", header.number.as_usize(), transactions.len());
+    let Block {
+        header,
+        transactions,
+    } = eth.get_full_block(Word::from(block_number)).await?;
+    println!(
+        "📦 Fetched block number: {} [with {} txs]",
+        header.number.as_usize(),
+        transactions.len()
+    );
 
     let ext = Ext::at_number(Word::from(block_number - 1), eth).await?;
 
@@ -116,7 +127,11 @@ async fn main() -> eyre::Result<()> {
     let BlockTransactions::Full(txs) = block.transactions else {
         eyre::bail!("Expected full block");
     };
-    println!("📦 Fetched block number: {} [with {} txs]", block.header.number, txs.len());
+    println!(
+        "📦 Fetched block number: {} [with {} txs]",
+        block.header.number,
+        txs.len()
+    );
 
     let mut g = evm_tracer::run::runner(block.header, provider);
 
@@ -152,36 +167,51 @@ async fn main() -> eyre::Result<()> {
                 } else {
                     format!("<{}>", revm_result.ret.len())
                 };
-                println!("---\n### block={block_number} index={idx} hash={}", txs[idx].info().hash.unwrap_or_default());
-                println!("REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}", 
+                println!(
+                    "---\n### block={block_number} index={idx} hash={}",
+                    txs[idx].info().hash.unwrap_or_default()
+                );
+                println!(
+                    "REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}",
                     !revm_result.rev,
                     ret,
                     revm_result.gas,
-                    revm_traces.len());
+                    revm_traces.len()
+                );
 
                 let gas_diff = if revm_result.gas == sole_result.gas {
                     "match".to_string()
                 } else {
                     format!("{:+5}", sole_result.gas - revm_result.gas)
                 };
-                println!("sole \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={sole_ms}", 
+                println!(
+                    "sole \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={sole_ms}",
                     !sole_result.rev,
                     sole_result.ret == revm_result.ret,
                     gas_diff,
-                    sole_traces.len());
+                    sole_traces.len()
+                );
             }
             Err(e) => {
-                println!("---\n### block={block_number} index={idx} hash={}", txs[idx].info().hash.unwrap_or_default());
-                println!("REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}", 
+                println!(
+                    "---\n### block={block_number} index={idx} hash={}",
+                    txs[idx].info().hash.unwrap_or_default()
+                );
+                println!(
+                    "REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}",
                     !revm_result.rev,
                     true,
                     revm_result.gas,
-                    revm_traces.len());
-                println!("sole \tPANIC: '{e}'"); 
+                    revm_traces.len()
+                );
+                println!("sole \tPANIC: '{e}'");
             }
         }
     }
 
-    println!("\n(total: {len}, matched: {matched}, invalid: {})", len - matched);
+    println!(
+        "\n(total: {len}, matched: {matched}, invalid: {})",
+        len - matched
+    );
     Ok(())
 }

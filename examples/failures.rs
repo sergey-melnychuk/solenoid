@@ -17,7 +17,8 @@ async fn main() -> eyre::Result<()> {
 
     let mut ext = Ext::local();
     ext.state.entry(from).or_default().value = Word::from(100_000_000_000_000_000u64);
-    ext.state.entry(from.of_smart_contract(Word::zero()))
+    ext.state
+        .entry(from.of_smart_contract(Word::zero()))
         .or_default()
         .state
         .insert(Word::zero(), Word::zero()); // Fail.owner

@@ -346,11 +346,8 @@ impl<T: EventTracer> Executor<T> {
             // }
 
             ext.account_mut(&call.from).value -= call.value;
-            evm.account.push(AccountTouch::SetValue(
-                call.from,
-                src,
-                src - call.value,
-            ));
+            evm.account
+                .push(AccountTouch::SetValue(call.from, src, src - call.value));
             self.tracer.push(Event {
                 data: EventData::Account(AccountEvent::SetValue {
                     address: call.from,
@@ -392,7 +389,8 @@ impl<T: EventTracer> Executor<T> {
             reverted: false,
         });
 
-        let is_transfer_only = code.bytecode.is_empty() && call.data.is_empty() && !call.to.is_zero();
+        let is_transfer_only =
+            code.bytecode.is_empty() && call.data.is_empty() && !call.to.is_zero();
         if is_transfer_only {
             evm.stopped = true;
             evm.reverted = false;
@@ -539,7 +537,8 @@ impl<T: EventTracer> Executor<T> {
                         },
                     });
                 }
-                if instruction.opcode.code == 0xfe { // INVALID
+                if instruction.opcode.code == 0xfe {
+                    // INVALID
                     evm.gas.sub(evm.gas.remaining()).expect("must succeed");
                     evm.stopped = true;
                     evm.reverted = true;
@@ -1146,7 +1145,7 @@ impl<T: EventTracer> Executor<T> {
                 // evm.push(self.header.extra_data)?;
                 evm.push(Word::zero())?;
                 // TODO: make it work properly?
-                // > tx.blob_versioned_hashes[index] if index < len(tx.blob_versioned_hashes), 
+                // > tx.blob_versioned_hashes[index] if index < len(tx.blob_versioned_hashes),
                 // > and otherwise with a zeroed bytes32 value."
                 // (See: https://www.evm.codes/?fork=prague#49)
                 gas = 3.into();

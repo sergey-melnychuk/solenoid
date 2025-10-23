@@ -90,13 +90,13 @@ fn main() -> eyre::Result<()> {
                 match event.code {
                     KeyCode::Char('n') => {
                         i += 1;
-                        continue
-                    },
+                        continue;
+                    }
                     KeyCode::Char('p') => {
                         i -= 1;
                         explore = true;
-                        continue
-                    },
+                        continue;
+                    }
                     _ => break,
                 }
             }

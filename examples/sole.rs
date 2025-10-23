@@ -1,10 +1,6 @@
 use eyre::{Context, eyre};
 use solenoid::{
-    common::{
-        address::Address,
-        hash,
-        word::Word,
-    },
+    common::{address::Address, hash, word::Word},
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},
