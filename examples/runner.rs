@@ -1,4 +1,3 @@
-use std::time::Instant;
 use std::{pin::Pin, sync::Arc};
 
 use evm_tracer::alloy_eips::BlockNumberOrTag;
@@ -141,14 +140,10 @@ async fn main() -> eyre::Result<()> {
     let mut matched = 0;
     for idx in 0..len {
         let tx = txs[idx].clone();
-        let now = Instant::now();
         let (revm_result, revm_traces) = g(tx)?;
-        let revm_ms = now.elapsed().as_millis();
 
         let tx = transactions[idx].clone();
-        let now = Instant::now();
         let result = f(tx).await;
-        let sole_ms = now.elapsed().as_millis();
         match result {
             Ok((sole_result, sole_traces)) => {
                 let rev_ok = revm_result.rev == sole_result.rev;
@@ -172,7 +167,7 @@ async fn main() -> eyre::Result<()> {
                     txs[idx].info().hash.unwrap_or_default()
                 );
                 println!(
-                    "REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}",
+                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}",
                     !revm_result.rev,
                     ret,
                     revm_result.gas,
@@ -185,7 +180,7 @@ async fn main() -> eyre::Result<()> {
                     format!("{:+5}", sole_result.gas - revm_result.gas)
                 };
                 println!(
-                    "sole \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={sole_ms}",
+                    "sole \tOK={} \tRET={:4}\tGAS={}\tTRACES={}",
                     !sole_result.rev,
                     sole_result.ret == revm_result.ret,
                     gas_diff,
@@ -198,7 +193,7 @@ async fn main() -> eyre::Result<()> {
                     txs[idx].info().hash.unwrap_or_default()
                 );
                 println!(
-                    "REVM \tOK={} \tRET={} \tGAS={} \tTRACES={} \tms={revm_ms}",
+                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}",
                     !revm_result.rev,
                     true,
                     revm_result.gas,
