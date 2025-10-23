@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solenoid WASM Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #result, #quoteResult, #solenoidResult {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 15px;
+        }
+        .error {
+            border-left-color: #f44336 !important;
+            color: #f44336;
+        }
+        .loading {
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Solenoid WASM Demo</h1>
+        <p>Fetch the latest Ethereum block number using Solenoid compiled to WebAssembly</p>
+
+        <label for="rpcUrl">RPC URL:</label>
+        <input
+            type="text"
+            id="rpcUrl"
+            placeholder="https://eth.llamarpc.com"
+            value="https://eth.llamarpc.com"
+        />
+
+        <button id="fetchButton" onclick="fetchBlockNumber()">Fetch Latest Block</button>
+
+        <div id="result"></div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #eee;">
+
+        <h2 style="color: #333; margin-bottom: 10px;">Uniswap V3 Quoter - WETH to USDC (Direct RPC Call)</h2>
+        <p>Get a quote for exchanging WETH to USDC using the Uniswap V3 Quoter contract</p>
+
+        <label for="rpcUrl2">RPC URL:</label>
+        <input
+            type="text"
+            id="rpcUrl2"
+            placeholder="https://eth.llamarpc.com"
+            value="https://eth.llamarpc.com"
+        />
+
+        <label for="amount">Amount (in Wei, 1 ETH = 1000000000000000000):</label>
+        <input
+            type="text"
+            id="amount"
+            placeholder="1000000000000000000"
+            value="1000000000000000000"
+        />
+        <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
+            Presets:
+            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount('1000000000000000000')">1 WETH</code>
+            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount('500000000000000000')">0.5 WETH</code>
+            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount('100000000000000000')">0.1 WETH</code>
+        </p>
+
+        <button id="quoteButton" onclick="getQuote()">Get Quote (via eth_call)</button>
+
+        <div id="quoteResult"></div>
+
+        <hr style="margin: 40px 0; border: none; border-top: 2px solid #eee;">
+
+        <h2 style="color: #333; margin-bottom: 10px;">Uniswap V3 Quoter - WETH to USDC (Solenoid Executor)</h2>
+        <p>Get a quote using the full Solenoid EVM executor running in WebAssembly - simulates the entire transaction locally!</p>
+
+        <label for="rpcUrl3">RPC URL:</label>
+        <input
+            type="text"
+            id="rpcUrl3"
+            placeholder="https://eth.llamarpc.com"
+            value="https://eth.llamarpc.com"
+        />
+
+        <label for="amount2">Amount (in Wei, 1 ETH = 1000000000000000000):</label>
+        <input
+            type="text"
+            id="amount2"
+            placeholder="1000000000000000000"
+            value="1000000000000000000"
+        />
+        <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
+            Presets:
+            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount2('1000000000000000000')">1 WETH</code>
+            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount2('500000000000000000')">0.5 WETH</code>
+            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount2('100000000000000000')">0.1 WETH</code>
+        </p>
+
+        <button id="solenoidButton" onclick="getQuoteSolenoid()">Get Quote (via Solenoid)</button>
+
+        <div id="solenoidResult"></div>
+    </div>
+
+    <script type="module">
+        import init, { get_latest_block_number, quote_weth_to_usdc, quote_weth_to_usdc_solenoid } from './pkg/wasm_demo.js';
+
+        let wasmInitialized = false;
+
+        async function initWasm() {
+            if (!wasmInitialized) {
+                await init();
+                wasmInitialized = true;
+                console.log('WASM initialized successfully');
+            }
+        }
+
+        window.fetchBlockNumber = async function() {
+            const rpcUrl = document.getElementById('rpcUrl').value;
+            const resultDiv = document.getElementById('result');
+            const button = document.getElementById('fetchButton');
+
+            if (!rpcUrl) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = 'Please enter an RPC URL';
+                return;
+            }
+
+            try {
+                button.disabled = true;
+                resultDiv.className = 'loading';
+                resultDiv.textContent = 'Fetching latest block...';
+
+                await initWasm();
+
+                const result = await get_latest_block_number(rpcUrl);
+
+                resultDiv.className = '';
+                resultDiv.textContent = result;
+            } catch (error) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = `Error: ${error}`;
+            } finally {
+                button.disabled = false;
+            }
+        };
+
+        window.getQuote = async function() {
+            const rpcUrl = document.getElementById('rpcUrl2').value;
+            const amount = document.getElementById('amount').value;
+            const resultDiv = document.getElementById('quoteResult');
+            const button = document.getElementById('quoteButton');
+
+            if (!rpcUrl) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = 'Please enter an RPC URL';
+                resultDiv.style.display = 'block';
+                return;
+            }
+
+            if (!amount) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = 'Please enter an amount';
+                resultDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                button.disabled = true;
+                resultDiv.className = 'loading';
+                resultDiv.textContent = 'Fetching quote from Uniswap V3 Quoter... This may take a moment as it simulates the swap on-chain.';
+                resultDiv.style.display = 'block';
+
+                await initWasm();
+
+                const result = await quote_weth_to_usdc(rpcUrl, amount);
+
+                resultDiv.className = '';
+                resultDiv.textContent = result;
+            } catch (error) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = `Error: ${error}`;
+            } finally {
+                button.disabled = false;
+            }
+        };
+
+        window.setAmount = function(value) {
+            document.getElementById('amount').value = value;
+        };
+
+        window.getQuoteSolenoid = async function() {
+            const rpcUrl = document.getElementById('rpcUrl3').value;
+            const amount = document.getElementById('amount2').value;
+            const resultDiv = document.getElementById('solenoidResult');
+            const button = document.getElementById('solenoidButton');
+
+            if (!rpcUrl) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = 'Please enter an RPC URL';
+                resultDiv.style.display = 'block';
+                return;
+            }
+
+            if (!amount) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = 'Please enter an amount';
+                resultDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                button.disabled = true;
+                resultDiv.className = 'loading';
+                resultDiv.textContent = 'Running Solenoid EVM executor in WASM... This will take longer as it simulates the entire transaction locally, fetching state as needed.';
+                resultDiv.style.display = 'block';
+
+                await initWasm();
+
+                const result = await quote_weth_to_usdc_solenoid(rpcUrl, amount);
+
+                resultDiv.className = '';
+                resultDiv.textContent = result;
+            } catch (error) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = `Error: ${error}`;
+                console.error('Solenoid execution error:', error);
+            } finally {
+                button.disabled = false;
+            }
+        };
+
+        window.setAmount2 = function(value) {
+            document.getElementById('amount2').value = value;
+        };
+
+        // Initialize WASM on page load
+        initWasm().catch(console.error);
+    </script>
+</body>
+</html>
