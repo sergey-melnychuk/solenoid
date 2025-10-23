@@ -1,12 +1,8 @@
 use eyre::OptionExt;
 
 use crate::common::{
-    block::{Block, Header},
-    word::Word,
+    address::Address, block::{Block, Header}, word::Word
 };
-
-#[cfg(feature = "account")]
-use crate::common::account::Account;
 
 #[derive(Clone)]
 pub struct EthClient {
@@ -169,55 +165,43 @@ impl EthClient {
         .and_then(|value| hex_to_word(&value))
     }
 
-    #[cfg(feature = "account")]
-    pub async fn get_account(&self, block_hash: &str, address: &str) -> eyre::Result<Account> {
-        self.rpc(serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "eth_getAccount",
-            "params": [
-                address,
-                {
-                    "blockHash": block_hash,
-                }
-            ],
-            "id": 0
-        }))
-        .await
-        .and_then(|value| parse_account(&value))
-    }
-
-    pub async fn call(
+    pub async fn eth_call(
         &self,
-        block_hash: &str,
-        address: &str,
-        calldata: &str,
-    ) -> eyre::Result<Vec<u8>> {
-        self.rpc(serde_json::json!({
+        address: &Address,
+        calldata: &[u8],
+    ) -> eyre::Result<String> {
+        let calldata_hex = format!("0x{}", hex::encode(calldata));
+        let address_hex = format!("0x{}", hex::encode(address.0));
+
+        let value = self.rpc(serde_json::json!({
             "jsonrpc": "2.0",
             "method": "eth_call",
             "params": [
                 {
-                    "to": address,
-                    "data": calldata,
+                    "to": address_hex,
+                    "data": calldata_hex,
                 },
-                {
-                    "blockHash": block_hash,
-                }
+                "latest"
             ],
             "id": 0
         }))
-        .await
-        .and_then(|value| hex_to_vec(&value))
+        .await?;
+
+        value.as_str()
+            .map(ToString::to_string)
+            .ok_or_else(|| eyre::eyre!("eth_call result is not a string"))
     }
 
     async fn rpc(&self, value: serde_json::Value) -> eyre::Result<serde_json::Value> {
         let res = self.http.post(&self.url).json(&value).send().await?;
 
         let status = res.status();
+        #[cfg(feature = "tracing")]
         let (code, message) = (status.as_u16(), status.as_str());
         if !status.is_success() {
+            #[cfg(feature = "tracing")]
             tracing::error!(code, message, "Ethereum call failed");
-            eyre::bail!(code);
+            eyre::bail!(status.as_u16());
         }
 
         let response: serde_json::Value = res.json().await?;
@@ -252,28 +236,6 @@ fn hex_to_vec(val: &serde_json::Value) -> eyre::Result<Vec<u8>> {
     let hex = hex.strip_prefix("0x").unwrap_or(hex);
     let vec = hex::decode(hex)?;
     Ok(vec)
-}
-
-#[cfg(feature = "account")]
-fn parse_account(val: &serde_json::Value) -> eyre::Result<Account> {
-    Ok(Account {
-        balance: val
-            .get("balance")
-            .ok_or_eyre("account.balance missing")
-            .and_then(hex_to_word)?,
-        nonce: val
-            .get("nonce")
-            .ok_or_eyre("account.balance missing")
-            .and_then(hex_to_word)?,
-        code_hash: val
-            .get("codeHash")
-            .ok_or_eyre("account.codeHash missing")
-            .and_then(hex_to_word)?,
-        root: val
-            .get("storageRoot")
-            .ok_or_eyre("account.storageRoot missing")
-            .and_then(hex_to_word)?,
-    })
 }
 
 #[cfg(test)]

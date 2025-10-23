@@ -1,7 +1,7 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::Instant,
-};
+use std::collections::{HashMap, HashSet};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
 
 use crate::{
     common::{address::Address, hash::keccak256, word::Word},
@@ -101,20 +101,27 @@ impl Ext {
             self.pull(addr).await?;
         }
         if let Some(val) = self.state.get(addr).and_then(|s| s.state.get(key)).copied() {
+            #[cfg(feature = "tracing")]
             tracing::debug!("GET: {addr}[{key:#x}]={val:#064x} [cached value]");
             self.original.entry((*addr, *key)).or_insert(val);
             Ok(val)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
+            #[cfg(not(target_arch = "wasm32"))]
             let now = Instant::now();
+
             let hex = format!("{key:#064x}");
             let address = format!("0x{}", hex::encode(addr.0));
             let val = eth.get_storage_at(block_hash, &address, &hex).await?;
+
+            #[cfg(not(target_arch = "wasm32"))]
             let ms = now.elapsed().as_millis();
 
             self.state.entry(*addr).or_default().state.insert(*key, val);
             self.original.entry((*addr, *key)).or_insert(val);
 
+            #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
             tracing::debug!("GET: {addr:#}[{key:#x}]={val:#064x} [took {ms} ms]");
+
             Ok(val)
         } else {
             Ok(Word::zero())
@@ -125,21 +132,9 @@ impl Ext {
         let _ = self.get(addr, &key).await?;
         let state = self.state.entry(*addr).or_default();
         state.state.insert(key, val);
+        #[cfg(feature = "tracing")]
         tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}");
         Ok(())
-    }
-
-    #[cfg(feature = "account")]
-    pub async fn acc(&mut self, addr: &Address) -> eyre::Result<Account> {
-        if let Some(acc) = self.state.get(addr).map(|s| s.account.clone()) {
-            Ok(acc)
-        } else {
-            let address = format!("0x{}", hex::encode(addr.0));
-            let account = self.eth.get_account(&self.block_hash, &address).await?;
-            let state = self.state.entry(*addr).or_default();
-            state.account = account.clone();
-            Ok(account)
-        }
     }
 
     pub async fn is_empty(&mut self, addr: &Address) -> eyre::Result<bool> {

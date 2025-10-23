@@ -62,7 +62,21 @@ impl Word {
     }
 
     pub fn as_usize(&self) -> usize {
-        self.0.as_usize()
+        // WASM32 safe: Check if value fits in usize
+        #[cfg(target_pointer_width = "32")]
+        {
+            if self.0 > primitive_types::U256::from(u32::MAX) {
+                // For WASM32, cap at u32::MAX to avoid overflow
+                // This is reasonable since WASM32 can't address more than 4GB anyway
+                u32::MAX as usize
+            } else {
+                self.0.as_u32() as usize
+            }
+        }
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            self.0.as_usize()
+        }
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Self {
