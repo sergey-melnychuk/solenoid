@@ -1,10 +1,6 @@
 📦 Fetched block number: 23027350 [with 209 txs]
 📦 Fetched block number: 23027350 [with 209 txs]
 ---
-### block=23027350 index=14 hash=0x7c73933ddf6aa7cc0016e956314a19b3332075131d031cea4e584dff48c59612
-REVM 	OK=true 	RET=<32>	GAS=183140	TRACES=10078
-sole 	OK=true 	RET=true	GAS=+2139	TRACES=10078
----
 ### block=23027350 index=18 hash=0x1ee2cd45b6365a8c1d5eb9d49c1700f2489a0b0eb24a0fe2e4adb0949af27573
 REVM 	OK=false 	RET=<100>	GAS=34910	TRACES=425
 sole 	OK=false 	RET=true	GAS=-2182	TRACES=425
@@ -13,12 +9,8 @@ sole 	OK=false 	RET=true	GAS=-2182	TRACES=425
 REVM 	OK=true 	RET=empty	GAS=408554	TRACES=21450
 sole 	OK=true 	RET=true	GAS=+25000	TRACES=21450
 ---
-### block=23027350 index=55 hash=0xb10b001ffb62d7273accd1c94829f8cc16e8f98597e5c5df4d39af5ff0422bfc
-REVM 	OK=true 	RET=empty	GAS=351107	TRACES=48620
-sole 	OK=true 	RET=true	GAS= +372	TRACES=48620
----
 ### block=23027350 index=83 hash=0x6677280b19ee666d9c29d5e16a62000626b26f5aad3d8ecffb6571745dcadd57
 REVM 	OK=true 	RET=<96>	GAS=502640	TRACES=34359
 sole 	OK=true 	RET=true	GAS=-135653	TRACES=34359
 
-(total: 209, matched: 204, invalid: 5)
+(total: 209, matched: 206, invalid: 3)

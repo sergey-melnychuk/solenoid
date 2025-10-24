@@ -17,12 +17,8 @@ sole 	OK=true 	RET=false	GAS=match	TRACES=10430
 REVM 	OK=true 	RET=<32>	GAS=197680	TRACES=6928
 sole 	OK=true 	RET=false	GAS=match	TRACES=6928
 ---
-### block=23634227 index=231 hash=0x85e33507dec57b119d4e1978cc45dc68b467eef23619a7225f407c895f68db59
-REVM 	OK=true 	RET=empty	GAS=2601836	TRACES=136862
-sole 	OK=true 	RET=true	GAS=+7644	TRACES=136862
----
 ### block=23634227 index=238 hash=0x9a05ba4381458a6be7cb88249fc8a4acd891c33c03a6c82e4f6f875949e97f94
 REVM 	OK=false 	RET=empty	GAS=174996	TRACES=6084
 sole 	OK=true 	RET=true	GAS=-23664	TRACES=6640
 
-(total: 268, matched: 262, invalid: 6)
+(total: 268, matched: 263, invalid: 5)
