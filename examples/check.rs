@@ -1,9 +1,9 @@
 use crossterm::{
-    event::{KeyCode, read},
+    event::{read, KeyCode, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use evm_tracer::OpcodeTrace;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 fn main() -> eyre::Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
@@ -57,19 +57,19 @@ fn main() -> eyre::Result<()> {
     let len = sole.len().min(revm.len());
     let mut i = 0;
     while i < len {
-        let (trace, block) = (revm[i], sole[i]);
-        if trace.is_empty() ^ block.is_empty() {
+        let (a, b) = (revm[i], sole[i]);
+        if a.is_empty() ^ b.is_empty() {
             break;
         }
-        if trace.starts_with('#') && block.starts_with('#') {
+        if a.starts_with('#') && b.starts_with('#') {
             i += 1;
             continue;
         }
 
-        let trace: OpcodeTrace = parse(trace, &overrides);
-        let block: OpcodeTrace = parse(block, &overrides);
+        let a: OpcodeTrace = parse(a, &overrides);
+        let b: OpcodeTrace = parse(b, &overrides);
         let r = std::panic::catch_unwind(|| {
-            pretty_assertions::assert_eq!(block, trace);
+            pretty_assertions::assert_eq!(b, a);
         });
 
         let is_failed = r.is_err();
@@ -77,7 +77,12 @@ fn main() -> eyre::Result<()> {
             eprintln!("LINE: {i}");
             failed = true;
         } else if explore {
-            eprintln!("{}", serde_json::to_string_pretty(&trace).unwrap());
+            let mut entry = serde_json::to_value(a.clone())?;
+            entry["debug"] = json!({
+                "revm": a.debug,
+                "sole": b.debug,
+            });
+            eprintln!("{}", serde_json::to_string_pretty(&entry).unwrap());
             eprintln!("\nLINE: {i} [explore]");
         }
 
@@ -87,9 +92,11 @@ fn main() -> eyre::Result<()> {
             let event = read()?;
             disable_raw_mode()?;
             if let Some(event) = event.as_key_press_event() {
+                let ctrl: bool = event.modifiers.contains(KeyModifiers::CONTROL);
                 match event.code {
                     KeyCode::Char('n') => {
                         i += 1;
+                        explore = !ctrl;
                         continue;
                     }
                     KeyCode::Char('p') => {
