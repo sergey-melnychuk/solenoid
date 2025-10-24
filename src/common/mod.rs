@@ -31,6 +31,7 @@ impl<const N: usize> From<[u8; N]> for Hex {
 impl std::fmt::Debug for Hex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hex = hex::encode(&self.0);
+        f.write_str("0x")?;
         f.write_str(&hex)
     }
 }
@@ -38,6 +39,7 @@ impl std::fmt::Debug for Hex {
 impl std::fmt::Display for Hex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hex = hex::encode(&self.0);
+        f.write_str("0x")?;
         f.write_str(&hex)
     }
 }
