@@ -38,7 +38,7 @@ pub fn gas_cost(address: &Address, input: &[u8]) -> i64 {
         1 => 3000,                                        // ecrecover
         2 => 60 + 12 * input.len().div_ceil(32) as u64,   // sha256
         3 => 600 + 120 * input.len().div_ceil(32) as u64, // ripemd160
-        4 => 15 + 3 * input.len() as u64,                 // identity
+        4 => 15 + 3 * input.len().div_ceil(32) as u64,    // identity
         5 => modexp_gas_cost(input),                      // modexp
         6 => 150,                                         // bn128_add
         7 => 6000,                                        // bn128_mul
@@ -715,7 +715,7 @@ mod tests {
         // Test identity gas cost
         addr_bytes[19] = 4;
         let address = Address(addr_bytes);
-        assert_eq!(gas_cost(&address, &input), 15 + 3 * 64);
+        assert_eq!(gas_cost(&address, &input), 15 + 3 * 2);
 
         // Test bn128_add gas cost
         addr_bytes[19] = 6;
