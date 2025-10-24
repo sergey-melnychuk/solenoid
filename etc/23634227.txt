@@ -1,10 +1,6 @@
 📦 Fetched block number: 23634227 [with 268 txs]
 📦 Fetched block number: 23634227 [with 268 txs]
 ---
-### block=23634227 index=33 hash=0xeff61a8f3f1fec5f10fb9ff27fed619daa55cabf1c37216244252c3b101f42bf
-REVM 	OK=true 	RET=empty	GAS=22280	TRACES=0
-sole 	OK=true 	RET=true	GAS= -768	TRACES=0
----
 ### block=23634227 index=59 hash=0xe00b20075d996d1d20f6353430151b1212eefdaa617d08d72cd14bc38a916101
 REVM 	OK=true 	RET=<32>	GAS=274756	TRACES=16634
 sole 	OK=true 	RET=false	GAS=match	TRACES=16634
@@ -17,10 +13,6 @@ sole 	OK=false 	RET=true	GAS=-8406	TRACES=1288
 REVM 	OK=true 	RET=<32>	GAS=184866	TRACES=10430
 sole 	OK=true 	RET=false	GAS=match	TRACES=10430
 ---
-### block=23634227 index=90 hash=0xb25be6e8c22af1df452d24bfcf144c809a09f049072941cd3d340a42bcb0b84f
-REVM 	OK=true 	RET=empty	GAS=184900	TRACES=7896
-sole 	OK=false 	RET=false	GAS=-28184	TRACES=5959
----
 ### block=23634227 index=92 hash=0x185e8ddc3ac947b48a1c7a518596af6a8497430a826257a3b31e498feca8a284
 REVM 	OK=true 	RET=<32>	GAS=197680	TRACES=6928
 sole 	OK=true 	RET=false	GAS=match	TRACES=6928
@@ -32,13 +24,5 @@ sole 	OK=true 	RET=true	GAS=+7644	TRACES=136862
 ### block=23634227 index=238 hash=0x9a05ba4381458a6be7cb88249fc8a4acd891c33c03a6c82e4f6f875949e97f94
 REVM 	OK=false 	RET=empty	GAS=174996	TRACES=6084
 sole 	OK=true 	RET=true	GAS=-23664	TRACES=6640
----
-### block=23634227 index=256 hash=0x388659506f1eb4bc3359724d0ad49459ca4871e2141163683e3079685140b7b3
-REVM 	OK=true 	RET=empty	GAS=194775	TRACES=10182
-sole 	OK=false 	RET=true	GAS=-130063	TRACES=1371
----
-### block=23634227 index=261 hash=0xdac167ab6a47328a063a7aa1c4d66b879d2ac752084a1d49c491249936da65cc
-REVM 	OK=true 	RET=empty	GAS=622927	TRACES=141188
-sole 	OK=false 	RET=true	GAS=-516237	TRACES=3743
 
-(total: 268, matched: 258, invalid: 10)
+(total: 268, matched: 262, invalid: 6)

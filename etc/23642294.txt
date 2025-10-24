@@ -25,10 +25,6 @@ sole 	OK=true 	RET=true	GAS=+5301	TRACES=39370
 REVM 	OK=true 	RET=empty	GAS=209647	TRACES=12213
 sole 	OK=false 	RET=false	GAS=-183452	TRACES=401
 ---
-### block=23642294 index=59 hash=0x54b3a107dcc9bd16c4b21e2d99ab1a05c6edadea147646ac40e4a112367c83c1
-REVM 	OK=true 	RET=empty	GAS=177815	TRACES=7820
-sole 	OK=false 	RET=false	GAS=-21123	TRACES=5959
----
 ### block=23642294 index=65 hash=0xdf9eaaa91415a630306cec28bc5705c4de3ebb4672945b751af4e8608bb220f8
 REVM 	OK=true 	RET=<32>	GAS=199625	TRACES=12468
 sole 	OK=false 	RET=false	GAS=-145261	TRACES=2228
@@ -40,9 +36,5 @@ sole 	OK=false 	RET=false	GAS=-114776	TRACES=7968
 ### block=23642294 index=248 hash=0x626cb87b7322cf6ae00b859631b3fceb74b64d4e05aa43b0987d7afe03106bd2
 REVM 	OK=false 	RET=<196>	GAS=876874	TRACES=52673
 sole 	OK=false 	RET=true	GAS=-139000	TRACES=52673
----
-### block=23642294 index=302 hash=0xacdb595ce4a2a3756357c73bf69bac5e9da29fe18712f9b9d3a4b50f947cf688
-REVM 	OK=true 	RET=empty	GAS=21080	TRACES=0
-sole 	OK=true 	RET=true	GAS=  -48	TRACES=0
 
-(total: 304, matched: 293, invalid: 11)
+(total: 304, matched: 295, invalid: 9)
