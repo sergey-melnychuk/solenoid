@@ -286,7 +286,7 @@ pub struct Executor<T: EventTracer> {
     tracer: T,
     ret: Vec<u8>,
     log: bool,
-    debug: std::collections::HashMap<String, serde_json::Value>,
+    debug: serde_json::Value,
 }
 
 impl<T: EventTracer> Executor<T> {
@@ -510,14 +510,11 @@ impl<T: EventTracer> Executor<T> {
                     let refund = evm.gas.refund - evm.refund;
                     evm.refund = evm.gas.refund;
 
-                    self.debug.insert("is_call".to_string(), false.into());
-                    self.debug
-                        .insert("gas_left".to_string(), (evm.gas.remaining() - cost).into());
-                    self.debug.insert("gas_cost".to_string(), cost.into());
-                    self.debug
-                        .insert("evm.gas.used".to_string(), evm.gas.used.into());
-                    self.debug
-                        .insert("evm.gas.back".to_string(), evm.gas.refund.into());
+                    self.debug["is_call"] = false.into();
+                    self.debug["gas_left"] = (evm.gas.remaining() - cost).into();
+                    self.debug["gas_cost"] = cost.into();
+                    self.debug["evm.gas.used"] = evm.gas.used.into();
+                    self.debug["evm.gas.back"] = evm.gas.refund.into();
 
                     self.tracer.push(Event {
                         depth: ctx.depth,
@@ -596,7 +593,7 @@ impl<T: EventTracer> Executor<T> {
         ctx: Context,
         instruction: &Instruction,
     ) -> eyre::Result<Word> {
-        self.debug.clear();
+        self.debug = json!({});
         let mut gas = Word::zero();
         let mut pc_increment = true;
 
@@ -1076,8 +1073,8 @@ impl<T: EventTracer> Executor<T> {
             0x3f => {
                 // EXTCODEHASH
                 let address: Address = (&evm.pop()?).into();
-                let exists = ext.state.contains_key(&address);
-                if !exists {
+                let is_empty = ext.is_empty(&address).await?;
+                if is_empty {
                     evm.push(Word::zero())?;
                 } else {
                     let (_, hash) = ext.code(&address).await?;
@@ -1126,14 +1123,11 @@ impl<T: EventTracer> Executor<T> {
                 // SELFBALANCE
                 let balance = ext.balance(&this).await?;
 
-                let mut selfbalance: serde_json::Map<String, serde_json::Value> =
-                    serde_json::Map::new();
-                selfbalance.insert("address".to_string(), this.to_string().into());
-                selfbalance.insert("balance".to_string(), balance.to_string().into());
-                self.debug
-                    .insert("SELFBALANCE".to_string(), selfbalance.into());
+                self.debug["SELFBALANCE"] = json!({
+                    "address": this,
+                    "balance": balance,
+                });
 
-                // TODO: touch account
                 evm.push(balance)?;
                 gas = 5.into();
             }
@@ -1243,13 +1237,12 @@ impl<T: EventTracer> Executor<T> {
                     2100.into() // cold
                 };
 
-                let mut sload: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-                sload.insert("address".to_owned(), this.to_string().into());
-                sload.insert("key".to_owned(), hex::encode(key.into_bytes()).into());
-                sload.insert("val".to_owned(), hex::encode(val.into_bytes()).into());
-                sload.insert("is_warm".to_owned(), is_warm.into());
-                self.debug
-                    .insert("SLOAD".to_owned(), serde_json::Value::Object(sload));
+                self.debug["SLOAD"] = json!({
+                    "address": this,
+                    "key": key,
+                    "val": val,
+                    "is_warm": is_warm,
+                });
             }
             0x55 => {
                 // SSTORE
@@ -1349,26 +1342,20 @@ impl<T: EventTracer> Executor<T> {
                     }
                 }
 
-                let mut sstore: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
-                sstore.insert("is_warm".to_owned(), is_warm.into());
-                sstore.insert(
-                    "original".to_owned(),
-                    hex::encode(original.into_bytes()).into(),
-                );
-                sstore.insert("key".to_owned(), hex::encode(key.into_bytes()).into());
-                sstore.insert("val".to_owned(), hex::encode(val.into_bytes()).into());
-                sstore.insert("new".to_owned(), hex::encode(new.into_bytes()).into());
-                sstore.insert("gas_cost".to_owned(), gas_cost.into());
-                sstore.insert("gas_back".to_owned(), gas_refund.into());
-                let refund_traces = refund_traces
-                    .into_iter()
-                    .map(ToOwned::to_owned)
-                    .map(serde_json::Value::from)
-                    .collect();
-                let refund_traces = serde_json::Value::Array(refund_traces);
-                sstore.insert("refund".to_owned(), refund_traces);
-                self.debug
-                    .insert("sstore".to_owned(), serde_json::Value::Object(sstore));
+                self.debug["sstore"] = json!({
+                    "is_warm": is_warm,
+                    "original": original,
+                    "key": key,
+                    "val": val,
+                    "new": new,
+                    "gas_cost": gas_cost,
+                    "gas_back": gas_refund,
+                    "refund": refund_traces
+                        .into_iter()
+                        .map(ToOwned::to_owned)
+                        .map(serde_json::Value::from)
+                        .collect::<Vec<_>>()
+                });
 
                 evm.gas.refund(gas_refund);
                 gas = gas_cost.into();
@@ -1676,13 +1663,14 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
         ctx: Context,
     ) -> eyre::Result<()> {
-        let call_gas = evm.pop()?;
-        let call_gas = call_gas.min(i64::MAX.into()); // avoid possible i64 overflow
+        let call_gas = evm.pop()?.min(i64::MAX.into()); // avoid possible i64 overflow
         let address: Address = (&evm.pop()?).into();
         let value = if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             evm.pop()?
+        } else if matches!(ctx.call_type, CallType::Static) {
+            Word::zero() // STATICCALL always has value = 0
         } else {
-            call.value
+            call.value // DELEGATECALL inherits value from parent
         };
         let args_offset = evm.pop()?.as_usize();
         let args_size = evm.pop()?.as_usize();
@@ -1712,6 +1700,7 @@ impl<T: EventTracer> Executor<T> {
         // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
         let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
             let target = Address::try_from(&code[3..]).expect("address");
+            // eprintln!("DEBUG: delegation {} -> {}", address, target);
             access_cost += evm.address_access_cost(&target, ext).as_i64();
             let (code, _) = ext.code(&target).await?;
             code
