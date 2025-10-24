@@ -87,6 +87,9 @@ async fn main() -> eyre::Result<()> {
                     tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
                 nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
             } as i64;
+            // eprintln!("DEBUG: evm.gas.limit={} evm.gas.used={} evm.gas.refund={} call_cost={} data_cost={}",
+            //     result.evm.gas.limit, result.evm.gas.used, result.evm.gas.refund, call_cost, data_cost);
+            // eprintln!("DEBUG: tx.gas={} evm.gas.remaining()={}", tx.gas.as_u64(), result.evm.gas.remaining());
             let total_gas = result.evm.gas.finalized(call_cost + data_cost);
             eprintln!("GAS: {total_gas}");
         } else {

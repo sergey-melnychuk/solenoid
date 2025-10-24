@@ -64,7 +64,8 @@ pub async fn trace_all(
 
     let mut ret = Vec::new();
     for tx in txs {
-        eprintln!("TX hash={} index={}", tx.inner.hash(), tx.transaction_index.unwrap_or_default());
+        // eprintln!("TX hash={} index={}", tx.inner.hash(), tx.transaction_index.unwrap_or_default());
+        // eprintln!("TX: {tx:#?}");
         // eprintln!("GAS LIMIT: {}", tx.gas_limit());
         let tx_env = TxEnv::builder()
             .caller(tx.inner.signer())
