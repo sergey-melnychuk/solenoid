@@ -125,6 +125,7 @@ async fn handle_jsonrpc(
             | "eth_getStorageAt"
             | "eth_getBlockByHash"
             | "eth_getBlockByNumber"
+            | "eth_getTransactionReceipt"
     );
 
     let is_latest_block = (method == "eth_getBlockByNumber" || method == "eth_getBlockByHash")
