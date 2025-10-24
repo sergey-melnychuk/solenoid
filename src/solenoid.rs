@@ -210,6 +210,7 @@ impl Runner {
         // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
         let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
             let target = Address::try_from(&code[3..]).expect("address");
+            // eprintln!("DEBUG: delegation {} -> {}", self.call.to, target);
             let (code, _) = ext.code(&target).await?;
             code
         } else {
@@ -219,21 +220,31 @@ impl Runner {
         let code = Decoder::decode(code);
         let mut evm = Evm::new();
 
-        let upfront_gas_reduction = if self.call.to.is_zero() {
-            let call_cost = 21000i64;
-            let data_cost = {
-                let total_calldata_len = self.call.data.len();
-                let nonzero_bytes_count = self.call.data.iter().filter(|byte| *byte != &0).count();
-                nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
-            } as i64;
+        let call_cost = 21000i64;
+        let data_cost = {
+            let total_calldata_len = self.call.data.len();
+            let nonzero_bytes_count = self.call.data.iter().filter(|byte| *byte != &0).count();
+            nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
+        } as i64;
+        let upfront_gas_reduction = if self.call.to.is_zero() {            
             let create_cost = 32000i64;
             let init_code_cost = 2 * self.call.data.len().div_ceil(32) as i64;
             data_cost + create_cost + call_cost + init_code_cost
         } else {
+            call_cost + data_cost
+        };
+
+        // TODO: investigate? seems like some extra gas charges for calldata that
+        // is sent to an account that has no code (effectively storing calldata)
+        let calldata_extra_costs = if code.bytecode.is_empty() && !self.call.data.is_empty() {
+            let len = self.call.data.len();
+            let zeroes = self.call.data.iter().filter(|byte| byte == &&0).count();
+            ((len - zeroes) * 24 + zeroes * 6) as i64
+        } else {
             0
         };
 
-        evm.gas = Gas::new(self.call.gas.as_i64() - upfront_gas_reduction);
+        evm.gas = Gas::new(self.call.gas.as_i64() - upfront_gas_reduction - calldata_extra_costs);
 
         ext.pull(&self.call.from).await?;
         let nonce = ext.account_mut(&self.call.from).nonce;

@@ -33,14 +33,16 @@ pub fn runner(
 ) -> impl FnMut(Tx) -> Pin<Box<dyn Future<Output = eyre::Result<(TxResult, Vec<OpcodeTrace>)>>>> {
     let ext = Arc::new(Mutex::new(ext));
     move |tx| {
+        let calldata = tx.input.as_ref().to_vec();
+
         let call_cost = 21000i64;
         let data_cost = {
-            let total_calldata_len = tx.input.as_ref().len();
-            let nonzero_bytes_count = tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
+            let total_calldata_len = calldata.len();
+            let nonzero_bytes_count = calldata.iter().filter(|byte| *byte != &0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         } as i64;
         let create_cost = 32000i64;
-        let init_code_cost = 2 * tx.input.as_ref().len().div_ceil(32) as i64;
+        let init_code_cost = 2 * calldata.len().div_ceil(32) as i64;
 
         let header = header.clone();
         let ext = ext.clone();
@@ -75,6 +77,17 @@ pub fn runner(
                 .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
                 .collect::<Vec<_>>();
 
+            // TODO: investigate? seems like some extra gas charges for calldata that
+            // is sent to an account that has no code (effectively storing calldata)
+            let calldata_extra_costs = if traces.is_empty() && !calldata.is_empty() {
+                let len = calldata.len();
+                let zeroes = calldata.iter().filter(|byte| byte == &&0).count();
+                ((len - zeroes) * 24 + zeroes * 6) as i64
+            } else {
+                0
+            };
+
+            let gas_costs = gas_costs + calldata_extra_costs;
             Ok((as_tx_result(gas_costs, result), traces))
         })
     }
