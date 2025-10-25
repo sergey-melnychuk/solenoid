@@ -79,6 +79,15 @@ async fn main() -> eyre::Result<()> {
             );
         }
 
+        // EIP-7623: Increase calldata cost
+        // Calculate tokens in calldata and floor gas
+        let calldata_tokens = {
+            let zero_bytes = tx.input.as_ref().iter().filter(|b| **b == 0).count() as i64;
+            let nonzero_bytes = tx.input.as_ref().len() as i64 - zero_bytes;
+            zero_bytes + nonzero_bytes * 4
+        };
+        let gas_floor = 21000 + 10 * calldata_tokens;
+
         if tx.to.is_some() {
             let call_cost = 21000i64;
             let data_cost = {
@@ -87,10 +96,9 @@ async fn main() -> eyre::Result<()> {
                     tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
                 nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
             } as i64;
-            // eprintln!("DEBUG: evm.gas.limit={} evm.gas.used={} evm.gas.refund={} call_cost={} data_cost={}",
-            //     result.evm.gas.limit, result.evm.gas.used, result.evm.gas.refund, call_cost, data_cost);
-            // eprintln!("DEBUG: tx.gas={} evm.gas.remaining()={}", tx.gas.as_u64(), result.evm.gas.remaining());
             let total_gas = result.evm.gas.finalized(call_cost + data_cost);
+            let total_gas = total_gas.max(gas_floor);
+
             eprintln!("GAS: {total_gas}");
         } else {
             /*
@@ -121,8 +129,7 @@ async fn main() -> eyre::Result<()> {
             let total_gas = result.evm.gas.finalized(
                 call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost,
             );
-            // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}");
-            // eprintln!("DEBUG: create_cost={create_cost}, init_code_cost={init_code_cost}, deployed_code_cost={deployed_code_cost}");
+            let total_gas = total_gas.max(gas_floor);
             eprintln!(
                 "GAS: {total_gas} [created={}]",
                 result.created.expect("contract should have been created")

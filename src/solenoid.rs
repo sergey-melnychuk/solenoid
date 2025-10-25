@@ -234,17 +234,7 @@ impl Runner {
             call_cost + data_cost
         };
 
-        // TODO: investigate? seems like some extra gas charges for calldata that
-        // is sent to an account that has no code (effectively storing calldata)
-        let calldata_extra_costs = if code.bytecode.is_empty() && !self.call.data.is_empty() {
-            let len = self.call.data.len();
-            let zeroes = self.call.data.iter().filter(|byte| byte == &&0).count();
-            ((len - zeroes) * 24 + zeroes * 6) as i64
-        } else {
-            0
-        };
-
-        evm.gas = Gas::new(self.call.gas.as_i64() - upfront_gas_reduction - calldata_extra_costs);
+        evm.gas = Gas::new(self.call.gas.as_i64() - upfront_gas_reduction);
 
         ext.pull(&self.call.from).await?;
         let nonce = ext.account_mut(&self.call.from).nonce;
