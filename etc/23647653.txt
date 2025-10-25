@@ -1,10 +1,6 @@
 📦 Fetched block number: 23647653 [with 249 txs]
 📦 Fetched block number: 23647653 [with 249 txs]
 ---
-### block=23647653 index=7 hash=0xa898199e7972638e1388b0235ed1bd0a41d15f599dbfe12167e1e4d9d59d618f
-REVM 	OK=true 	RET=empty	GAS=357610	TRACES=2929
-sole 	OK=true 	RET=true	GAS=+75000	TRACES=2929
----
 ### block=23647653 index=9 hash=0xfd639f8401478e3967f9823e01eab76eec1493f00f16fcddc4354d3c60ab0134
 REVM 	OK=true 	RET=<32>	GAS=367836	TRACES=1679
 sole 	OK=false 	RET=false	GAS=-245696	TRACES=771
@@ -27,7 +23,7 @@ sole 	OK=false 	RET=true	GAS=-46423	TRACES=7156
 ---
 ### block=23647653 index=149 hash=0x06bbb0ecc2f36883ab6680fb354afc07ae9353caf51ecabe835761cfcf0c1f9f
 REVM 	OK=true 	RET=<32>	GAS=30120	TRACES=321
-sole 	OK=false 	RET=false	GAS=-8055	TRACES=88
+sole 	OK=false 	RET=false	GAS=-7540	TRACES=88
 ---
 ### block=23647653 index=154 hash=0x4ec695206da07ee3d13efb2e96e5a748a3930f5f9f32528fd8725be5625bcd7e
 REVM 	OK=true 	RET=<256>	GAS=238913	TRACES=17805
@@ -39,7 +35,7 @@ sole 	OK=false 	RET=true	GAS=-28300	TRACES=25996
 ---
 ### block=23647653 index=206 hash=0xb224cb3b07ba00a8aa59bb6c60ee92310ac97b50fa909f7607dc5b28d75200d5
 REVM 	OK=true 	RET=empty	GAS=326262	TRACES=25343
-sole 	OK=false 	RET=false	GAS=-298678	TRACES=291
+sole 	OK=false 	RET=false	GAS=-291382	TRACES=291
 ---
 ### block=23647653 index=212 hash=0x8adfffaebf44cf435ba20599c11b9870729cc363427cbd1357a06fcaeb4ed030
 REVM 	OK=true 	RET=empty	GAS=592947	TRACES=41219
@@ -51,10 +47,10 @@ sole 	OK=false 	RET=false	GAS=-596211	TRACES=5335
 ---
 ### block=23647653 index=221 hash=0xb45ea2ad778eb3e58b53f5dd73e66eaee007c2b767d87687d90908e662e886ac
 REVM 	OK=true 	RET=empty	GAS=318444	TRACES=25145
-sole 	OK=false 	RET=false	GAS=-290918	TRACES=271
+sole 	OK=false 	RET=false	GAS=-283564	TRACES=271
 ---
 ### block=23647653 index=236 hash=0xb310e35b9ec37f4706302e0ad335bef3d6a271bae6381e969d2374a90bb9c9e4
 REVM 	OK=true 	RET=empty	GAS=326383	TRACES=27519
-sole 	OK=false 	RET=false	GAS=-298504	TRACES=401
+sole 	OK=false 	RET=false	GAS=-291563	TRACES=401
 
-(total: 249, matched: 235, invalid: 14)
+(total: 249, matched: 236, invalid: 13)

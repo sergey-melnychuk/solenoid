@@ -1,16 +1,4 @@
 📦 Fetched block number: 23027350 [with 209 txs]
 📦 Fetched block number: 23027350 [with 209 txs]
----
-### block=23027350 index=18 hash=0x1ee2cd45b6365a8c1d5eb9d49c1700f2489a0b0eb24a0fe2e4adb0949af27573
-REVM 	OK=false 	RET=<100>	GAS=34910	TRACES=425
-sole 	OK=false 	RET=true	GAS=-2182	TRACES=425
----
-### block=23027350 index=26 hash=0x9c3312fc1035e77ce2ee0193faaeea0ea2dc8b2e9fc7bef11962ced7213f22ff
-REVM 	OK=true 	RET=empty	GAS=408554	TRACES=21450
-sole 	OK=true 	RET=true	GAS=+25000	TRACES=21450
----
-### block=23027350 index=83 hash=0x6677280b19ee666d9c29d5e16a62000626b26f5aad3d8ecffb6571745dcadd57
-REVM 	OK=true 	RET=<96>	GAS=502640	TRACES=34359
-sole 	OK=true 	RET=true	GAS=-135653	TRACES=34359
 
-(total: 209, matched: 206, invalid: 3)
+(total: 209, matched: 209, invalid: 0)
