@@ -139,8 +139,9 @@ impl Ext {
 
     pub async fn is_empty(&mut self, addr: &Address) -> eyre::Result<bool> {
         let balance = self.balance(addr).await?;
+        let nonce = self.nonce(addr).await?;
         let code = self.code(addr).await?;
-        let is_empty = balance.is_zero() && code.0.is_empty();
+        let is_empty = balance.is_zero() && nonce.is_zero() && code.0.is_empty();
         Ok(is_empty)
     }
 
