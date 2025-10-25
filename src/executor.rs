@@ -263,6 +263,7 @@ impl Gas {
 
     pub fn sub(&mut self, gas: i64) -> Result<(), ExecutorError> {
         if gas > self.remaining() {
+            self.used += gas.min(self.remaining());
             return Err(ExecutorError::OutOfGas());
         }
         self.used += gas;
@@ -488,7 +489,6 @@ impl<T: EventTracer> Executor<T> {
         });
 
         if ctx.depth > CALL_DEPTH_LIMIT {
-            // return Err(ExecutorError::CallDepthLimitReached.into());
             evm.stopped = true;
             evm.reverted = true;
             return (self.tracer, vec![]);
@@ -505,6 +505,7 @@ impl<T: EventTracer> Executor<T> {
                 })
             {
                 let cost = cost.as_i64();
+                let charged_cost = cost.min(evm.gas.remaining());
                 if !instruction.is_call() {
                     // HERE: TODO: remove this label
                     let refund = evm.gas.refund - evm.refund;
@@ -524,10 +525,10 @@ impl<T: EventTracer> Executor<T> {
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
-                            gas_cost: cost,
-                            gas_used: (evm.gas.used + cost),
+                            gas_cost: charged_cost,
+                            gas_used: (evm.gas.used + charged_cost),
                             gas_back: refund,
-                            gas_left: evm.gas.remaining().saturating_sub(cost),
+                            gas_left: evm.gas.remaining() - charged_cost,
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: json!(self.debug),
@@ -535,20 +536,20 @@ impl<T: EventTracer> Executor<T> {
                     });
                 }
                 if instruction.opcode.code == 0xfe {
-                    // INVALID
+                    // INVALID opcode
                     evm.gas.sub(evm.gas.remaining()).expect("must succeed");
                     evm.stopped = true;
                     evm.reverted = true;
                     return (self.tracer, vec![]);
                 }
                 if evm.gas(cost).is_err() {
-                    // eprintln!("out of gas");
+                    // out of gas
                     evm.stopped = true;
                     evm.reverted = true;
                     return (self.tracer, vec![]);
                 }
             } else {
-                // eprintln!("{} failed", instruction.opcode.name());
+                // opcode failed
                 evm.stopped = true;
                 evm.reverted = true;
                 return (self.tracer, vec![]);
@@ -1562,7 +1563,8 @@ impl<T: EventTracer> Executor<T> {
                     .await?;
             }
             0xf3 | 0xfd => {
-                // RETURN | REVERT
+                // RETURN
+                // REVERT
                 evm.stopped = true;
                 evm.reverted = opcode == 0xfd;
 
@@ -1688,14 +1690,15 @@ impl<T: EventTracer> Executor<T> {
         }
         let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
 
-        // Calculate address access cost (EIP-2929)
-        let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
         let mut create_cost = 0;
-        if !value.is_zero() && ext.is_empty(&address).await? {
+        let is_empty = ext.is_empty(&address).await?;
+        if !value.is_zero() && is_empty {
             create_cost = 25000; // account creation cost
         }
 
+        // Calculate address access cost (EIP-2929)
         let (code, codehash) = ext.code(&address).await?;
+        let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
 
         // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
         let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
@@ -1874,6 +1877,7 @@ impl<T: EventTracer> Executor<T> {
                     "call.gas": call_gas.as_u64(),
                     "access_cost": access_cost,
                     "inner_evm.reverted": inner_evm.reverted,
+                    "is_empty": is_empty,
                 }),
             },
         });
