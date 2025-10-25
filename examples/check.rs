@@ -110,6 +110,10 @@ fn main() -> eyre::Result<()> {
         }
 
         i += 1;
+        if i == len {
+            explore = true;
+            i -= 1;
+        }
     }
 
     if !failed {
