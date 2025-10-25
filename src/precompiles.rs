@@ -65,12 +65,48 @@ fn ecrecover(input: &[u8]) -> eyre::Result<Vec<u8>> {
     if v_byte != 27 && v_byte != 28 {
         return Ok(vec![0u8; 32]);
     }
-    let recovery_id_byte = v_byte - 27;
+    let mut recovery_id_byte = v_byte - 27;
 
     // Create signature from r and s
+    // Note: Ethereum's ecrecover accepts high-s signatures, but k256 rejects them
+    // We need to normalize high-s to low-s and flip the recovery ID
     let mut signature_bytes = [0u8; 64];
     signature_bytes[0..32].copy_from_slice(r_bytes);
     signature_bytes[32..64].copy_from_slice(s_bytes);
+
+    // Check if s is high (s > n/2) and normalize if needed
+    // secp256k1 curve order
+    const SECP256K1_N: [u8; 32] = [
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
+        0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
+        0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
+    ];
+    const SECP256K1_N_HALF: [u8; 32] = [
+        0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x5D, 0x57, 0x6E, 0x73, 0x57, 0xA4, 0x50, 0x1D,
+        0xDF, 0xE9, 0x2F, 0x46, 0x68, 0x1B, 0x20, 0xA0,
+    ];
+
+    // Compare s with n/2
+    let s_is_high = s_bytes > &SECP256K1_N_HALF[..];
+
+    if s_is_high {
+        // Normalize: s_low = n - s_high
+        let mut s_bigint = num_bigint::BigUint::from_bytes_be(s_bytes);
+        let n_bigint = num_bigint::BigUint::from_bytes_be(&SECP256K1_N);
+        s_bigint = n_bigint - s_bigint;
+
+        let s_low_bytes = s_bigint.to_bytes_be();
+        // Pad to 32 bytes
+        let padding = 32 - s_low_bytes.len();
+        signature_bytes[32..32 + padding].fill(0);
+        signature_bytes[32 + padding..64].copy_from_slice(&s_low_bytes);
+
+        // Flip recovery ID when normalizing s
+        recovery_id_byte ^= 1;
+    }
 
     let signature =
         Signature::from_slice(&signature_bytes).map_err(|_| eyre!("Invalid signature"))?;
@@ -81,7 +117,7 @@ fn ecrecover(input: &[u8]) -> eyre::Result<Vec<u8>> {
 
     // Recover public key
     let verifying_key = VerifyingKey::recover_from_prehash(msg_hash, &signature, recovery_id)
-        .map_err(|_| eyre!("Failed to recover public key"))?;
+        .map_err(|e| eyre!("Failed to recover public key: {e}"))?;
 
     // Convert to uncompressed public key format (65 bytes: 0x04 + x + y)
     let pubkey_bytes = verifying_key.to_encoded_point(false);
@@ -747,13 +783,9 @@ mod tests {
         let result = ecrecover(&input).unwrap();
         assert_eq!(result.len(), 32);
 
-        // Should not be all zeros for valid input
-        assert_ne!(result, vec![0u8; 32]);
-
         // Expected address: 0xd148c7f37b346a4bd8e14f8c1f181f5f640481c8
-        let expected_address =
-            hex_to_bytes("000000000000000000000000d148c7f37b346a4bd8e14f8c1f181f5f640481c8");
-        assert_eq!(result, expected_address);
+        let expected_address = "000000000000000000000000d148c7f37b346a4bd8e14f8c1f181f5f640481c8";
+        assert_eq!(hex::encode(result), expected_address);
     }
 
     #[test]
@@ -769,6 +801,53 @@ mod tests {
         input[63] = 26; // Invalid v (should be 27 or 28)
         let result = ecrecover(&input).unwrap();
         assert_eq!(result, vec![0u8; 32]); // Should return zero address
+    }
+
+    #[test]
+    fn test_ecrecover_high_s_signature() {
+        // BLOCK: 23647631, INDEX: 159
+        // TX: 0x255e2638eebd5fb935dfd47c3ef58667281336fa9b628610fa27b2a45d1cc8bf
+        // This signature has a high-s value that Ethereum accepts but k256 rejects by default
+        let input = hex_to_bytes(
+            "a6588c81ba59e991dccec1b3c3b73c4b04cce35f30344c6df815d75e4d42351a\
+            000000000000000000000000000000000000000000000000000000000000001b\
+            4ca5e12d5fc25d983a215fb64032bbfe90a3e596d67a1b2cfa9646186a513704\
+            bda125db9c2f810df6eaf77a5479de3b147359425fc1534f1fee6c1211308966");
+        let expected = "0000000000000000000000008948112e60ba94f6afdcfc6b690904b7321d3a52";
+        let result = ecrecover(&input).unwrap();
+        assert_eq!(hex::encode(result), expected);
+    }
+
+    #[test]
+    fn test_ecrecover_with_generated_signature() {
+        use k256::ecdsa::SigningKey;
+
+        let msg_hash = hex_to_bytes("a6588c81ba59e991dccec1b3c3b73c4b04cce35f30344c6df815d75e4d42351a");
+
+        let private_key_bytes: [u8; 32] = hex_to_bytes("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+            .try_into().unwrap();
+        let signing_key = SigningKey::from_bytes(&private_key_bytes.into()).unwrap();
+
+        let (signature, recovery_id) = signing_key.sign_prehash_recoverable(&msg_hash).unwrap();
+
+        let verifying_key = signing_key.verifying_key();
+        let pubkey_bytes = verifying_key.to_encoded_point(false);
+        let pubkey_hash = keccak256(&pubkey_bytes.as_bytes()[1..]); // Skip 0x04 prefix
+
+        let mut expected_address = [0u8; 32];
+        expected_address[12..32].copy_from_slice(&pubkey_hash[12..32]);
+
+        let sig_bytes = signature.to_bytes();
+        let v = recovery_id.to_byte() + 27;
+
+        let mut input = vec![0u8; 128];
+        input[0..32].copy_from_slice(&msg_hash);
+        input[63] = v; // v is a single byte, right-aligned in 32-byte slot
+        input[64..96].copy_from_slice(&sig_bytes[..32]); // r
+        input[96..128].copy_from_slice(&sig_bytes[32..]); // s
+
+        let result = ecrecover(&input).unwrap();
+        assert_eq!(hex::encode(&result), hex::encode(&expected_address));
     }
 
     // 0x02: SHA-256 tests
