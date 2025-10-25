@@ -89,7 +89,6 @@ async fn main() -> eyre::Result<()> {
         nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
     } as i64;
     let total_gas = result.evm.gas.finalized(call_cost + data_cost);
-    // eprintln!("DEBUG: call_cost={call_cost}, data_cost={data_cost}");
 
     println!("✅ Transaction executed successfully!");
     println!("🔄 Reverted: {}", result.evm.reverted);
