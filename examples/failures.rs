@@ -18,7 +18,7 @@ async fn main() -> eyre::Result<()> {
     let mut ext = Ext::local();
     ext.state.entry(from).or_default().value = Word::from(100_000_000_000_000_000u64);
     ext.state
-        .entry(from.of_smart_contract(Word::zero()))
+        .entry(from.create(Word::zero()))
         .or_default()
         .state
         .insert(Word::zero(), Word::zero()); // Fail.owner
@@ -44,7 +44,7 @@ async fn main() -> eyre::Result<()> {
         .ok_or_else(|| eyre::eyre!("No address returned"))?;
     println!(" Owner: {from}");
     println!("Deploy: {address}");
-    assert_eq!(address, from.of_smart_contract(Word::zero()));
+    assert_eq!(address, from.create(Word::zero()));
 
     let mut res = sole
         .execute(address, "is_owner()", &[])
@@ -67,7 +67,7 @@ async fn main() -> eyre::Result<()> {
     };
     println!("Fail.is_owner({from}): {ret}");
 
-    let user = from.of_smart_contract(Word::one());
+    let user = from.create(Word::one());
     let mut res = sole
         .execute(address, "is_owner()", &[])
         .with_sender(user)

@@ -169,6 +169,15 @@ impl Ext {
         }
     }
 
+    pub async fn get_block_hash(&mut self, block_number: Word) -> eyre::Result<Word> {
+        if let Some(Remote { eth, .. }) = self.remote.as_ref() {
+            let header = eth.get_block_header(block_number).await?;
+            Ok(header.hash)
+        } else {
+            Ok(Word::zero())
+        }
+    }
+
     pub async fn pull(&mut self, addr: &Address) -> eyre::Result<&Account> {
         if self.state.contains_key(addr) {
             return Ok(self.state.get(addr).expect("must be present"));

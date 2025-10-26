@@ -238,7 +238,7 @@ impl Runner {
 
         ext.pull(&self.call.from).await?;
         let nonce = ext.account_mut(&self.call.from).nonce;
-        let address: Address = self.call.from.of_smart_contract(nonce);
+        let address: Address = self.call.from.create(nonce);
 
         if !self.call.to.is_zero() {
             let (tracer, ret) = exe.execute(&code, &self.call, &mut evm, ext).await?;

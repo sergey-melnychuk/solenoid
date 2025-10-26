@@ -43,8 +43,8 @@ async fn test_deploy() -> eyre::Result<()> {
 
     ext.pull(&from).await?;
     ext.account_mut(&from).nonce = Word::zero();
-    let created1 = from.of_smart_contract(Word::zero());
-    let created2 = created1.of_smart_contract(Word::zero());
+    let created1 = from.create(Word::zero());
+    let created2 = created1.create(Word::zero());
 
     let mut evm = Evm::default();
     let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
@@ -58,6 +58,7 @@ async fn test_deploy() -> eyre::Result<()> {
         vec![
             AccountTouch::SetNonce(from, 0, 1),
             AccountTouch::WarmUp(from),
+            AccountTouch::WarmUp(created2),
             AccountTouch::SetCode(
                 created2,
                 (Word::from_bytes(&hash::empty()), vec![]),

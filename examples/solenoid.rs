@@ -84,7 +84,7 @@ async fn main() -> eyre::Result<()> {
         .context("execute")?;
     println!("Call.get(): {}", hex::encode(res.ret));
 
-    let cell = address.of_smart_contract(Word::zero());
+    let cell = address.create(Word::zero());
     println!("Cell address: {cell}");
 
     let res = sole

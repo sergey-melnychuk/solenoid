@@ -14,15 +14,25 @@ impl Address {
         self.0.iter().all(|byte| byte == &0)
     }
 
-    pub fn of_smart_contract(&self, nonce: Word) -> Address {
+    pub fn create(&self, nonce: Word) -> Address {
         // https://www.evm.codes/?fork=cancun#55
         // address = keccak256(rlp([sender_address,sender_nonce]))[12:]
-        let a: Word = self.into();
-        let a: [u8; 32] = a.into_bytes();
-        let b: [u8; 32] = nonce.into_bytes();
-        let mut buffer = [0u8; 64];
-        buffer[0..32].copy_from_slice(&a);
-        buffer[32..].copy_from_slice(&b);
+        // Breakdown:
+        //   0xd8   = List prefix (0xc0 + 24 bytes total length)
+        //   0x94   = Address prefix (0x80 + 20 bytes)
+        //   5bc1c1942f2333acb9ce156525bc079fad983f13 = Factory address (20 bytes)
+        //   0x82   = Nonce prefix (0x80 + 2 bytes)
+        //   065b   = Nonce value 1627 in big-endian (2 bytes)
+        let address_bytes = self.0.to_vec();
+        let nonce_bytes = nonce.into_bytes().into_iter().skip_while(|byte| byte == &0).collect::<Vec<_>>();
+
+        let mut buffer = Vec::new();
+        buffer.push(0xc0u8 + (1 + address_bytes.len() + 1 + nonce_bytes.len()) as u8);
+        buffer.push(0x80u8 + address_bytes.len() as u8);
+        buffer.extend_from_slice(&address_bytes);
+        buffer.push(0x80u8 + nonce_bytes.len() as u8);
+        buffer.extend_from_slice(&nonce_bytes);
+
         let hash = super::hash::keccak256(&buffer);
         let mut addr = [0u8; 20];
         addr.copy_from_slice(&hash[12..32]);
@@ -137,12 +147,8 @@ mod tests {
     #[test]
     fn test_create_address() {
         assert_eq!(
-            addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512").of_smart_contract(Word::zero()),
-            addr("0xc80a141ce8a5b73371043cba5cee40437975bb37")
-        );
-        assert_eq!(
-            addr("0xc80a141ce8a5b73371043cba5cee40437975bb37").of_smart_contract(Word::zero()),
-            addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552")
-        );
+            addr("0x5bc1c1942f2333acb9ce156525bc079fad983f13").create(Word::from_hex("0x065b").unwrap()),
+            addr("0xe77afefd5b7beb79d1843e65a0fd54963abc742f")
+        );   
     }
 }
