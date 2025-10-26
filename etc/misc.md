@@ -63,3 +63,12 @@ curl -s -X POST \
     "params": ["0xaf9bc110613cd93023b42756665d659c363a16823587642bc97555780df0a894"],
     "id": 1
   }' http://127.0.0.1:8080 | jq
+
+curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_getTransactionCount",
+    "params": ["0x93F730AB81f4B72f778d25dA321dda2e4570597f","0x168a664"],
+    "id": 1
+  }' http://127.0.0.1:8080 | jq

@@ -1,20 +1,4 @@
 📦 Fetched block number: 23634227 [with 268 txs]
 📦 Fetched block number: 23634227 [with 268 txs]
----
-### block=23634227 index=59 hash=0xe00b20075d996d1d20f6353430151b1212eefdaa617d08d72cd14bc38a916101
-REVM 	OK=true 	RET=<32>	GAS=274756	TRACES=16634
-sole 	OK=true 	RET=false	GAS=match	TRACES=16634
----
-### block=23634227 index=88 hash=0xdb10da398fa0d5d9de781a4cacdd954f5cb656bd686112b7dae06b7b579ee786
-REVM 	OK=true 	RET=<32>	GAS=184866	TRACES=10430
-sole 	OK=true 	RET=false	GAS=match	TRACES=10430
----
-### block=23634227 index=92 hash=0x185e8ddc3ac947b48a1c7a518596af6a8497430a826257a3b31e498feca8a284
-REVM 	OK=true 	RET=<32>	GAS=197680	TRACES=6928
-sole 	OK=true 	RET=false	GAS=match	TRACES=6928
----
-### block=23634227 index=238 hash=0x9a05ba4381458a6be7cb88249fc8a4acd891c33c03a6c82e4f6f875949e97f94
-REVM 	OK=false 	RET=empty	GAS=174996	TRACES=6084
-sole 	OK=true 	RET=true	GAS=-23664	TRACES=6640
 
-(total: 268, matched: 264, invalid: 4)
+(total: 268, matched: 268, invalid: 0)

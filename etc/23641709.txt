@@ -5,16 +5,8 @@
 REVM 	OK=true 	RET=empty	GAS=318330	TRACES=16337
 sole 	OK=true 	RET=true	GAS=+2500	TRACES=16337
 ---
-### block=23641709 index=12 hash=0x345695c54f8a97eeb828f4d371a7677b9e67501aaa83b52cca4ba05d775bc244
-REVM 	OK=true 	RET=empty	GAS=184470	TRACES=13169
-sole 	OK=false 	RET=false	GAS=-153770	TRACES=329
----
-### block=23641709 index=15 hash=0x110cc76561f20cb514e21a24fe778f0a7a13f791dcc1bd24c87a129ab67463c6
-REVM 	OK=false 	RET=<100>	GAS=216001	TRACES=12334
-sole 	OK=false 	RET=true	GAS=-5600	TRACES=12334
----
 ### block=23641709 index=107 hash=0x18d2e71af44031ddf785cc33c69668f6aa7d9df2bdd46062857e2b013f3d5268
 REVM 	OK=true 	RET=empty	GAS=41501	TRACES=1288
 sole 	OK=false 	RET=false	GAS=-10513	TRACES=960
 
-(total: 291, matched: 287, invalid: 4)
+(total: 291, matched: 289, invalid: 2)
