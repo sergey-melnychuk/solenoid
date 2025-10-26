@@ -1,5 +1,6 @@
 use alloy_consensus::Transaction as _;
 use alloy_eips::BlockId;
+use alloy_primitives::Address;
 use alloy_provider::Provider;
 use alloy_rpc_types::{Header, Transaction as Tx};
 use eyre::Result;
@@ -14,7 +15,7 @@ use revm::interpreter::{
 use revm::{
     context::{Context, TxEnv},
     database::{AlloyDB, CacheDB, StateBuilder, WrapDatabaseAsync},
-    primitives::{Log, TxKind, B256, U256},
+    primitives::{TxKind, B256, U256},
     MainBuilder,
 };
 use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
@@ -234,14 +235,6 @@ where
     CTX: ContextTr,
     INTR: InterpreterTypes,
 {
-    fn initialize_interp(
-        &mut self,
-        _interp: &mut Interpreter<INTR>,
-        _context: &mut CTX,
-    ) {
-        //
-    }
-
     fn step(&mut self, interp: &mut Interpreter<INTR>, _context: &mut CTX) {
         self.aux.pc = interp.bytecode.pc() as u64;
         self.aux.opcode = interp.bytecode.opcode();
@@ -303,6 +296,15 @@ where
         }
     }
 
+    fn create(
+        &mut self,
+        _context: &mut CTX,
+        _inputs: &mut CreateInputs,
+    ) -> Option<CreateOutcome> {
+        self.aux.depth += 1;
+        None
+    }
+
     fn create_end(
         &mut self,
         _context: &mut CTX,
@@ -314,12 +316,12 @@ where
         }
     }
 
-    fn log(
+    fn selfdestruct(
         &mut self,
-        _interp: &mut Interpreter<INTR>,
-        _context: &mut CTX,
-        _log: Log,
+        _contract: Address,
+        _target: Address,
+        _value: U256,
     ) {
-        // Could add log tracking here if needed
+        // TODO
     }
 }
