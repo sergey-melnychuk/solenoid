@@ -226,7 +226,7 @@ impl Runner {
             let nonzero_bytes_count = self.call.data.iter().filter(|byte| *byte != &0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
         } as i64;
-        let upfront_gas_reduction = if self.call.to.is_zero() {            
+        let upfront_gas_reduction = if self.call.to.is_zero() {
             let create_cost = 32000i64;
             let init_code_cost = 2 * self.call.data.len().div_ceil(32) as i64;
             data_cost + create_cost + call_cost + init_code_cost

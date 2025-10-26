@@ -24,7 +24,11 @@ impl Address {
         //   0x82   = Nonce prefix (0x80 + 2 bytes)
         //   065b   = Nonce value 1627 in big-endian (2 bytes)
         let address_bytes = self.0.to_vec();
-        let nonce_bytes = nonce.into_bytes().into_iter().skip_while(|byte| byte == &0).collect::<Vec<_>>();
+        let nonce_bytes = nonce
+            .into_bytes()
+            .into_iter()
+            .skip_while(|byte| byte == &0)
+            .collect::<Vec<_>>();
 
         let mut buffer = Vec::new();
         buffer.push(0xc0u8 + (1 + address_bytes.len() + 1 + nonce_bytes.len()) as u8);
@@ -147,8 +151,9 @@ mod tests {
     #[test]
     fn test_create_address() {
         assert_eq!(
-            addr("0x5bc1c1942f2333acb9ce156525bc079fad983f13").create(Word::from_hex("0x065b").unwrap()),
+            addr("0x5bc1c1942f2333acb9ce156525bc079fad983f13")
+                .create(Word::from_hex("0x065b").unwrap()),
             addr("0xe77afefd5b7beb79d1843e65a0fd54963abc742f")
-        );   
+        );
     }
 }

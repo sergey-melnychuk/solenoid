@@ -77,16 +77,14 @@ fn ecrecover(input: &[u8]) -> eyre::Result<Vec<u8>> {
     // Check if s is high (s > n/2) and normalize if needed
     // secp256k1 curve order
     const SECP256K1_N: [u8; 32] = [
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
-        0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
-        0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFE, 0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36,
+        0x41, 0x41,
     ];
     const SECP256K1_N_HALF: [u8; 32] = [
-        0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0x5D, 0x57, 0x6E, 0x73, 0x57, 0xA4, 0x50, 0x1D,
-        0xDF, 0xE9, 0x2F, 0x46, 0x68, 0x1B, 0x20, 0xA0,
+        0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x5D, 0x57, 0x6E, 0x73, 0x57, 0xA4, 0x50, 0x1D, 0xDF, 0xE9, 0x2F, 0x46, 0x68, 0x1B,
+        0x20, 0xA0,
     ];
 
     // Compare s with n/2
@@ -812,7 +810,8 @@ mod tests {
             "a6588c81ba59e991dccec1b3c3b73c4b04cce35f30344c6df815d75e4d42351a\
             000000000000000000000000000000000000000000000000000000000000001b\
             4ca5e12d5fc25d983a215fb64032bbfe90a3e596d67a1b2cfa9646186a513704\
-            bda125db9c2f810df6eaf77a5479de3b147359425fc1534f1fee6c1211308966");
+            bda125db9c2f810df6eaf77a5479de3b147359425fc1534f1fee6c1211308966",
+        );
         let expected = "0000000000000000000000008948112e60ba94f6afdcfc6b690904b7321d3a52";
         let result = ecrecover(&input).unwrap();
         assert_eq!(hex::encode(result), expected);
@@ -822,10 +821,13 @@ mod tests {
     fn test_ecrecover_with_generated_signature() {
         use k256::ecdsa::SigningKey;
 
-        let msg_hash = hex_to_bytes("a6588c81ba59e991dccec1b3c3b73c4b04cce35f30344c6df815d75e4d42351a");
+        let msg_hash =
+            hex_to_bytes("a6588c81ba59e991dccec1b3c3b73c4b04cce35f30344c6df815d75e4d42351a");
 
-        let private_key_bytes: [u8; 32] = hex_to_bytes("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-            .try_into().unwrap();
+        let private_key_bytes: [u8; 32] =
+            hex_to_bytes("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+                .try_into()
+                .unwrap();
         let signing_key = SigningKey::from_bytes(&private_key_bytes.into()).unwrap();
 
         let (signature, recovery_id) = signing_key.sign_prehash_recoverable(&msg_hash).unwrap();

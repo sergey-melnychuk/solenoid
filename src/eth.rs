@@ -1,7 +1,9 @@
 use eyre::OptionExt;
 
 use crate::common::{
-    address::Address, block::{Block, Header}, word::Word
+    address::Address,
+    block::{Block, Header},
+    word::Word,
 };
 
 #[derive(Clone)]
@@ -165,29 +167,27 @@ impl EthClient {
         .and_then(|value| hex_to_word(&value))
     }
 
-    pub async fn eth_call(
-        &self,
-        address: &Address,
-        calldata: &[u8],
-    ) -> eyre::Result<String> {
+    pub async fn eth_call(&self, address: &Address, calldata: &[u8]) -> eyre::Result<String> {
         let calldata_hex = format!("0x{}", hex::encode(calldata));
         let address_hex = format!("0x{}", hex::encode(address.0));
 
-        let value = self.rpc(serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "eth_call",
-            "params": [
-                {
-                    "to": address_hex,
-                    "data": calldata_hex,
-                },
-                "latest"
-            ],
-            "id": 0
-        }))
-        .await?;
+        let value = self
+            .rpc(serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "eth_call",
+                "params": [
+                    {
+                        "to": address_hex,
+                        "data": calldata_hex,
+                    },
+                    "latest"
+                ],
+                "id": 0
+            }))
+            .await?;
 
-        value.as_str()
+        value
+            .as_str()
             .map(ToString::to_string)
             .ok_or_else(|| eyre::eyre!("eth_call result is not a string"))
     }

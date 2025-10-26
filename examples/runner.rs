@@ -85,7 +85,7 @@ pub fn runner(
                 .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
                 .collect::<Vec<_>>();
 
-                Ok((as_tx_result(gas_costs, gas_floor, result), traces))
+            Ok((as_tx_result(gas_costs, gas_floor, result), traces))
         })
     }
 }

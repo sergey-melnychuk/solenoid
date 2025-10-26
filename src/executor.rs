@@ -2045,16 +2045,21 @@ impl<T: EventTracer> Executor<T> {
             executor.execute_with_context(&code, &inner_call, &mut inner_evm, ext, inner_ctx);
         let (tracer, code) = Box::pin(future).await;
 
-        let deployed_code_cost = if !inner_evm.reverted { 200 * code.len() as i64 } else { 0 };
-        let base_gas_cost = memory_expansion_cost + create_cost + init_code_cost + deployed_code_cost;
-        
+        let deployed_code_cost = if !inner_evm.reverted {
+            200 * code.len() as i64
+        } else {
+            0
+        };
+        let base_gas_cost =
+            memory_expansion_cost + create_cost + init_code_cost + deployed_code_cost;
+
         // For tracing: report the total cost including gas forwarded (to match REVM)
         // REVM reports the forwarded gas, not the used gas, because from the outer EVM's
         // perspective, all forwarded gas is "spent" even if the inner execution didn't use it all
         // Note: deployed_code_cost is NOT included in the forwarded gas calculation
         let base_cost_without_deployed = memory_expansion_cost + create_cost + init_code_cost;
         let total_gas_cost_for_tracing = base_cost_without_deployed + gas_to_forward;
-        
+
         // HERE: TODO: remove this label
         self.tracer.push(Event {
             depth: ctx.depth,
@@ -2082,7 +2087,7 @@ impl<T: EventTracer> Executor<T> {
         });
 
         self.tracer.join(tracer, inner_evm.reverted);
-        
+
         evm.gas.used += base_gas_cost;
         evm.gas.used += inner_evm.gas.used;
         *gas = Word::zero();

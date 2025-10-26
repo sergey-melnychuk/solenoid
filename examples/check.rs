@@ -1,9 +1,9 @@
 use crossterm::{
-    event::{read, KeyCode, KeyModifiers},
+    event::{KeyCode, KeyModifiers, read},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use evm_tracer::OpcodeTrace;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn main() -> eyre::Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
