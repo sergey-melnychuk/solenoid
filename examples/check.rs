@@ -1,9 +1,25 @@
 use crossterm::{
-    event::{KeyCode, KeyModifiers, read},
+    event::{read, KeyCode, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use evm_tracer::OpcodeTrace;
 use serde_json::{Value, json};
+
+enum Predicate {
+    Depth(usize),
+    IsCall,
+    None,
+}
+
+impl Predicate {
+    fn check(&self, trace: &OpcodeTrace) -> bool {
+        match self {
+            Self::Depth(d) => &trace.depth == d,
+            Self::IsCall => trace.debug.value["is_call"].as_bool().unwrap_or_default(),
+            Self::None => false,
+        }
+    }
+}
 
 fn main() -> eyre::Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
@@ -30,6 +46,8 @@ fn main() -> eyre::Result<()> {
         .into_iter()
         .collect::<Vec<_>>();
 
+    let is_compact = args.iter().skip(2).any(|arg| arg == "--compact");
+
     let revm = std::fs::read_to_string(&revm_path).expect("traces");
     let revm = revm
         .split('\n')
@@ -52,31 +70,41 @@ fn main() -> eyre::Result<()> {
         eprintln!("NOTE: len match: {}", sole.len());
     }
 
+    let mut p = Predicate::None;
+
     let mut failed = false;
     let mut explore = false;
-    let len = sole.len().min(revm.len());
-    let mut i = 0;
-    while i < len {
+    let len = sole.len().min(revm.len()) as i64;
+    let mut index: i64 = 0;
+    let mut step = 1i64;
+    while index < len {
+        let i = index as usize;
         let (a, b) = (revm[i], sole[i]);
         if a.is_empty() ^ b.is_empty() {
             break;
         }
-        if a.starts_with('#') && b.starts_with('#') {
-            i += 1;
-            continue;
-        }
 
-        let a: OpcodeTrace = parse(a, &overrides);
-        let b: OpcodeTrace = parse(b, &overrides);
+        let mut a: OpcodeTrace = parse(a, &overrides);
+        let mut b: OpcodeTrace = parse(b, &overrides);
+        if is_compact {
+            if a.memory == b.memory {
+                a.memory.clear();
+                b.memory.clear();
+            }
+            if a.stack == b.stack {
+                a.stack.clear();
+                b.stack.clear();
+            }
+        }
         let r = std::panic::catch_unwind(|| {
             pretty_assertions::assert_eq!(b, a);
         });
 
         let is_failed = r.is_err();
-        if is_failed {
+        if is_failed && matches!(p, Predicate::None) {
             eprintln!("LINE: {i}");
             failed = true;
-        } else if explore {
+        } else if explore || p.check(&b) {
             let mut entry = serde_json::to_value(a.clone())?;
             entry["debug"] = json!({
                 "revm": a.debug,
@@ -86,34 +114,46 @@ fn main() -> eyre::Result<()> {
             eprintln!("\nLINE: {i} [explore]");
         }
 
-        if is_failed || explore {
+        if is_failed || explore || p.check(&b) {
             explore = false;
             enable_raw_mode()?;
             let event = read()?;
             disable_raw_mode()?;
             if let Some(event) = event.as_key_press_event() {
-                let ctrl: bool = event.modifiers.contains(KeyModifiers::CONTROL);
+                let shift: bool = event.modifiers.contains(KeyModifiers::SHIFT);
                 match event.code {
-                    KeyCode::Char('n') => {
-                        i += 1;
-                        explore = !ctrl;
-                        continue;
+                    KeyCode::Char('n') | KeyCode::Char('N') => {
+                        step = 1;
+                        explore = !shift;
+                        p = Predicate::None;
                     }
                     KeyCode::Char('p') => {
-                        i -= 1;
+                        step = -1;
                         explore = true;
-                        continue;
+                        p = Predicate::None;
+                    }
+                    KeyCode::Char('d') => {
+                        p = Predicate::Depth(b.depth + 1);
+                        explore = false;
+                        step = 1;
+                    }
+                    KeyCode::Char('c') => {
+                        p = Predicate::IsCall;
+                        explore = false;
+                        step = 1;
                     }
                     _ => break,
                 }
             }
         }
 
-        i += 1;
-        if i == len {
+        if !failed && index == len-1 && step > 0 {
             explore = true;
-            i -= 1;
         }
+        if index == 0 && step < 0 {
+            break;
+        }
+        index += step;
     }
 
     if !failed {
