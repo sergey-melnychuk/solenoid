@@ -211,17 +211,13 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
         .try_into()
         .unwrap_or(0u64);
 
-    // EIP-2565 gas calculation
+    // EIP-2565 (Berlin) gas calculation
     let max_len = base_len.max(mod_len);
-    let multiplication_complexity = if max_len <= 64 {
-        max_len * max_len
-    } else if max_len <= 1024 {
-        (max_len * max_len) / 4 + 96 * max_len - 3072
-    } else {
-        (max_len * max_len) / 16 + 480 * max_len - 199680
-    };
+    // Calculate multiplication complexity: words² where words = ceil(max_len / 8)
+    let words = max_len.div_ceil(8);
+    let multiplication_complexity = words * words;
 
-    // Calculate iteration count
+    // Calculate iteration count based on exponent
     let iteration_count =
         if exp_len <= 32 && input.len() >= 96 + base_len as usize + exp_len as usize {
             let exp_start = 96 + base_len as usize;
@@ -230,20 +226,39 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
             if exp_bytes.iter().all(|&b| b == 0) {
                 0
             } else {
-                let mut adjusted_exp_len = exp_len;
-                // Find first non-zero byte
-                for &byte in exp_bytes {
-                    if byte == 0 {
-                        adjusted_exp_len = adjusted_exp_len.saturating_sub(1);
-                    } else {
+                // Calculate bit length of exponent
+                let mut bit_len = 0u64;
+                for (i, &byte) in exp_bytes.iter().enumerate() {
+                    if byte != 0 {
+                        // Found first non-zero byte
+                        let remaining_bytes = exp_bytes.len() - i;
+                        bit_len = (remaining_bytes as u64 - 1) * 8;
+                        bit_len += 8 - byte.leading_zeros() as u64;
                         break;
                     }
                 }
-                adjusted_exp_len * 8
-                    + (exp_bytes.last().unwrap_or(&0).leading_zeros() as u64).saturating_sub(1)
+                bit_len.saturating_sub(1)
+            }
+        } else if exp_len > 32 {
+            // For long exponents: 8 * (exp_len - 32) + bit_length(first 32 bytes) - 1
+            let exp_start = 96 + base_len as usize;
+            if input.len() >= exp_start + 32 {
+                let exp_head = &input[exp_start..exp_start + 32];
+                let mut bit_len = 0u64;
+                for (i, &byte) in exp_head.iter().enumerate() {
+                    if byte != 0 {
+                        let remaining_bytes = exp_head.len() - i;
+                        bit_len = (remaining_bytes as u64 - 1) * 8;
+                        bit_len += 8 - byte.leading_zeros() as u64;
+                        break;
+                    }
+                }
+                8 * (exp_len - 32) + bit_len.saturating_sub(1).max(0)
+            } else {
+                8 * (exp_len - 32)
             }
         } else {
-            8 * exp_len.saturating_sub(32).max(1)
+            1
         };
 
     let gas = (multiplication_complexity * iteration_count.max(1)) / 3;
