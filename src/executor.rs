@@ -245,10 +245,14 @@ impl Gas {
         self.limit - self.used
     }
 
-    pub fn finalized(&self, call_cost: i64) -> i64 {
-        let used = self.used + call_cost;
-        let cap = self.refund.min(used / 5);
-        used.saturating_sub(cap)
+    pub fn finalized(&self, call_cost: i64, reverted: bool) -> i64 {
+        if reverted {
+            self.used + call_cost
+        } else {
+            let used = self.used + call_cost;
+            let cap = self.refund.min(used / 5);
+            used.saturating_sub(cap)
+        }
     }
 
     pub fn fork(&self, limit: i64) -> Self {
@@ -1725,7 +1729,7 @@ impl<T: EventTracer> Executor<T> {
         let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
 
         let mut create_cost = 0;
-        let is_empty = ext.is_empty(&address).await?;
+        let is_empty = !precompiles::is_precompile(&address) && ext.is_empty(&address).await?;
         if !value.is_zero() && is_empty {
             create_cost = 25000; // account creation cost
         }
@@ -1800,7 +1804,8 @@ impl<T: EventTracer> Executor<T> {
                     memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                     gas_back: 0,
                     debug: json!({
-                        "is_call": "precompile",
+                        "is_call": true,
+                        "is_precompile": true,
                         "gas_left": evm.gas.remaining() - base_gas_cost,
                         "gas_cost": total_gas_cost_for_tracing,
                         "evm.gas.used": evm.gas.used,
@@ -1810,6 +1815,8 @@ impl<T: EventTracer> Executor<T> {
                         "call.result": result,
                         "call.gas": call_gas.as_u64(),
                         "access_cost": access_cost,
+                        "precompile_gas_cost": gas_cost,
+                        "memory_expansion_cost": memory_expansion_cost,
                     }),
                 },
             });

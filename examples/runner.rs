@@ -19,7 +19,7 @@ use solenoid::{
 use evm_tracer::{OpcodeTrace, run::TxResult};
 
 fn as_tx_result(gas_costs: i64, gas_floor: i64, result: CallResult<LoggingTracer>) -> TxResult {
-    let gas = result.evm.gas.finalized(gas_costs).max(gas_floor);
+    let gas = result.evm.gas.finalized(gas_costs, result.evm.reverted).max(gas_floor);
     TxResult {
         gas,
         ret: result.ret,
