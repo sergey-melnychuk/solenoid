@@ -3,7 +3,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use evm_tracer::OpcodeTrace;
-use serde_json::{Value, json};
+use serde_json::json;
 
 enum Predicate {
     Depth(usize),
@@ -36,15 +36,6 @@ fn main() -> eyre::Result<()> {
 
     let revm_path = format!("revm.{block_number}.{skip}.log");
     let sole_path = format!("sole.{block_number}.{skip}.log");
-
-    let overrides = args.get(2).cloned().unwrap_or_else(|| "{}".to_string());
-    let overrides: Value = serde_json::from_str(&overrides).expect("overrides:json");
-    let overrides = overrides
-        .as_object()
-        .cloned()
-        .unwrap_or_default()
-        .into_iter()
-        .collect::<Vec<_>>();
 
     let is_compact = args.iter().skip(2).any(|arg| arg == "--compact");
 
@@ -84,8 +75,8 @@ fn main() -> eyre::Result<()> {
             break;
         }
 
-        let mut a: OpcodeTrace = parse(a, &overrides);
-        let mut b: OpcodeTrace = parse(b, &overrides);
+        let mut a: OpcodeTrace = serde_json::from_str(a).unwrap();
+        let mut b: OpcodeTrace = serde_json::from_str(b).unwrap();
         if is_compact {
             if a.memory == b.memory {
                 a.memory.clear();
@@ -127,20 +118,30 @@ fn main() -> eyre::Result<()> {
                         explore = !shift;
                         p = Predicate::None;
                     }
-                    KeyCode::Char('p') => {
+                    KeyCode::Char('p') | KeyCode::Char('P') => {
                         step = -1;
-                        explore = true;
+                        explore = !shift;
                         p = Predicate::None;
                     }
-                    KeyCode::Char('d') => {
+                    KeyCode::Char('d') | KeyCode::Char('D') => {
                         p = Predicate::Depth(b.depth + 1);
                         explore = false;
-                        step = 1;
+                        step = if !shift {1} else {-1};
                     }
-                    KeyCode::Char('c') => {
+                    KeyCode::Char('c') | KeyCode::Char('C') => {
                         p = Predicate::IsCall;
                         explore = false;
-                        step = 1;
+                        step = if !shift {1} else {-1};
+                    }
+                    KeyCode::Char('g') | KeyCode::Char('G') => {
+                        explore = true;
+                        if shift {
+                            index = len - 1;
+                        } else {
+                            index = 0;
+                        };
+                        step = 0;
+                        p = Predicate::None;
                     }
                     _ => break,
                 }
@@ -160,14 +161,4 @@ fn main() -> eyre::Result<()> {
         println!("OK");
     }
     Ok(())
-}
-
-fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
-    let mut json: Value = serde_json::from_str(s).expect("opcode:json");
-    for (name, value) in overrides {
-        if let Some(field) = json.get_mut(name) {
-            *field = value.clone();
-        }
-    }
-    serde_json::from_value(json).expect("opcode:parse")
 }
