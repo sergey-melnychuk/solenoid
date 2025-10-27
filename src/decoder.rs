@@ -25,6 +25,9 @@ pub struct Bytecode {
 
 impl Bytecode {
     pub fn resolve_jump(&self, offset: usize) -> Option<usize> {
+        if offset == 0 {
+            return Some(0);
+        }
         let index = self
             .jumptable
             .binary_search_by_key(&offset, |(key, _)| *key)

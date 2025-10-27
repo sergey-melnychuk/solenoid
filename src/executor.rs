@@ -8,7 +8,7 @@ use crate::{
         address::Address,
         block::Header,
         call::Call,
-        hash::{self, keccak256},
+        hash::keccak256,
         word::{Word, decode_error_string},
     },
     decoder::{Bytecode, Decoder, Instruction},
@@ -27,8 +27,8 @@ pub enum ExecutorError {
     CallDepthLimitReached,
     #[error("Out of memory: {0} bytes requested")]
     OutOfMemory(usize),
-    #[error("Invalid jump")]
-    InvalidJump,
+    #[error("Expected JUMPDEST but got: {0}")]
+    InvalidJump(u8),
     #[error("Missing data")]
     MissingData,
     #[error("Wrong returned data size: expected {exp} but got {got}")]
@@ -186,9 +186,6 @@ impl Evm {
                         ext.put(address, *key, *val).await?
                     } else {
                         ext.accessed_storage.remove(&(*address, *key));
-                        if let Some(state) = ext.state.get_mut(address) {
-                            state.state.remove(key);
-                        }
                     }
                 }
                 StateTouch::Get(address, key, _, is_warm) => {
@@ -196,9 +193,6 @@ impl Evm {
                         // nothing to do
                     } else {
                         ext.accessed_storage.remove(&(*address, *key));
-                        if let Some(state) = ext.state.get_mut(address) {
-                            state.state.remove(key);
-                        }
                     }
                 }
                 _ => (),
@@ -212,8 +206,8 @@ impl Evm {
                 AccountTouch::SetValue(addr, val, _new) => {
                     ext.account_mut(addr).value = *val;
                 }
-                AccountTouch::SetCode(addr, _hash, _code) => {
-                    *ext.code_mut(addr) = (vec![], Word::from_bytes(&hash::empty()));
+                AccountTouch::SetCode(addr, (old_hash, old_code), _new) => {
+                    *ext.code_mut(addr) = (old_code.clone(), *old_hash);
                 }
                 AccountTouch::WarmUp(addr) => {
                     ext.accessed_addresses.remove(addr);
@@ -503,62 +497,63 @@ impl<T: EventTracer> Executor<T> {
         while !evm.stopped && evm.pc < code.instructions.len() {
             let pc = evm.pc;
             let instruction = &code.instructions[pc];
-            if let Ok(cost) = self
+            match self
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
-                .await
-                .with_context(|| {
-                    format!("{:#06x}: {}", instruction.offset, instruction.opcode.name())
-                })
-            {
-                let cost = cost.as_i64();
-                let charged_cost = cost.min(evm.gas.remaining());
-                if !instruction.is_call() {
-                    // HERE: TODO: remove this label
-                    let refund = evm.gas.refund - evm.refund;
-                    evm.refund = evm.gas.refund;
+                .await {
+                Ok(cost) => {
+                    let cost = cost.as_i64();
+                    let charged_cost = cost.min(evm.gas.remaining());
+                    if !instruction.is_call() {
+                        // HERE: TODO: remove this label
+                        let refund = evm.gas.refund - evm.refund;
+                        evm.refund = evm.gas.refund;
 
-                    self.debug["is_call"] = false.into();
-                    self.debug["gas_left"] = (evm.gas.remaining() - cost).into();
-                    self.debug["gas_cost"] = cost.into();
-                    self.debug["evm.gas.used"] = evm.gas.used.into();
-                    self.debug["evm.gas.back"] = evm.gas.refund.into();
+                        self.debug = json!({
+                            "is_call": false,
+                            "gas_left": evm.gas.remaining() - cost,
+                            "gas_cost": cost,
+                            "evm.gas.used": evm.gas.used,
+                            "evm.gas.back": evm.gas.refund,
+                        });
 
-                    self.tracer.push(Event {
-                        depth: ctx.depth,
-                        reverted: false,
-                        data: EventData::OpCode {
-                            pc: instruction.offset,
-                            op: instruction.opcode.code,
-                            name: instruction.opcode.name(),
-                            data: instruction.argument.clone().map(Into::into),
-                            gas_cost: charged_cost,
-                            gas_used: (evm.gas.used + charged_cost),
-                            gas_back: refund,
-                            gas_left: evm.gas.remaining() - charged_cost,
-                            stack: evm.stack.clone(),
-                            memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
-                            debug: json!(self.debug),
-                        },
-                    });
+                        self.tracer.push(Event {
+                            depth: ctx.depth,
+                            reverted: false,
+                            data: EventData::OpCode {
+                                pc: instruction.offset,
+                                op: instruction.opcode.code,
+                                name: instruction.opcode.name(),
+                                data: instruction.argument.clone().map(Into::into),
+                                gas_cost: charged_cost,
+                                gas_used: (evm.gas.used + charged_cost),
+                                gas_back: refund,
+                                gas_left: evm.gas.remaining() - charged_cost,
+                                stack: evm.stack.clone(),
+                                memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                                debug: json!(self.debug),
+                            },
+                        });
+                    }
+                    if instruction.opcode.code == 0xfe {
+                        // INVALID opcode
+                        evm.gas.sub(evm.gas.remaining()).expect("must succeed");
+                        evm.stopped = true;
+                        evm.reverted = true;
+                        return (self.tracer, vec![]);
+                    }
+                    if evm.gas(cost).is_err() {
+                        // out of gas
+                        evm.stopped = true;
+                        evm.reverted = true;
+                        return (self.tracer, vec![]);
+                    }
                 }
-                if instruction.opcode.code == 0xfe {
-                    // INVALID opcode
-                    evm.gas.sub(evm.gas.remaining()).expect("must succeed");
+                Err(_) => {
+                    // opcode failed
                     evm.stopped = true;
                     evm.reverted = true;
                     return (self.tracer, vec![]);
                 }
-                if evm.gas(cost).is_err() {
-                    // out of gas
-                    evm.stopped = true;
-                    evm.reverted = true;
-                    return (self.tracer, vec![]);
-                }
-            } else {
-                // opcode failed
-                evm.stopped = true;
-                evm.reverted = true;
-                return (self.tracer, vec![]);
             }
 
             if self.log {
@@ -713,8 +708,11 @@ impl<T: EventTracer> Executor<T> {
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let m = evm.pop()?;
-                // TODO: FIXME: addition might overflow
-                let res = ((a % m) + (b % m)) % m;
+                let res = if m.is_zero() {
+                    Word::zero()
+                } else {
+                    (&a).add_modulo(&b, &m)
+                };
                 evm.push(res)?;
                 gas = 8.into();
             }
@@ -944,12 +942,13 @@ impl<T: EventTracer> Executor<T> {
                 // CALLDATALOAD
                 let offset = evm.pop()?.as_usize();
                 if offset > call.data.len() {
-                    evm.error(ExecutorError::MissingData.into())?;
+                    evm.push(Word::zero())?;
+                } else {
+                    let mut data = [0u8; 32];
+                    let copy = call.data.len().min(offset + 32) - offset;
+                    data[0..copy].copy_from_slice(&call.data[offset..offset + copy]);
+                    evm.push(Word::from_bytes(&data))?;
                 }
-                let mut data = [0u8; 32];
-                let copy = call.data.len().min(offset + 32) - offset;
-                data[0..copy].copy_from_slice(&call.data[offset..offset + copy]);
-                evm.push(Word::from_bytes(&data))?;
                 gas = 3.into();
             }
             0x36 => {
@@ -1415,9 +1414,9 @@ impl<T: EventTracer> Executor<T> {
             0x56 => {
                 // JUMP
                 let dest = evm.pop()?.as_usize();
-                let dest = code.resolve_jump(dest).ok_or(ExecutorError::InvalidJump)?;
-                if code.instructions[dest].opcode.code != 0x5b {
-                    evm.error(ExecutorError::InvalidJump.into())?;
+                let dest = code.resolve_jump(dest).unwrap_or(dest);
+                if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
+                    evm.error(ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into())?;
                 }
                 evm.pc = dest;
                 pc_increment = false;
@@ -1426,11 +1425,11 @@ impl<T: EventTracer> Executor<T> {
             0x57 => {
                 // JUMPI
                 let dest = evm.pop()?.as_usize();
-                let dest = code.resolve_jump(dest).ok_or(ExecutorError::InvalidJump)?;
+                let dest = code.resolve_jump(dest).unwrap_or(dest);
                 let cond = evm.pop()?;
                 if !cond.is_zero() {
-                    if code.instructions[dest].opcode.code != 0x5b {
-                        evm.error(ExecutorError::InvalidJump.into())?;
+                    if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
+                        evm.error(ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into())?;
                     }
                     evm.pc = dest;
                     pc_increment = false;
@@ -1460,16 +1459,15 @@ impl<T: EventTracer> Executor<T> {
             0x5c => {
                 // TLOAD
                 let key = evm.pop()?;
-                let val = ext.transient.get(&key).copied().unwrap_or_default();
+                let val = ext.transient.get(&(this, key)).copied().unwrap_or_default();
                 evm.push(val)?;
                 gas = 100.into();
             }
             0x5d => {
                 // TSTORE
                 let key = evm.pop()?;
-                let new = evm.pop()?;
-                // let val = ext.transient.remove(&key).unwrap_or_default();
-                ext.transient.insert(key, new);
+                let val = evm.pop()?;
+                ext.transient.insert((this, key), val);
                 gas = 100.into();
             }
             0x5e => {
@@ -1817,6 +1815,7 @@ impl<T: EventTracer> Executor<T> {
                         "access_cost": access_cost,
                         "precompile_gas_cost": gas_cost,
                         "memory_expansion_cost": memory_expansion_cost,
+                        "ret": hex::encode(&self.ret),
                     }),
                 },
             });
@@ -1915,13 +1914,17 @@ impl<T: EventTracer> Executor<T> {
                     "ret_offset": ret_offset,
                     "ret_size": ret_size,
                     "memory.len": evm.memory.len(),
-                    "call.address": address,
+                    "call.from": inner_call.from,
+                    "call.to": inner_call.to,
                     "call.input": hex::encode(data),
                     "call.value": value,
                     "call.gas": call_gas.as_u64(),
                     "access_cost": access_cost,
                     "inner_evm.reverted": inner_evm.reverted,
                     "is_empty": is_empty,
+                    "code.len": code.bytecode.len(),
+                    // "code.hex": hex::encode(&code.bytecode),
+                    "ret": hex::encode(&self.ret),
                 }),
             },
         });
@@ -1972,7 +1975,7 @@ impl<T: EventTracer> Executor<T> {
         &mut self,
         instruction: &Instruction,
         this: Address,
-        call: &Call,
+        _call: &Call,
         gas: &mut Word,
         evm: &mut Evm,
         ext: &mut Ext,
@@ -2000,7 +2003,13 @@ impl<T: EventTracer> Executor<T> {
         let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
 
         let bytecode = evm.memory[offset..offset + size].to_vec();
-        let init_code_cost = 2 * bytecode.len().div_ceil(32) as i64;
+        let word_size = bytecode.len().div_ceil(32) as i64;
+        let init_code_cost = 2 * word_size + 
+            if matches!(ctx.call_type, CallType::Create2) {  
+                6 * word_size 
+            } else { 
+                0 
+            };
         let code = Decoder::decode(bytecode);
 
         let nonce = ext.nonce(&this).await?;
@@ -2012,9 +2021,9 @@ impl<T: EventTracer> Executor<T> {
             // address = keccak256(0xff + sender_address + salt + keccak256(initialisation_code))[12:]
             let mut buffer = Vec::with_capacity(1 + 20 + 32 + 32);
             buffer.push(0xffu8);
-            buffer.extend_from_slice(&call.from.0);
+            buffer.extend_from_slice(&this.0);  // Use 'this' (current contract), not call.from
             buffer.extend_from_slice(&salt.into_bytes());
-            buffer.extend_from_slice(&keccak256(&code.bytecode));
+            buffer.extend_from_slice(&keccak256(&code.bytecode));  // Use raw bytecode from memory
             let mut hash = keccak256(&buffer);
             hash[0..12].copy_from_slice(&[0u8; 12]);
             Address::from(&Word::from_bytes(&hash))
@@ -2089,6 +2098,7 @@ impl<T: EventTracer> Executor<T> {
                     "call.created": created,
                     "call.value": value,
                     "inner_evm.reverted": inner_evm.reverted,
+                    "inner_call": inner_call,
                 }),
             },
         });
@@ -2108,7 +2118,22 @@ impl<T: EventTracer> Executor<T> {
         let hash = keccak256(&code);
         let (old_code, old_hash) = ext.code(&created).await?;
         *ext.code_mut(&created) = (code.clone(), Word::from_bytes(&hash));
-        ext.account_mut(&call.from).nonce += Word::one();
+        let nonce = ext.account_mut(&this).nonce;
+        ext.account_mut(&this).nonce += Word::one();
+        evm.account.push(AccountTouch::SetNonce(
+            this,
+            nonce.as_u64(),
+            nonce.as_u64() + 1,
+        ));
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::SetNonce {
+                address: this,
+                val: nonce.as_u64(),
+                new: nonce.as_u64() + 1,
+            }),
+            depth: ctx.depth,
+            reverted: false,
+        });
         evm.account.push(AccountTouch::SetCode(
             created,
             (old_hash, old_code),
@@ -2119,15 +2144,6 @@ impl<T: EventTracer> Executor<T> {
                 address: created,
                 codehash: Word::from_bytes(&hash),
                 bytecode: code.into(),
-            }),
-            depth: ctx.depth,
-            reverted: false,
-        });
-        self.tracer.push(Event {
-            data: EventData::Account(AccountEvent::SetNonce {
-                address: call.from,
-                val: nonce.as_u64(),
-                new: nonce.as_u64() + 1,
             }),
             depth: ctx.depth,
             reverted: false,

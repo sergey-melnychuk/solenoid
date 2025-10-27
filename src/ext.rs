@@ -27,7 +27,7 @@ pub struct Ext {
     remote: Option<Remote>,
     pub state: HashMap<Address, Account>,
     pub original: HashMap<(Address, Word), Word>,
-    pub transient: HashMap<Word, Word>,
+    pub transient: HashMap<(Address, Word), Word>,
 
     // EIP-2929: Per-transaction access tracking
     pub accessed_addresses: HashSet<Address>,

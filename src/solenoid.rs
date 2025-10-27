@@ -242,6 +242,11 @@ impl Runner {
 
         if !self.call.to.is_zero() {
             let (tracer, ret) = exe.execute(&code, &self.call, &mut evm, ext).await?;
+            if evm.reverted {
+                evm.revert(ext).await?;
+                // Re-increment nonce (nonce is never reverted for valid transactions)
+                ext.account_mut(&self.call.from).nonce += Word::one();
+            }
             return Ok(CallResult {
                 evm,
                 ret,
@@ -259,12 +264,18 @@ impl Runner {
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
             .await;
 
-        ext.pull(&address).await?;
-        ext.pull(&self.call.from).await?;
+        if evm.reverted {
+            evm.revert(ext).await?;
+            // Re-increment nonce (nonce is never reverted for valid transactions)
+            ext.account_mut(&self.call.from).nonce += Word::one();
+        } else {
+            ext.pull(&address).await?;
+            ext.pull(&self.call.from).await?;
 
-        let hash = Word::from_bytes(&keccak256(&ret));
-        *ext.code_mut(&address) = (ret.clone(), hash);
-        ext.account_mut(&self.call.from).nonce += Word::one();
+            let hash = Word::from_bytes(&keccak256(&ret));
+            *ext.code_mut(&address) = (ret.clone(), hash);
+            ext.account_mut(&self.call.from).nonce += Word::one();
+        }
 
         Ok(CallResult {
             evm,
