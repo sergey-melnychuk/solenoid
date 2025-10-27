@@ -39,9 +39,9 @@ async fn main() -> eyre::Result<()> {
     dotenv::dotenv().ok();
 
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 7 {
+    if args.len() != 8 {
         eprintln!(
-            "Usage: {} <bytecode> <input> <from> <to> <value> <gas>",
+            "Usage: {} <bytecode> <input> <from> <to> <value> <gas> <block>",
             args[0]
         );
         std::process::exit(1);
@@ -53,6 +53,7 @@ async fn main() -> eyre::Result<()> {
     let to = addr(&args[4]);
     let value = word(&args[5]);
     let gas = word(&args[6]);
+    let block = word(&args[7]);
 
     let code = Decoder::decode(bytecode);
     dump(&code);
@@ -67,8 +68,7 @@ async fn main() -> eyre::Result<()> {
 
     let url = std::env::var("URL")?;
     let eth = EthClient::new(&url);
-    let mut ext = Ext::at_number(Word::from(23505042), eth).await?;
-    ext.account_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
+    let mut ext = Ext::at_number(block - Word::one(), eth).await?;
 
     println!("\nEXECUTION:");
     let executor = Executor::<LoggingTracer>::new().with_log();
