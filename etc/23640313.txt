@@ -3,10 +3,6 @@
 ---
 ### block=23640313 index=83 hash=0x382aaf01c5e08a17046ec314238894b9fb2238384b1b0b224a96d2099361f687
 REVM 	OK=true 	RET=empty	GAS=5926746	TRACES=72638
-sole 	OK=true 	RET=true	GAS=+6335	TRACES=72613
----
-### block=23640313 index=152 hash=0x44cb0cb57df2c3d009f111bace36b003b1623886c1f2c22a0a9c608cf056d14a
-REVM 	OK=true 	RET=empty	GAS=121653	TRACES=1505
-sole 	OK=true 	RET=true	GAS=  -12	TRACES=1505
+sole 	OK=true 	RET=true	GAS=+6393	TRACES=72613
 
-(total: 180, matched: 178, invalid: 2)
+(total: 180, matched: 179, invalid: 1)

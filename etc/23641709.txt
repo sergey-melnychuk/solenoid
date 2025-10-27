@@ -4,9 +4,5 @@
 ### block=23641709 index=8 hash=0xb0ec563595e0744993537a7a4c21b364cf6bcd33efbe940877df68b6cd670400
 REVM 	OK=true 	RET=empty	GAS=318330	TRACES=16337
 sole 	OK=true 	RET=true	GAS=+2500	TRACES=16337
----
-### block=23641709 index=107 hash=0x18d2e71af44031ddf785cc33c69668f6aa7d9df2bdd46062857e2b013f3d5268
-REVM 	OK=true 	RET=empty	GAS=41501	TRACES=1288
-sole 	OK=false 	RET=false	GAS=-10513	TRACES=960
 
-(total: 291, matched: 289, invalid: 2)
+(total: 291, matched: 290, invalid: 1)

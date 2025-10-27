@@ -4,13 +4,5 @@
 ### block=23642294 index=23 hash=0xcc1153bb06a1895030f57e8b492a97b632cbc7fc84fc442e02b935d94fe05742
 REVM 	OK=true 	RET=empty	GAS=114820	TRACES=4816
 sole 	OK=true 	RET=true	GAS=+1223	TRACES=4816
----
-### block=23642294 index=65 hash=0xdf9eaaa91415a630306cec28bc5705c4de3ebb4672945b751af4e8608bb220f8
-REVM 	OK=true 	RET=<32>	GAS=199625	TRACES=12468
-sole 	OK=false 	RET=false	GAS=-145261	TRACES=2228
----
-### block=23642294 index=77 hash=0xe956977ef42db5100172d5e6b2f2b9dbc06f4824c01f1211908df446752375be
-REVM 	OK=true 	RET=<32>	GAS=229225	TRACES=12876
-sole 	OK=false 	RET=false	GAS=-114776	TRACES=7968
 
-(total: 304, matched: 301, invalid: 3)
+(total: 304, matched: 303, invalid: 1)
