@@ -59,6 +59,7 @@ async fn test_deploy() -> eyre::Result<()> {
             AccountTouch::SetNonce(from, 0, 1),
             AccountTouch::WarmUp(from),
             AccountTouch::WarmUp(created2),
+            AccountTouch::SetNonce(created1, 0, 1),
             AccountTouch::SetCode(
                 created2,
                 (Word::from_bytes(&hash::empty()), vec![]),

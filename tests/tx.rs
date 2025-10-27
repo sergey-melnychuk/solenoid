@@ -11,6 +11,7 @@ use solenoid::{
 };
 
 async fn tx(
+    block: u64,
     tag: &str,
     from: Address,
     to: Address,
@@ -23,8 +24,7 @@ async fn tx(
 
     let url = std::env::var("URL")?;
     let eth = eth::EthClient::new(&url);
-    // let mut ext = Ext::at_latest(eth).await?;
-    let mut ext = Ext::at_number(word("0x15f5e96") - Word::one(), eth).await?;
+    let mut ext = Ext::at_number(Word::from(block - 1), eth).await?;
     ext.pull(&from).await?;
     ext.account_mut(&from).value = Word::from(1_000_000_000_000_000_000u64);
 
@@ -66,6 +66,7 @@ async fn test_tx_()
 async fn test_tx_0xe30bacb372ab39e3cfc57c2b939ed1962833852e884d60fcbca6f82d2c2a6507()
 -> eyre::Result<()> {
     let mut res = tx(
+        23027350,
         "0xe30bacb372ab39e3cfc57c2b939ed1962833852e884d60fcbca6f82d2c2a6507", 
         addr("0x2555abe866ba45a57e62fcc06e8039686fd840a2"),
         addr("0x03f34be1bf910116595db1b11e9d1b2ca5d59659"),
@@ -91,6 +92,7 @@ async fn test_tx_0xe30bacb372ab39e3cfc57c2b939ed1962833852e884d60fcbca6f82d2c2a6
 async fn test_tx_0x9b312d7abad8a54cca5735b21304097b700142cea90aeba3740f6a470e734fa6()
 -> eyre::Result<()> {
     let mut res = tx(
+        23027350,
         "0x9b312d7abad8a54cca5735b21304097b700142cea90aeba3740f6a470e734fa6",
         addr("0xb6b1581b3d267044761156d55717b719ab0565b1"),
         addr("0x5c2e112783a6854653b4bc7dc22248d3e592559c"),
@@ -111,6 +113,7 @@ async fn test_tx_0x9b312d7abad8a54cca5735b21304097b700142cea90aeba3740f6a470e734
 async fn test_tx_0x6d2d94b5bf06ff07cca77f0100233da7d45876cc58595122505ebd124d00d4a1()
 -> eyre::Result<()> {
     let mut res = tx(
+        23027350,
         "0x6d2d94b5bf06ff07cca77f0100233da7d45876cc58595122505ebd124d00d4a1", 
         addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512"), 
         addr("0x0000000000000068f116a894984e2db1123eb395"),
@@ -130,6 +133,7 @@ async fn test_tx_0x6d2d94b5bf06ff07cca77f0100233da7d45876cc58595122505ebd124d00d
 async fn test_tx_0x3db7dd66f03757ef51fd8c2cd98d533a76f9eca8373d2daf8793e271842e29e3()
 -> eyre::Result<()> {
     let res = tx(
+        23027350,
         "0x3db7dd66f03757ef51fd8c2cd98d533a76f9eca8373d2daf8793e271842e29e3",
         addr("0xe8b023ed28131909c39546e2f68afc8f5031c7da"),
         addr("0x0000000000000068f116a894984e2db1123eb395"),
@@ -139,5 +143,24 @@ async fn test_tx_0x3db7dd66f03757ef51fd8c2cd98d533a76f9eca8373d2daf8793e271842e2
     ).await?;
     assert!(res.evm.reverted);
     // assert_eq!(res.evm.gas.used, 40550);
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_tx_0xda636204dd50e257aa537a96470e161cde951932cf28d0347ae35977769e971a_subcall()
+-> eyre::Result<()> {
+    let mut res = tx(
+        23635581,
+        "0xda636204dd50e257aa537a96470e161cde951932cf28d0347ae35977769e971a: CALL @ pc=7893",
+        addr("0x6710c63432a2de02954fc0f851db07146a6c0312"),
+        addr("0x331d077518216c07c87f4f18ba64cd384c411f84"),
+        "14712e2f000000000000000000000000000000000022d473030f116ddee9f6b43ac78ba3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff4d4647000000000000000000000000000000000000000000000000000000000000000000000000000000000092e8c440bd5ae54c9d95ce5a4d3bc8151fda63d8",
+        Word::from(119747),
+        Word::zero(),
+    ).await?;
+    for e in res.tracer.take() {
+        println!("{}", serde_json::to_string(&e)?);
+    }
+    assert!(!res.evm.reverted);
     Ok(())
 }
