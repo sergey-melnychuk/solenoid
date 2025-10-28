@@ -1114,7 +1114,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x44 => {
                 // PREVRANDAO
-                evm.push(self.header.mix_hash)?;
+                evm.push(Word::zero())?;
                 gas = 2.into();
             }
             0x45 => {
@@ -1737,11 +1737,13 @@ impl<T: EventTracer> Executor<T> {
         let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
 
         // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
-        let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
-            let target = Address::try_from(&code[3..]).expect("address");
-            // eprintln!("DEBUG: delegation {} -> {}", address, target);
-            access_cost += evm.address_access_cost(&target, ext).as_i64();
+        let is_delegated = code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]);
+        let code = if is_delegated {
+            access_cost += 100;
+            let target = Address::try_from(&code[3..]).expect("must succeed");
             let (code, _) = ext.code(&target).await?;
+            let target_cost = evm.address_access_cost(&target, ext).as_i64();
+            access_cost += target_cost - 100;
             code
         } else {
             code
@@ -1919,11 +1921,11 @@ impl<T: EventTracer> Executor<T> {
                     "call.input": hex::encode(data),
                     "call.value": value,
                     "call.gas": call_gas.as_u64(),
+                    "call.is_delegated": is_delegated,
                     "access_cost": access_cost,
                     "inner_evm.reverted": inner_evm.reverted,
                     "is_empty": is_empty,
                     "code.len": code.bytecode.len(),
-                    // "code.hex": hex::encode(&code.bytecode),
                     "ret": hex::encode(&self.ret),
                 }),
             },
