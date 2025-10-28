@@ -67,7 +67,6 @@ impl Ext {
         self.gas_price = gas_price;
         self.original.clear();
 
-        // Clear EIP-2929 access tracking (you need to add this tracking first!)
         // Clear transient storage (EIP-1153)
         self.transient.clear();
 
