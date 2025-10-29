@@ -321,6 +321,29 @@ impl<T: EventTracer> Executor<T> {
         evm: &mut Evm,
         ext: &mut Ext,
     ) -> eyre::Result<(T, Vec<u8>)> {
+        // EIP-2929: Pre-warm sender and target addresses at transaction start
+        ext.warm_address(&call.from);
+        evm.account.push(AccountTouch::WarmUp(call.from));
+        if !call.to.is_zero() {
+            ext.warm_address(&call.to);
+            evm.account.push(AccountTouch::WarmUp(call.to));
+
+            // EIP-7702: If call.to is delegated, also pre-warm the target address
+            let (code, _) = ext.code(&call.to).await?;
+            if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
+                let target = Address::try_from(&code[3..]).expect("must succeed");
+                ext.warm_address(&target);
+                evm.account.push(AccountTouch::WarmUp(target));
+            }
+        }
+
+        // EIP-3651 (Shanghai): Pre-warm coinbase address
+        let coinbase = self.header.miner;
+        if !coinbase.is_zero() {
+            ext.warm_address(&coinbase);
+            evm.account.push(AccountTouch::WarmUp(coinbase));
+        }
+        
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
         gas -= call_cost;
@@ -454,27 +477,6 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
         ctx: Context,
     ) -> (T, Vec<u8>) {
-        // EIP-2929: Pre-warm sender and target addresses at transaction start
-        if ctx.depth == 1 {
-            ext.pull(&call.from).await.expect("pre-warm:from");
-            ext.warm_address(&call.from);
-            evm.account.push(AccountTouch::WarmUp(call.from));
-
-            if !call.to.is_zero() {
-                ext.pull(&call.to).await.expect("pre-warm:to");
-                ext.warm_address(&call.to);
-                evm.account.push(AccountTouch::WarmUp(call.to));
-            }
-
-            // EIP-3651 (Shanghai): Pre-warm coinbase address
-            let coinbase = self.header.miner;
-            if !coinbase.is_zero() {
-                ext.pull(&coinbase).await.expect("pre-warm:coinbase");
-                ext.warm_address(&coinbase);
-                evm.account.push(AccountTouch::WarmUp(coinbase));
-            }
-        }
-
         self.tracer.push(Event {
             data: EventData::Call {
                 r#type: ctx.call_type,
@@ -543,6 +545,7 @@ impl<T: EventTracer> Executor<T> {
                     }
                     if evm.gas(cost).is_err() {
                         // out of gas
+                        // eprintln!("OUT OF GAS: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                         evm.stopped = true;
                         evm.reverted = true;
                         return (self.tracer, vec![]);
@@ -1562,7 +1565,7 @@ impl<T: EventTracer> Executor<T> {
                 if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
-                self.create(instruction, this, call, &mut gas, evm, ext, ctx)
+                self.create(instruction, this, &mut gas, evm, ext, ctx)
                     .await?;
             }
             0xf1 => {
@@ -1656,7 +1659,7 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Create2,
                     ..ctx
                 };
-                self.create(instruction, this, call, &mut gas, evm, ext, ctx)
+                self.create(instruction, this, &mut gas, evm, ext, ctx)
                     .await?;
             }
             0xfa => {
@@ -1706,7 +1709,7 @@ impl<T: EventTracer> Executor<T> {
         let value = if !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             evm.pop()?
         } else if matches!(ctx.call_type, CallType::Static) {
-            Word::zero() // STATICCALL always has value = 0
+            Word::zero() // STATICCALL always has zero value
         } else {
             call.value // DELEGATECALL inherits value from parent
         };
@@ -1716,8 +1719,10 @@ impl<T: EventTracer> Executor<T> {
         let ret_size = evm.pop()?.as_usize();
 
         // Handle memory expansion for arguments and return data
-        let size = (args_offset + args_size).max(ret_offset + ret_size);
-        if (ret_size > 0 || args_size > 0) && size > evm.memory.len() {
+        let args_max = if args_size > 0 { args_offset + args_size } else { 0 };
+        let ret_max = if ret_size > 0 { ret_offset + ret_size } else { 0 };
+        let size = args_max.max(ret_max);
+        if size > evm.memory.len() {
             if size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(size).into());
             }
@@ -1977,7 +1982,6 @@ impl<T: EventTracer> Executor<T> {
         &mut self,
         instruction: &Instruction,
         this: Address,
-        _call: &Call,
         gas: &mut Word,
         evm: &mut Evm,
         ext: &mut Ext,
@@ -1992,9 +1996,7 @@ impl<T: EventTracer> Executor<T> {
             Word::zero()
         };
 
-        // HERE: TODO: apply proper create costs (Create: Scenario 2 - From-Code Create)
-
-        if offset + size > evm.memory.len() {
+        if size > 0 && offset + size > evm.memory.len() {
             if offset + size > ALLOCATION_SANITY_LIMIT {
                 return Err(ExecutorError::InvalidAllocation(offset + size).into());
             }
@@ -2036,7 +2038,13 @@ impl<T: EventTracer> Executor<T> {
 
         let create_cost = 32000;
         let base_gas_cost = memory_expansion_cost + create_cost + init_code_cost;
-        let remaining_gas = evm.gas.remaining().saturating_sub(base_gas_cost);
+        let remaining_gas = evm.gas.remaining() - base_gas_cost;
+
+        if remaining_gas <= 0 {
+            // TODO: handle this case properly
+            panic!("remaining gas is negative: {}", remaining_gas);
+        }
+
         let all_but_one_64th = remaining_gas - remaining_gas / 64;
         let gas_to_forward = all_but_one_64th;
 
@@ -2070,15 +2078,9 @@ impl<T: EventTracer> Executor<T> {
         };
         let base_gas_cost =
             memory_expansion_cost + create_cost + init_code_cost + deployed_code_cost;
-
-        // For tracing: report the total cost including gas forwarded (to match REVM)
-        // REVM reports the forwarded gas, not the used gas, because from the outer EVM's
-        // perspective, all forwarded gas is "spent" even if the inner execution didn't use it all
-        // Note: deployed_code_cost is NOT included in the forwarded gas calculation
-        let base_cost_without_deployed = memory_expansion_cost + create_cost + init_code_cost;
-        let total_gas_cost_for_tracing = base_cost_without_deployed + gas_to_forward;
-
+    
         // HERE: TODO: remove this label
+        let total_gas_cost_for_tracing = memory_expansion_cost + create_cost + init_code_cost + gas_to_forward;
         self.tracer.push(Event {
             depth: ctx.depth,
             reverted: false,
@@ -2107,13 +2109,19 @@ impl<T: EventTracer> Executor<T> {
 
         self.tracer.join(tracer, inner_evm.reverted);
 
-        evm.gas.used += base_gas_cost;
-        evm.gas.used += inner_evm.gas.used;
+        if gas_to_forward < base_gas_cost + inner_evm.gas.used {
+            evm.gas.used += gas_to_forward + base_gas_cost - deployed_code_cost;
+            evm.push(Word::zero())?;
+            inner_evm.revert(ext).await?;
+            return Ok(());
+        }
+
+        evm.gas.used += base_gas_cost + inner_evm.gas.used;
         *gas = Word::zero();
 
         if inner_evm.reverted {
-            inner_evm.revert(ext).await?;
             evm.push(Word::zero())?;
+            inner_evm.revert(ext).await?;
             return Ok(());
         }
 
@@ -2157,7 +2165,6 @@ impl<T: EventTracer> Executor<T> {
             evm.state.push(state);
         }
         evm.push((&created).into())?;
-
         Ok(())
     }
 }
