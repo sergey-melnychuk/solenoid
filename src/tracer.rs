@@ -78,6 +78,10 @@ pub enum HashAlg {
     Keccak256,
 }
 
+fn is_zero_i64(x: &i64) -> bool {
+    x == &0
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum EventData {
     Tag(EventTag),
@@ -91,7 +95,7 @@ pub enum EventData {
         gas_cost: i64,
         gas_used: i64,
         gas_left: i64,
-        // #[serde(skip_serializing_if = "Word::is_zero")]
+        #[serde(skip_serializing_if = "is_zero_i64")]
         gas_back: i64,
         stack: Vec<Word>,
         memory: Vec<Word>,
@@ -125,8 +129,13 @@ pub enum EventData {
         error: Option<String>,
     },
 
-    // SELFDESTRUCT
-    Remove {
+    Created {
+        address: Address,
+        codehash: Hex,
+        balance: Word,
+    },
+
+    SelfDestruct {
         address: Address,
         beneficiary: Address,
         balance: Word,
