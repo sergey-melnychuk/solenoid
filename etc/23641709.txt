@@ -1,8 +1,4 @@
 📦 Fetched block number: 23641709 [with 291 txs]
 📦 Fetched block number: 23641709 [with 291 txs]
----
-### block=23641709 index=8 hash=0xb0ec563595e0744993537a7a4c21b364cf6bcd33efbe940877df68b6cd670400
-REVM 	OK=true 	RET=empty	GAS=318330	TRACES=16337
-sole 	OK=true 	RET=true	GAS=+2500	TRACES=16337
 
-(total: 291, matched: 290, invalid: 1)
+(total: 291, matched: 291, invalid: 0)

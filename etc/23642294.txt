@@ -1,8 +1,4 @@
 📦 Fetched block number: 23642294 [with 304 txs]
 📦 Fetched block number: 23642294 [with 304 txs]
----
-### block=23642294 index=23 hash=0xcc1153bb06a1895030f57e8b492a97b632cbc7fc84fc442e02b935d94fe05742
-REVM 	OK=true 	RET=empty	GAS=114820	TRACES=4816
-sole 	OK=true 	RET=true	GAS=+1223	TRACES=4816
 
-(total: 304, matched: 303, invalid: 1)
+(total: 304, matched: 304, invalid: 0)
