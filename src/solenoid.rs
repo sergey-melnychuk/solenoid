@@ -258,6 +258,7 @@ impl Runner {
         let ctx = Context {
             created: address,
             call_type: CallType::Create,
+            depth: 1,
             ..Default::default()
         };
         let (tracer, ret) = exe
