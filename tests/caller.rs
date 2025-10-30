@@ -56,8 +56,8 @@ async fn test_deploy() -> eyre::Result<()> {
     pretty_assertions::assert_eq!(
         evm.account,
         vec![
-            AccountTouch::SetNonce(from, 0, 1),
             AccountTouch::WarmUp(from),
+            AccountTouch::SetNonce(from, 0, 1),
             AccountTouch::WarmUp(created2),
             AccountTouch::SetNonce(created1, 0, 1),
             AccountTouch::SetCode(
