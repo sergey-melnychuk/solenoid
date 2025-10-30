@@ -505,7 +505,7 @@ impl<T: EventTracer> Executor<T> {
                 Ok(cost) => {
                     let cost = cost.as_i64();
                     let charged_cost = cost.min(evm.gas.remaining());
-                    if !instruction.is_call() && instruction.opcode.code != 0xfe {
+                    if !instruction.is_call() {
                         // HERE: TODO: remove this label
                         let refund = evm.gas.refund - evm.refund;
                         evm.refund = evm.gas.refund;
