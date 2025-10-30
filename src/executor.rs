@@ -378,7 +378,7 @@ impl<T: EventTracer> Executor<T> {
                     val: src,
                     new: src - call.value,
                 }),
-                depth: 0,
+                depth: 1,
                 reverted: false,
             });
 
@@ -391,7 +391,7 @@ impl<T: EventTracer> Executor<T> {
                     val: src,
                     new: src + call.value,
                 }),
-                depth: 0,
+                depth: 1,
                 reverted: false,
             });
         }
@@ -409,7 +409,7 @@ impl<T: EventTracer> Executor<T> {
                 val: nonce.as_u64(),
                 new: nonce.as_u64() + 1,
             }),
-            depth: 0,
+            depth: 1,
             reverted: false,
         });
 
@@ -462,7 +462,7 @@ impl<T: EventTracer> Executor<T> {
                 val: src,
                 new: src - gas_fee
             }),
-            depth: 0,
+            depth: 1,
             reverted: false,
         });*/
 
@@ -505,7 +505,7 @@ impl<T: EventTracer> Executor<T> {
                 Ok(cost) => {
                     let cost = cost.as_i64();
                     let charged_cost = cost.min(evm.gas.remaining());
-                    if !instruction.is_call() {
+                    if !instruction.is_call() && instruction.opcode.code != 0xfe {
                         // HERE: TODO: remove this label
                         let refund = evm.gas.refund - evm.refund;
                         evm.refund = evm.gas.refund;
@@ -538,21 +538,27 @@ impl<T: EventTracer> Executor<T> {
                     }
                     if instruction.opcode.code == 0xfe {
                         // INVALID opcode
+                        // eprintln!("OPCODE INVALID: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                         evm.gas.sub(evm.gas.remaining()).expect("must succeed");
                         evm.stopped = true;
                         evm.reverted = true;
                         return (self.tracer, vec![]);
                     }
-                    if evm.gas(cost).is_err() {
+                    if evm.gas(cost).is_err() /*|| evm.gas.remaining() <= 0*/{
                         // out of gas
                         // eprintln!("OUT OF GAS: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                         evm.stopped = true;
                         evm.reverted = true;
                         return (self.tracer, vec![]);
                     }
+                    if instruction.opcode.code == 0xff {
+                        // SELFDESTRUCT opcode
+                        return (self.tracer, vec![]);
+                    }
                 }
                 Err(_) => {
                     // opcode failed
+                    // eprintln!("OPCODE FAILED: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                     evm.stopped = true;
                     evm.reverted = true;
                     return (self.tracer, vec![]);
@@ -882,27 +888,24 @@ impl<T: EventTracer> Executor<T> {
                 // SHA3 (KECCAK256)
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
-                if offset + size > evm.memory.len() {
-                    return Err(ExecutorError::MissingData.into());
-                }
-                let data = &evm.memory[offset..offset + size];
-                let sha3 = keccak256(data);
+                let data = if offset + size > evm.memory.len() {
+                    let mut data = evm.memory.clone();
+                    data.resize(offset + size, 0);
+                    data[offset..offset + size].to_vec()
+                } else {
+                    evm.memory[offset..offset + size].to_vec()
+                };
+                let sha3 = keccak256(&data);
                 let hash = Word::from_bytes(&sha3);
                 self.tracer.push(Event {
                     data: EventData::Hash {
-                        data: data.to_vec().into(),
-                        hash: sha3.to_vec().into(),
+                        data: data.into(),
+                        hash: sha3.into(),
                         alg: HashAlg::Keccak256,
                     },
                     depth: ctx.depth,
                     reverted: false,
                 });
-                #[cfg(feature = "tracing")]
-                tracing::debug!(
-                    preimage = hex::encode(data),
-                    keccak256 = hex::encode(sha3),
-                    "HASH"
-                );
                 evm.push(hash)?;
                 gas = (30 + 6 * size.div_ceil(32)).into();
             }
@@ -1679,7 +1682,22 @@ impl<T: EventTracer> Executor<T> {
                 if matches!(ctx.call_type, CallType::Static) {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
-                todo!("SELFDESTRUCT");
+
+                let address: Address = (&evm.pop()?).into();
+
+                // TODO: send balance to address
+                // TODO: mark account for removal at the end of the transaction
+
+                let opcode_cost = 5000;
+                let access_cost = evm.address_access_cost(&address, ext).as_i64();
+                let create_cost = if ext.is_empty(&address).await? {
+                    25000 // account creation cost
+                } else {
+                    0
+                };
+
+                let total_gas_cost = opcode_cost + access_cost + create_cost; 
+                gas = total_gas_cost.into();
             }
             _ => {
                 return Err(ExecutorError::UnknownOpcode(opcode).into());
@@ -1765,8 +1783,50 @@ impl<T: EventTracer> Executor<T> {
             gas_stipend_adjustment = 2300;
         }
 
+        // TODO: check if there is enough gas
+
+        /*
+        if base_gas_cost >= evm.gas.remaining() {
+            let gas_cost = evm.gas.remaining();
+            *gas = gas_cost.into();
+
+            self.tracer.push(Event {
+                depth: ctx.depth,
+                reverted: false,
+                data: EventData::OpCode {
+                    pc: instruction.offset,
+                    op: instruction.opcode.code,
+                    name: instruction.opcode.name(),
+                    data: instruction.argument.clone().map(Into::into),
+                    gas_cost,
+                    gas_used: evm.gas.used + gas_cost,
+                    gas_left: 0,
+                    stack: evm.stack.clone(),
+                    memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                    gas_back: 0,
+                    debug: json!({
+                        "is_call": true,
+                        "evm.gas.used": evm.gas.used,
+                        "evm.gas.refund": evm.gas.refund,
+                        "call.address": address,
+                        "call.input": hex::encode(&evm.memory[args_offset..args_offset + args_size]),
+                        "call.result": "OOG",
+                        "call.gas": call_gas.as_u64(),
+                        "access_cost": access_cost,
+                        "memory_expansion_cost": memory_expansion_cost,
+                    }),
+                },
+            });
+
+            // Don't add refunds from reverted calls
+            evm.refund = evm.gas.refund;
+            evm.push(Word::zero())?;
+            return Ok(());
+        }
+        */
+
         // Calculate available gas for forwarding using "all but one 64th" rule
-        let remaining_gas = evm.gas.remaining().saturating_sub(base_gas_cost);
+        let remaining_gas = evm.gas.remaining() - base_gas_cost;
         let all_but_one_64th = remaining_gas - remaining_gas / 64;
         let gas_to_forward = call_gas.as_i64().min(all_but_one_64th) + gas_stipend_adjustment;
 
@@ -1786,6 +1846,7 @@ impl<T: EventTracer> Executor<T> {
         // Handle precompile call
         if precompiles::is_precompile(&address) {
             let gas_cost = precompiles::gas_cost(&address, data);
+            // TODO: check if there is enough gas
             let result = match precompiles::execute(&address, data) {
                 Ok(ret) => {
                     self.ret = ret;
@@ -1942,10 +2003,12 @@ impl<T: EventTracer> Executor<T> {
             evm.memory[ret_offset..ret_offset + copy_len].copy_from_slice(&ret[..copy_len]);
         }
 
+        // TODO: check if there is enough gas
+
+        evm.gas.used += inner_evm.gas.used;
+        evm.gas.used -= gas_stipend_adjustment;
+
         if inner_evm.reverted {
-            // When call reverts, charge the gas that was used
-            evm.gas.used += inner_evm.gas.used;
-            evm.gas.used -= gas_stipend_adjustment;
             // Don't add refunds from reverted calls
             evm.refund = evm.gas.refund;
             self.ret = ret;
@@ -1958,10 +2021,6 @@ impl<T: EventTracer> Executor<T> {
             }
             return Ok(());
         }
-
-        // Call succeeded: charge actual gas used
-        evm.gas.used += inner_evm.gas.used;
-        evm.gas.used -= gas_stipend_adjustment;
 
         // Only add refunds if call succeeded
         evm.gas.refund += inner_evm.gas.refund;
@@ -2042,7 +2101,7 @@ impl<T: EventTracer> Executor<T> {
 
         if remaining_gas <= 0 {
             // TODO: handle this case properly
-            panic!("remaining gas is negative: {}", remaining_gas);
+            panic!("remaining gas <= 0");
         }
 
         let all_but_one_64th = remaining_gas - remaining_gas / 64;
