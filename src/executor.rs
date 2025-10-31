@@ -510,14 +510,6 @@ impl<T: EventTracer> Executor<T> {
                         let refund = evm.gas.refund - evm.refund;
                         evm.refund = evm.gas.refund;
 
-                        self.debug = json!({
-                            "is_call": false,
-                            "gas_left": evm.gas.remaining() - cost,
-                            "gas_cost": cost,
-                            "evm.gas.used": evm.gas.used,
-                            "evm.gas.back": evm.gas.refund,
-                        });
-
                         self.tracer.push(Event {
                             depth: ctx.depth,
                             reverted: false,
@@ -532,7 +524,7 @@ impl<T: EventTracer> Executor<T> {
                                 gas_left: evm.gas.remaining() - charged_cost,
                                 stack: evm.stack.clone(),
                                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
-                                debug: json!(self.debug),
+                                debug: self.debug.take(),
                             },
                         });
                     }
@@ -544,7 +536,7 @@ impl<T: EventTracer> Executor<T> {
                         evm.reverted = true;
                         return (self.tracer, vec![]);
                     }
-                    if evm.gas(cost).is_err() /*|| evm.gas.remaining() <= 0*/{
+                    if evm.gas(cost).is_err() {
                         // out of gas
                         // eprintln!("OUT OF GAS: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                         evm.stopped = true;
@@ -1267,34 +1259,6 @@ impl<T: EventTracer> Executor<T> {
                 let key = evm.pop()?;
                 let new = evm.pop()?;
 
-                // EIP-2200: Check gas stipend (must have at least 2300 gas remaining)
-                if evm.gas.remaining() <= 2300 {
-                    self.tracer.push(Event {
-                        depth: ctx.depth,
-                        reverted: false,
-                        data: EventData::OpCode {
-                            pc: instruction.offset,
-                            op: instruction.opcode.code,
-                            name: instruction.opcode.name(),
-                            data: instruction.argument.clone().map(Into::into),
-                            gas_cost: 0,
-                            gas_used: evm.gas.used,
-                            gas_back: 0,
-                            gas_left: evm.gas.remaining(),
-                            stack: evm.stack.clone(),
-                            memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
-                            debug: json!({
-                                "is_call": false,
-                                "gas_left": evm.gas.remaining(),
-                                "gas_cost": 0,
-                                "evm.gas.used": evm.gas.used,
-                                "evm.gas.back": evm.gas.refund,
-                            }),
-                        },
-                    });
-                    evm.error(ExecutorError::OutOfGas().into())?;
-                }
-
                 let is_warm = ext.is_storage_warm(&this, &key);
                 if !is_warm {
                     ext.warm_storage(&this, &key);
@@ -1389,6 +1353,7 @@ impl<T: EventTracer> Executor<T> {
                 self.debug["sstore"] = json!({
                     "is_warm": is_warm,
                     "original": original,
+                    "address": this,
                     "key": key,
                     "val": val,
                     "new": new,
@@ -1400,6 +1365,29 @@ impl<T: EventTracer> Executor<T> {
                         .map(serde_json::Value::from)
                         .collect::<Vec<_>>()
                 });
+
+                // EIP-2200: Check gas stipend (must have at least 2300 gas remaining)
+                if evm.gas.remaining() + gas_refund < gas_cost {
+                    self.tracer.push(Event {
+                        depth: ctx.depth,
+                        reverted: false,
+                        data: EventData::OpCode {
+                            pc: instruction.offset,
+                            op: instruction.opcode.code,
+                            name: instruction.opcode.name(),
+                            data: instruction.argument.clone().map(Into::into),
+                            gas_cost: 0,
+                            gas_used: evm.gas.used,
+                            gas_back: 0,
+                            gas_left: evm.gas.remaining(),
+                            stack: evm.stack.clone(),
+                            memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                            debug: self.debug.take(),
+                        },
+                    });
+                    // TODO: make OOG detection more generic
+                    evm.error(ExecutorError::OutOfGas().into())?;
+                }
 
                 evm.gas.refund(gas_refund);
                 gas = gas_cost.into();
