@@ -159,7 +159,7 @@ async fn main() -> eyre::Result<()> {
                 let rev_ok = revm_result.rev == sole_result.rev;
                 let ret_ok = revm_result.ret == sole_result.ret;
                 let gas_ok = revm_result.gas == sole_result.gas;
-                let traces_ok = revm_traces.len() == sole_traces.len();
+                let traces_ok = revm_traces == sole_traces;
 
                 let ok = rev_ok && ret_ok && gas_ok && traces_ok;
                 if ok {

@@ -1,4 +1,20 @@
 📦 Fetched block number: 23642294 [with 304 txs]
 📦 Fetched block number: 23642294 [with 304 txs]
+---
+### block=23642294 index=24 hash=0xc1d3c8523394dbdc3e24ada24f888a3746b5d390b778b13e074eee2eaf8fda10
+REVM 	OK=true 	RET=empty	GAS=956677	TRACES=89872
+sole 	OK=true 	RET=true	GAS=match	TRACES=89872
+---
+### block=23642294 index=34 hash=0xfa1b9e5357dc1674fba3c43ef7bb9a85be8fc13a605b51c966152cb34dcba22a
+REVM 	OK=true 	RET=empty	GAS=956926	TRACES=87112
+sole 	OK=true 	RET=true	GAS=match	TRACES=87112
+---
+### block=23642294 index=44 hash=0x8106d540e16162e53c5d65c434e771df99b3ead362eb9f05fd2151414f5311ce
+REVM 	OK=true 	RET=empty	GAS=174978	TRACES=11417
+sole 	OK=true 	RET=true	GAS=match	TRACES=11417
+---
+### block=23642294 index=57 hash=0x78b40adb68f8a232717b0d703da1574ac6cd7b54cc7ebe4df9c9d983e0368d29
+REVM 	OK=true 	RET=empty	GAS=723105	TRACES=60772
+sole 	OK=true 	RET=true	GAS=match	TRACES=60772
 
-(total: 304, matched: 304, invalid: 0)
+(total: 304, matched: 300, invalid: 4)

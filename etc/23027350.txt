@@ -1,4 +1,8 @@
 📦 Fetched block number: 23027350 [with 209 txs]
 📦 Fetched block number: 23027350 [with 209 txs]
+---
+### block=23027350 index=152 hash=0x75a45b6908fb2e09bc47814b589b5013914fb1166fb9678c7c68f8575064a420
+REVM 	OK=true 	RET=empty	GAS=344628	TRACES=33744
+sole 	OK=true 	RET=true	GAS=match	TRACES=33744
 
-(total: 209, matched: 209, invalid: 0)
+(total: 209, matched: 208, invalid: 1)
