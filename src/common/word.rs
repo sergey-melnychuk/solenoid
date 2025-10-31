@@ -1,6 +1,5 @@
 use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
 
-use k256::elliptic_curve::bigint::Encoding;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::common::decode;
@@ -17,11 +16,12 @@ impl Word {
     }
 
     pub fn add_modulo(&self, that: &Word, modulo: &Word) -> Word {
-        let a = k256::U256::from_be_slice(&self.into_bytes());
-        let b = k256::U256::from_be_slice(&that.into_bytes());
-        let m = k256::U256::from_be_slice(&modulo.into_bytes());
-        let r = (&a).add_mod(&b, &m);
-        Self::from_bytes(&r.to_be_bytes())
+        // Expand all values to 512 bits to avoid overflow
+        let a = self.0.full_mul(U256::one());
+        let b = that.0.full_mul(U256::one());
+        let m = modulo.0.full_mul(U256::one());
+        let r = (a + b) % m; // a + b cannot overflow here
+        Word(U256::from_big_endian(&r.to_big_endian()[32..]))
     }
 }
 

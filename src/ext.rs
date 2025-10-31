@@ -32,6 +32,7 @@ pub struct Ext {
     // EIP-2929: Per-transaction access tracking
     pub accessed_addresses: HashSet<Address>,
     pub accessed_storage: HashSet<(Address, Word)>,
+    pub created_accounts: HashSet<Address>,
 
     pub gas_price: Word,
 }
@@ -49,6 +50,7 @@ impl Ext {
             transient: HashMap::default(),
             accessed_addresses: HashSet::default(),
             accessed_storage: HashSet::default(),
+            created_accounts: HashSet::default(),
             gas_price: Word::zero(),
         }
     }
@@ -73,6 +75,7 @@ impl Ext {
         // Clear EIP-2929 access tracking
         self.accessed_addresses.clear();
         self.accessed_storage.clear();
+        self.created_accounts.clear();
     }
 
     /// Check if an address has been accessed in the current transaction (EIP-2929)
@@ -144,6 +147,18 @@ impl Ext {
         Ok(is_empty)
     }
 
+    // pub async fn create(&mut self, addr: &Address, value: Word, nonce: Word, code: Vec<u8>) -> eyre::Result<Word> {
+    //     let hash = Word::from_bytes(&keccak256(&code));
+    //     self.state.insert(*addr, Account {
+    //         value,
+    //         nonce,
+    //         code: (code, hash),
+    //         root: Word::zero(),
+    //         state: Default::default(),
+    //     });
+    //     Ok(hash)
+    // }
+
     pub async fn code(&mut self, addr: &Address) -> eyre::Result<(Vec<u8>, Word)> {
         if let Some(code) = self.state.get(addr).map(|s| s.code.clone()) {
             Ok(code)
@@ -162,7 +177,13 @@ impl Ext {
 
     pub async fn nonce(&mut self, addr: &Address) -> eyre::Result<Word> {
         if let Some(nonce) = self.state.get(addr).map(|s| s.nonce) {
-            Ok(nonce)
+            // created account starts with nonce=1
+            let inc = if self.created_accounts.contains(addr) {
+                Word::one()
+            } else {
+                Word::zero()
+            };
+            Ok(nonce + inc)
         } else {
             Ok(self.pull(addr).await?.nonce)
         }

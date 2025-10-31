@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::common::{decode, word::Word};
+use crate::common::{decode, hash::keccak256, word::Word};
 
 #[derive(Clone, Copy, Default, Hash, Eq, PartialEq)]
 pub struct Address(pub [u8; 20]);
@@ -12,6 +12,20 @@ impl Address {
 
     pub fn is_zero(&self) -> bool {
         self.0.iter().all(|byte| byte == &0)
+    }
+
+    pub fn create2(&self, salt: &Word, code: &[u8]) -> Address {
+        // (See: https://www.evm.codes/?fork=cancun#f5)
+        // initialisation_code = memory[offset:offset+size]
+        // address = keccak256(0xff + sender_address + salt + keccak256(initialisation_code))[12:]
+        let mut buffer = Vec::with_capacity(1 + 20 + 32 + 32);
+        buffer.push(0xffu8);
+        buffer.extend_from_slice(&self.0);  // Use 'this' (current contract), not call.from
+        buffer.extend_from_slice(&salt.into_bytes());
+        buffer.extend_from_slice(&keccak256(&code));  // Use raw bytecode from memory
+        let mut hash = keccak256(&buffer);
+        hash[0..12].copy_from_slice(&[0u8; 12]);
+        Address::from(&Word::from_bytes(&hash))
     }
 
     pub fn create(&self, nonce: Word) -> Address {
@@ -31,11 +45,34 @@ impl Address {
             .collect::<Vec<_>>();
 
         let mut buffer = Vec::new();
-        buffer.push(0xc0u8 + (1 + address_bytes.len() + 1 + nonce_bytes.len()) as u8);
+        
+        // Calculate the total payload size for the list
+        // Payload includes: address_prefix (1) + address (20) + nonce_encoding
+        let nonce_encoding_len = if nonce_bytes.is_empty() {
+            1  // 0x80 for integer 0
+        } else if nonce_bytes.len() == 1 && nonce_bytes[0] < 0x80 {
+            1  // single byte for integers 1-127
+        } else {
+            1 + nonce_bytes.len()  // prefix + bytes for integers > 127
+        };
+        let payload_len = 1 + address_bytes.len() + nonce_encoding_len;
+        
+        buffer.push(0xc0u8 + payload_len as u8);
         buffer.push(0x80u8 + address_bytes.len() as u8);
         buffer.extend_from_slice(&address_bytes);
-        buffer.push(0x80u8 + nonce_bytes.len() as u8);
-        buffer.extend_from_slice(&nonce_bytes);
+        
+        // RLP encode the nonce according to spec
+        if nonce_bytes.is_empty() {
+            // Integer 0 is encoded as 0x80 (empty byte string)
+            buffer.push(0x80u8);
+        } else if nonce_bytes.len() == 1 && nonce_bytes[0] < 0x80 {
+            // Integers 1-127 are encoded as a single byte
+            buffer.push(nonce_bytes[0]);
+        } else {
+            // Integers > 127 are encoded with prefix
+            buffer.push(0x80u8 + nonce_bytes.len() as u8);
+            buffer.extend_from_slice(&nonce_bytes);
+        }
 
         let hash = super::hash::keccak256(&buffer);
         let mut addr = [0u8; 20];

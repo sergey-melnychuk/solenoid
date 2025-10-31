@@ -8,7 +8,7 @@ use crate::{
         address::Address,
         block::Header,
         call::Call,
-        hash::keccak256,
+        hash::{empty, keccak256},
         word::{Word, decode_error_string},
     },
     decoder::{Bytecode, Decoder, Instruction},
@@ -72,7 +72,7 @@ pub enum AccountTouch {
     GetCode(Address, Word, Vec<u8>),
     SetNonce(Address, u64, u64),
     SetValue(Address, Word, Word),
-    SetCode(Address, (Word, Vec<u8>), (Word, Vec<u8>)),
+    Create(Address, Word, Word, Vec<u8>, Word),
 }
 
 #[derive(Debug, Clone)]
@@ -206,8 +206,10 @@ impl Evm {
                 AccountTouch::SetValue(addr, val, _new) => {
                     ext.account_mut(addr).value = *val;
                 }
-                AccountTouch::SetCode(addr, (old_hash, old_code), _new) => {
-                    *ext.code_mut(addr) = (old_code.clone(), *old_hash);
+                AccountTouch::Create(addr, _value, _nonce, _code, _hash) => {
+                    *ext.code_mut(addr) = (vec![], Word::from_bytes(&empty()));
+                    ext.account_mut(addr).nonce = Word::zero();
+                    ext.account_mut(addr).value = Word::zero();
                 }
                 AccountTouch::WarmUp(addr) => {
                     ext.accessed_addresses.remove(addr);
@@ -352,8 +354,8 @@ impl<T: EventTracer> Executor<T> {
             let total_calldata_len = call.data.len();
             let nonzero_bytes_count = call.data.iter().filter(|byte| byte != &&0).count();
             nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
-        };
-        gas -= data_cost as i64;
+        } as i64;
+        gas -= data_cost;
 
         evm.gas = Gas::new(gas);
 
@@ -437,12 +439,30 @@ impl<T: EventTracer> Executor<T> {
             .await;
         self.tracer.join(tracer, evm.reverted);
 
-        // TODO: sort out gas fee value reduction!
-        // (see: https://www.blocknative.com/blog/eip-1559-fees)
-        /*let gas_price = Word::from(1_000_000_000);
-        let gas_final = evm.gas.finalized(0); // TODO: use finalised gas
-        let gas_fee = Word::from(gas_final) * gas_price;
+        // Calculate gas costs and transaction fee
+
+        let create_cost = 32000i64;
+        let init_code_cost = 2 * call.data.len().div_ceil(32) as i64;
+
+        // EIP-7623: Increase calldata cost
+        let calldata_tokens = {
+            let zero_bytes = call.data.iter().filter(|b| **b == 0).count() as i64;
+            let nonzero_bytes = call.data.len() as i64 - zero_bytes;
+            zero_bytes + nonzero_bytes * 4
+        };
+        let gas_floor = 21000 + 10 * calldata_tokens;
+
+        let gas_costs = if !call.to.is_zero() {
+            call_cost + data_cost
+        } else {
+            let deployed_code_cost = 200 * ret.len() as i64;
+            call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost
+        };
+
+        let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);
+        let gas_fee = Word::from(gas_final) * ext.gas_price;
         let src = ext.balance(&call.from).await?;
+
         if src < gas_fee {
             return Err(ExecutorError::InsufficientFunds {
                 have: src,
@@ -450,21 +470,23 @@ impl<T: EventTracer> Executor<T> {
             }
             .into());
         }
-        ext.account_mut(&call.from).value -= gas_fee;
-        evm.account.push(AccountTouch::SetValue(
-            call.from,
-            src,
-            src - gas_fee,
-        ));
-        self.tracer.push(Event {
-            data: EventData::Account(AccountEvent::SetValue {
-                address: call.from,
-                val: src,
-                new: src - gas_fee
-            }),
-            depth: 1,
-            reverted: false,
-        });*/
+        if !gas_fee.is_zero() {
+            ext.account_mut(&call.from).value -= gas_fee;
+            evm.account.push(AccountTouch::SetValue(
+                call.from,
+                src,
+                src - gas_fee,
+            ));
+            self.tracer.push(Event {
+                data: EventData::Fee { 
+                    gas: Word::from(gas_final), 
+                    price: ext.gas_price, 
+                    total: gas_fee,
+                },
+                depth: 0,
+                reverted: false,
+            });
+        }
 
         Ok((self.tracer, ret))
     }
@@ -582,6 +604,26 @@ impl<T: EventTracer> Executor<T> {
                     .for_each(|(i, word)| println!("{:>4}: {word:#02x}", i + 1));
                 println!();
             }
+        }
+
+        if !evm.stopped && !code.instructions.is_empty() {
+            self.tracer.push(Event {
+                depth: ctx.depth,
+                reverted: false,
+                data: EventData::OpCode {
+                    pc: evm.pc,
+                    op: 0x00,
+                    name: "STOP".to_string(),
+                    data: None,
+                    gas_cost: 0,
+                    gas_used: evm.gas.used,
+                    gas_back: 0,
+                    gas_left: evm.gas.remaining(),
+                    stack: evm.stack.clone(),
+                    memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                    debug: self.debug.take(),
+                },
+            });
         }
 
         (self.tracer, self.ret)
@@ -709,12 +751,18 @@ impl<T: EventTracer> Executor<T> {
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let m = evm.pop()?;
-                let res = if m.is_zero() {
+                let r = if m.is_zero() {
                     Word::zero()
                 } else {
                     (&a).add_modulo(&b, &m)
                 };
-                evm.push(res)?;
+                self.debug["ADDMOD"] = json!({
+                    "a": a,
+                    "b": b,
+                    "m": m,
+                    "r": r,
+                });
+                evm.push(r)?;
                 gas = 8.into();
             }
             0x09 => {
@@ -914,6 +962,10 @@ impl<T: EventTracer> Executor<T> {
                 // EIP-2929: Use proper address access tracking
                 gas = evm.address_access_cost(&addr, ext);
                 let value = ext.balance(&addr).await?;
+                self.debug["BALANCE"] = json!({
+                    "address": addr,
+                    "balance": value,
+                });
                 evm.push(value)?;
             }
             0x32 => {
@@ -1905,16 +1957,36 @@ impl<T: EventTracer> Executor<T> {
         };
 
         // Apply value transfer BEFORE call execution
-        let mut transferred = false;
         let sender_balance = ext.balance(&this).await?;
         let receiver_balance = ext.balance(&address).await?;
         if !value.is_zero() && !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
             if sender_balance >= value {
                 // For self-calls (where sender == receiver), no net balance change
                 if this != address {
-                    ext.account_mut(&this).value = sender_balance - value;
-                    ext.account_mut(&address).value = receiver_balance + value;
-                    transferred = true;
+                    let new_sender_balance = sender_balance - value;
+                    ext.account_mut(&this).value = new_sender_balance;
+                    evm.account.push(AccountTouch::SetValue(this, sender_balance, new_sender_balance));
+                    self.tracer.push(Event {
+                        data: EventData::Account(AccountEvent::SetValue {
+                            address: this,
+                            val: sender_balance,
+                            new: new_sender_balance,
+                        }),
+                        depth: ctx.depth,
+                        reverted: false,
+                    });
+                    let new_receiver_balance = receiver_balance + value;
+                    ext.account_mut(&address).value = new_receiver_balance;
+                    evm.account.push(AccountTouch::SetValue(address, receiver_balance, new_receiver_balance));
+                    self.tracer.push(Event {
+                        data: EventData::Account(AccountEvent::SetValue {
+                            address: address,
+                            val: receiver_balance,
+                            new: new_receiver_balance,
+                        }),
+                        depth: ctx.depth,
+                        reverted: false,
+                    });
                 }
             } else {
                 // TODO: insufficient funds to transfer
@@ -2002,11 +2074,6 @@ impl<T: EventTracer> Executor<T> {
             self.ret = ret;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            // Revert the value transfer if it was performed
-            if transferred {
-                ext.account_mut(&this).value = sender_balance;
-                ext.account_mut(&address).value = receiver_balance;
-            }
             return Ok(());
         }
 
@@ -2064,22 +2131,13 @@ impl<T: EventTracer> Executor<T> {
         let code = Decoder::decode(bytecode);
 
         let nonce = ext.nonce(&this).await?;
-        let created = if !matches!(ctx.call_type, CallType::Create2) {
-            this.create(nonce)
+        let created = if matches!(ctx.call_type, CallType::Create2) {
+            this.create2(&salt, &code.bytecode)
         } else {
-            // (See: https://www.evm.codes/?fork=cancun#f5)
-            // initialisation_code = memory[offset:offset+size]
-            // address = keccak256(0xff + sender_address + salt + keccak256(initialisation_code))[12:]
-            let mut buffer = Vec::with_capacity(1 + 20 + 32 + 32);
-            buffer.push(0xffu8);
-            buffer.extend_from_slice(&this.0);  // Use 'this' (current contract), not call.from
-            buffer.extend_from_slice(&salt.into_bytes());
-            buffer.extend_from_slice(&keccak256(&code.bytecode));  // Use raw bytecode from memory
-            let mut hash = keccak256(&buffer);
-            hash[0..12].copy_from_slice(&[0u8; 12]);
-            Address::from(&Word::from_bytes(&hash))
+            this.create(nonce)
         };
 
+        ext.created_accounts.insert(created);
         ext.warm_address(&created);
         evm.account.push(AccountTouch::WarmUp(created));
 
@@ -2146,8 +2204,12 @@ impl<T: EventTracer> Executor<T> {
                     "is_call": true,
                     "evm.gas.used": evm.gas.used,
                     "evm.gas.refund": evm.gas.refund,
-                    "call.created": created,
-                    "call.value": value,
+                    "created": {
+                        "opcode": ctx.call_type,
+                        "address": created,
+                        "creator": this,
+                        "nonce": nonce,
+                    },
                     "inner_evm.reverted": inner_evm.reverted,
                     "inner_call": inner_call,
                 }),
@@ -2173,8 +2235,42 @@ impl<T: EventTracer> Executor<T> {
         }
 
         let hash = keccak256(&code);
-        let (old_code, old_hash) = ext.code(&created).await?;
+        let _empty = ext.code(&created).await?;
         *ext.code_mut(&created) = (code.clone(), Word::from_bytes(&hash));
+
+        let sender_balance = ext.balance(&this).await?;
+        let receiver_balance = ext.balance(&created).await?;
+        if !value.is_zero() && !matches!(ctx.call_type, CallType::Static | CallType::Delegate) {
+            if sender_balance >= value {
+                let new_sender_balance = sender_balance - value;
+                ext.account_mut(&this).value = new_sender_balance;
+                evm.account.push(AccountTouch::SetValue(this, sender_balance, new_sender_balance));
+                self.tracer.push(Event {
+                    data: EventData::Account(AccountEvent::SetValue {
+                        address: this,
+                        val: sender_balance,
+                        new: new_sender_balance,
+                    }),
+                    depth: ctx.depth,
+                    reverted: false,
+                });
+                let new_receiver_balance = receiver_balance + value;
+                ext.account_mut(&created).value = new_receiver_balance;
+                evm.account.push(AccountTouch::SetValue(created, receiver_balance, new_receiver_balance));
+                self.tracer.push(Event {
+                    data: EventData::Account(AccountEvent::SetValue {
+                        address: created,
+                        val: receiver_balance,
+                        new: new_receiver_balance,
+                    }),
+                    depth: ctx.depth,
+                    reverted: false,
+                });
+            } else {
+                // TODO: insufficient funds to transfer
+            }
+        }
+
         let nonce = ext.account_mut(&this).nonce;
         ext.account_mut(&this).nonce += Word::one();
         evm.account.push(AccountTouch::SetNonce(
@@ -2191,14 +2287,20 @@ impl<T: EventTracer> Executor<T> {
             depth: ctx.depth,
             reverted: false,
         });
-        evm.account.push(AccountTouch::SetCode(
+
+        evm.account.push(AccountTouch::Create(
             created,
-            (old_hash, old_code),
-            (Word::from_bytes(&hash), code.clone()),
+            value,
+            Word::one(),
+            code.clone(),
+            Word::from_bytes(&hash),
         ));
         self.tracer.push(Event {
-            data: EventData::Account(AccountEvent::SetCode {
+            data: EventData::Account(AccountEvent::Create {
                 address: created,
+                creator: this,
+                nonce: Word::one(),
+                value: value,
                 codehash: Word::from_bytes(&hash),
                 bytecode: code.into(),
             }),

@@ -29,6 +29,14 @@ pub enum AccountEvent {
         codehash: Word,
         bytecode: Hex,
     },
+    Create {
+        address: Address,
+        creator: Address,
+        nonce: Word,
+        value: Word,
+        codehash: Word,
+        bytecode: Hex,
+    },
     // TODO: add necessary events in the executor
     // GetNonce {
     //     address: Address,
@@ -38,11 +46,11 @@ pub enum AccountEvent {
     //     address: Address,
     //     val: Word,
     // },
-    SetCode {
-        address: Address,
-        codehash: Word,
-        bytecode: Hex,
-    },
+    // Destroy {
+    //     address: Address,
+    //     beneficiary: Address,
+    //     balance: Word,
+    // },
     SetNonce {
         address: Address,
         val: u64,
@@ -146,6 +154,12 @@ pub enum EventData {
         topics: Vec<Word>,
         data: Hex,
     },
+
+    Fee {
+        gas: Word,
+        price: Word,
+        total: Word,
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

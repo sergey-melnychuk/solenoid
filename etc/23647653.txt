@@ -1,10 +1,6 @@
 📦 Fetched block number: 23647653 [with 249 txs]
 📦 Fetched block number: 23647653 [with 249 txs]
 ---
-### block=23647653 index=153 hash=0xdb80c246bc0ea10311ca6d21c60c98559a5e548fcd96a9036663a180da94f6c6
-REVM 	OK=true 	RET=empty	GAS=576265	TRACES=54773
-sole 	OK=true 	RET=true	GAS=match	TRACES=54773
----
 ### block=23647653 index=212 hash=0x8adfffaebf44cf435ba20599c11b9870729cc363427cbd1357a06fcaeb4ed030
 REVM 	OK=true 	RET=empty	GAS=592947	TRACES=41219
 sole 	OK=true 	RET=true	GAS=match	TRACES=41219
@@ -12,9 +8,5 @@ sole 	OK=true 	RET=true	GAS=match	TRACES=41219
 ### block=23647653 index=225 hash=0xb708a69e0a696d9d833a5ccaaa62849ec4d57619186eee9b49a314bc42014871
 REVM 	OK=true 	RET=empty	GAS=262419	TRACES=23889
 sole 	OK=true 	RET=true	GAS=match	TRACES=23889
----
-### block=23647653 index=226 hash=0x2b79fc732ddbacd6ec97bb5ff65f94222ad7078cf61a967931bf8cad5802d216
-REVM 	OK=true 	RET=<32>	GAS=194111	TRACES=12628
-sole 	OK=true 	RET=true	GAS=match	TRACES=12628
 
-(total: 249, matched: 245, invalid: 4)
+(total: 249, matched: 247, invalid: 2)

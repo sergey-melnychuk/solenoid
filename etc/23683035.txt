@@ -1,0 +1,16 @@
+📦 Fetched block number: 23683035 [with 208 txs]
+📦 Fetched block number: 23683035 [with 208 txs]
+---
+### block=23683035 index=19 hash=0x19c1246b8200c48b6d249791082efeedb259f2f342a0dea4399ca58086fda2bf
+REVM 	OK=false 	RET=empty	GAS=80000	TRACES=438
+sole 	OK=false 	RET=true	GAS=match	TRACES=438
+---
+### block=23683035 index=20 hash=0x2ec9f9a60dfac93b69f54dcb1ebc7f7d1266b5d86d00891350bea31cc2f3c6d2
+REVM 	OK=false 	RET=empty	GAS=80000	TRACES=438
+sole 	OK=false 	RET=true	GAS=match	TRACES=458
+---
+### block=23683035 index=164 hash=0x7420dff042cec686d5f74844fb36bf34d100036a801c34f5bf7563363aafd8b7
+REVM 	OK=true 	RET=empty	GAS=258492	TRACES=18408
+sole 	OK=true 	RET=true	GAS=match	TRACES=18408
+
+(total: 208, matched: 205, invalid: 3)

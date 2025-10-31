@@ -1,0 +1,16 @@
+📦 Fetched block number: 23678721 [with 227 txs]
+📦 Fetched block number: 23678721 [with 227 txs]
+---
+### block=23678721 index=21 hash=0x860ac1defd8b1907b3dd680337a3344604ab40e9fe30213e68612581c3fdc897
+REVM 	OK=false 	RET=empty	GAS=80000	TRACES=438
+sole 	OK=false 	RET=true	GAS=match	TRACES=438
+---
+### block=23678721 index=22 hash=0x27610b207f9c49d6c93ed6f398d0223f52e9dea4d41c1fb102597e1977f7a01b
+REVM 	OK=false 	RET=empty	GAS=80000	TRACES=438
+sole 	OK=false 	RET=true	GAS=match	TRACES=458
+---
+### block=23678721 index=137 hash=0xc90b93f50ccbc3f1238b8a7d4ea8fe40c09cbb43d958e88974a11a84eea7b41f
+REVM 	OK=false 	RET=true	GAS=220316	TRACES=92
+sole 	PANIC: 'task 423 panicked with message "index out of bounds: the len is 11219 but the index is 15616"'
+
+(total: 227, matched: 224, invalid: 3)

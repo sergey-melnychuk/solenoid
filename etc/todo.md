@@ -1,23 +1,16 @@
 DONE! 10 selected blocks etc/sync.sh are 100% gas match!
+TODO: Check post-tx state & logs in runner.
 
----
-
-23678686 0      // -38 gas_left on delegatecall
-
-23683764 137    // depth 1->3 after CREATE (not OOG)
-// STOP after CREATE at depth 3 is missing from traces
-
-23678721 137    // JUMP(I) dest beyond bytecode
-
-23683035 0      // ADDMOD mismatch
-23683035 1      // same
-23683035 2      // same
-
----
-
-etc/ab.sh 23678007 0
-// revm(<pid>,0x1f4cb0800) malloc: Failed to allocate segment from range group - out of space
-// TODO: create PR in revm with allocation sanity checks
+- 23678686
+- 23683764
+  - 137: created account must have nonce=1
+- 23678721
+  - 137: JUMP 'the len is 11219 but the index is 15616'
+- 23683035
+- 23678007
+  - 0: 'malloc: ... - out of space' by revm (PR to revm?)
+- 23690323
+  - 58: 'malloc: ... - out of space'
 
 ---
 

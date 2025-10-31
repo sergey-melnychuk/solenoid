@@ -2,7 +2,7 @@ use solenoid::{
     common::{
         address::{Address, addr},
         call::Call,
-        hash::{self, keccak256},
+        hash::keccak256,
         word::{Word, word},
     },
     decoder::Decoder,
@@ -53,6 +53,7 @@ async fn test_deploy() -> eyre::Result<()> {
     assert_eq!(ret, hex::decode(CALL.trim_start_matches("0x"))?);
 
     let code = hex::decode(CELL.trim_start_matches("0x"))?;
+    let hash = keccak256(&code);
     pretty_assertions::assert_eq!(
         evm.account,
         vec![
@@ -60,10 +61,12 @@ async fn test_deploy() -> eyre::Result<()> {
             AccountTouch::SetNonce(from, 0, 1),
             AccountTouch::WarmUp(created2),
             AccountTouch::SetNonce(created1, 0, 1),
-            AccountTouch::SetCode(
+            AccountTouch::Create(
                 created2,
-                (Word::from_bytes(&hash::empty()), vec![]),
-                (Word::from_bytes(&keccak256(&code)), code)
+                Word::zero(),
+                Word::one(),
+                code,
+                Word::from_bytes(&hash),
             ),
         ]
     );
