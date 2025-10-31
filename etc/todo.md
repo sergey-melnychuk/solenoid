@@ -2,8 +2,6 @@ DONE! 10 selected blocks etc/sync.sh are 100% gas match!
 TODO: Check post-tx state & logs in runner.
 
 - 23678686
-- 23683764
-  - 137: created account must have nonce=1
 - 23678721
   - 137: JUMP 'the len is 11219 but the index is 15616'
 - 23683035
