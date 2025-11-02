@@ -23,6 +23,19 @@ impl EthClient {
         }
     }
 
+    pub async fn chain_id(&self) -> eyre::Result<u64> {
+        let value = self
+            .rpc(serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "eth_chainId",
+                "params": [],
+                "id": 0
+            }))
+            .await?;
+        let chain_id = hex_to_u64(&value)?;
+        Ok(chain_id)
+    }
+
     pub async fn get_block_header(&self, number: Word) -> eyre::Result<Header> {
         let value = self
             .rpc(serde_json::json!({

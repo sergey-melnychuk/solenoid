@@ -6,7 +6,7 @@ use solenoid::{
     },
     decoder::{Bytecode, Decoder},
     eth::EthClient,
-    executor::{Evm, Executor, StateTouch},
+    executor::{AccountTouch, Evm, Executor},
     ext::Ext,
     tracer::NoopTracer,
 };
@@ -91,8 +91,13 @@ async fn test_get() -> eyre::Result<()> {
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 32]);
     assert_eq!(
-        evm.state,
-        vec![StateTouch::Get(to, Word::zero(), Word::zero(), false)]
+        evm.touches,
+        vec![
+            AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
+            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
+            AccountTouch::GetState(to, Word::zero(), Word::zero(), false),
+        ]
     );
     Ok(())
 }
@@ -117,8 +122,13 @@ async fn test_get_with_override() -> eyre::Result<()> {
         hex::decode("0000000000000000000000000000000000000000000000000000000000000001")?
     );
     assert_eq!(
-        evm.state,
-        vec![StateTouch::Get(to, Word::zero(), Word::one(), false)]
+        evm.touches,
+        vec![
+            AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
+            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
+            AccountTouch::GetState(to, Word::zero(), Word::one(), false),
+        ]
     );
     Ok(())
 }
@@ -134,8 +144,13 @@ async fn test_dec() -> eyre::Result<()> {
         hex::decode("4e487b710000000000000000000000000000000000000000000000000000000000000011")?
     );
     assert_eq!(
-        evm.state,
-        vec![StateTouch::Get(to, Word::zero(), Word::zero(), false)]
+        evm.touches,
+        vec![
+            AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
+            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
+            AccountTouch::GetState(to, Word::zero(), Word::zero(), false),
+        ]
     );
     Ok(())
 }
@@ -157,10 +172,13 @@ async fn test_dec_with_override() -> eyre::Result<()> {
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 0]);
     assert_eq!(
-        evm.state,
+        evm.touches,
         vec![
-            StateTouch::Get(to, Word::zero(), Word::one(), false),
-            StateTouch::Put(to, Word::zero(), Word::one(), Word::zero(), true),
+            AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
+            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
+            AccountTouch::GetState(to, Word::zero(), Word::one(), false),
+            AccountTouch::SetState(to, Word::zero(), Word::one(), Word::zero(), true),
         ]
     );
     Ok(())
@@ -174,10 +192,13 @@ async fn test_inc() -> eyre::Result<()> {
     assert!(!evm.reverted);
     assert_eq!(ret, vec![0u8; 0]);
     assert_eq!(
-        evm.state,
+        evm.touches,
         vec![
-            StateTouch::Get(to, Word::zero(), Word::zero(), false),
-            StateTouch::Put(to, Word::zero(), Word::zero(), Word::one(), true),
+            AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
+            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
+            AccountTouch::GetState(to, Word::zero(), Word::zero(), false),
+            AccountTouch::SetState(to, Word::zero(), Word::zero(), Word::one(), true),
         ]
     );
     Ok(())
@@ -194,8 +215,13 @@ async fn test_set() -> eyre::Result<()> {
     assert_eq!(ret, vec![0u8; 0]);
 
     assert_eq!(
-        evm.state,
-        vec![StateTouch::Put(to, Word::zero(), Word::zero(), val, false)]
+        evm.touches,
+        vec![
+            AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
+            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
+            AccountTouch::SetState(to, Word::zero(), Word::zero(), val, false),
+        ]
     );
     assert_eq!(evm.gas.used, 22309);
     Ok(())

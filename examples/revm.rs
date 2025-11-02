@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
 use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::network::primitives::BlockTransactions;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::eyre::{self, Result};
+use evm_tracer::revm::primitives::{StorageKey, StorageValue};
+use serde_json::json;
 use solenoid::common::hash;
 use solenoid::common::word::Word;
 
@@ -57,6 +61,30 @@ async fn main() -> Result<()> {
         let path = format!("revm.{block_number}.{skip}.log");
         evm_tracer::aux::dump(&path, &traces)?;
         println!("TRACES: {} in {path}", traces.len());
+
+        // let json = serde_json::to_string_pretty(&result.state)?;
+        // eprintln!("{json}");
+
+        let state= result.state.iter().map(|(address, account)| {
+            let state = account.storage.iter()
+                .filter(|(_, value)| value.present_value != value.original_value)
+                .map(|(key, value)| -> (StorageKey, StorageValue) {
+                    (key.clone(), value.present_value.clone())
+                })
+                .collect::<HashMap<_, _>>();
+            let mut json = json!({
+                "balance": account.info.balance,
+                "nonce": account.info.nonce,
+                "code": account.info.code_hash,
+            });
+            if !state.is_empty() {
+                json["state"] = serde_json::to_value(state).unwrap();
+            }
+            (*address, json)
+        }).collect::<HashMap<_, _>>();
+        let json = serde_json::to_string_pretty(&state)?;
+        eprintln!("{json}");
+
     }
     Ok(())
 }

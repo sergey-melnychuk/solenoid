@@ -7,7 +7,7 @@ use solenoid::{
     },
     decoder::Decoder,
     eth::EthClient,
-    executor::{AccountTouch, Evm, Executor, StateTouch},
+    executor::{AccountTouch, Evm, Executor},
     ext::Ext,
     tracer::NoopTracer,
 };
@@ -55,10 +55,12 @@ async fn test_deploy() -> eyre::Result<()> {
     let code = hex::decode(CELL.trim_start_matches("0x"))?;
     let hash = keccak256(&code);
     pretty_assertions::assert_eq!(
-        evm.account,
+        evm.touches,
         vec![
             AccountTouch::WarmUp(from),
             AccountTouch::SetNonce(from, 0, 1),
+            AccountTouch::GetState(created1, Word::zero(), Word::zero(), false),
+            AccountTouch::SetState(created1, Word::zero(), Word::zero(), (&from).into(), true,),
             AccountTouch::WarmUp(created2),
             AccountTouch::SetNonce(created1, 0, 1),
             AccountTouch::Create(
@@ -68,16 +70,9 @@ async fn test_deploy() -> eyre::Result<()> {
                 code,
                 Word::from_bytes(&hash),
             ),
-        ]
-    );
-    pretty_assertions::assert_eq!(
-        evm.state,
-        vec![
-            StateTouch::Get(created1, Word::zero(), Word::zero(), false),
-            StateTouch::Put(created1, Word::zero(), Word::zero(), (&from).into(), true,),
-            StateTouch::Put(created2, Word::zero(), Word::zero(), word("0x42"), false),
-            StateTouch::Get(created1, Word::one(), Word::zero(), false),
-            StateTouch::Put(
+            AccountTouch::SetState(created2, Word::zero(), Word::zero(), word("0x42"), false),
+            AccountTouch::GetState(created1, Word::one(), Word::zero(), false),
+            AccountTouch::SetState(
                 created1,
                 Word::one(),
                 Word::zero(),

@@ -33,6 +33,7 @@ pub struct Ext {
     pub accessed_addresses: HashSet<Address>,
     pub accessed_storage: HashSet<(Address, Word)>,
     pub created_accounts: HashSet<Address>,
+    pub destroyed_accounts: HashSet<Address>,
 
     pub gas_price: Word,
 }
@@ -51,6 +52,7 @@ impl Ext {
             accessed_addresses: HashSet::default(),
             accessed_storage: HashSet::default(),
             created_accounts: HashSet::default(),
+            destroyed_accounts: HashSet::default(),
             gas_price: Word::zero(),
         }
     }
@@ -76,6 +78,14 @@ impl Ext {
         self.accessed_addresses.clear();
         self.accessed_storage.clear();
         self.created_accounts.clear();
+
+        // Apply SELFDESTRUCT
+        let destroyed = self.destroyed_accounts
+            .drain()
+            .collect::<Vec<_>>();
+        for addr in destroyed {
+            self.state.remove(&addr);
+        }
     }
 
     /// Check if an address has been accessed in the current transaction (EIP-2929)

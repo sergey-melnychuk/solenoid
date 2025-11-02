@@ -1,4 +1,4 @@
-use solenoid::common::word::word;
+use solenoid::{common::word::word, executor::AccountTouch};
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
@@ -6,7 +6,7 @@ async fn main() -> eyre::Result<()> {
         common::{address::addr, call::Call, word::Word},
         decoder::{Bytecode, Decoder},
         eth::EthClient,
-        executor::{Evm, Executor, StateTouch},
+        executor::{Evm, Executor},
         ext::Ext,
         tracer::{EventTracer, LoggingTracer},
     };
@@ -82,17 +82,17 @@ async fn main() -> eyre::Result<()> {
 
     println!("GAS: {}", evm.gas.used);
     println!("---");
-    evm.state.iter().for_each(|st| match st {
-        StateTouch::Put(addr, key, val, new, _) => {
+    evm.touches.iter().for_each(|st| match st {
+        AccountTouch::SetState(addr, key, val, new, _) => {
             println!("W:{addr}[0x{key:0x}]=0x{val:0x}->0x{new:0x}");
         }
-        StateTouch::Get(addr, key, val, _) => {
+        AccountTouch::GetState(addr, key, val, _) => {
             println!("R:{addr}[0x{key:0x}]=0x{val:0x}");
         }
         _ => (),
     });
     println!("---");
-    evm.account.iter().for_each(|acc| {
+    evm.touches.iter().for_each(|acc| {
         use solenoid::executor::AccountTouch;
         match acc {
             AccountTouch::Create(addr, _balance, _nonce, code, hash) => {

@@ -1,6 +1,30 @@
 DONE! 10 selected blocks etc/sync.sh are 100% gas match!
 TODO: Check post-tx state & logs in runner.
 
+Blocks that fail with "stack overflow":
+## Set min stack size to 16 Mb
+RUST_MIN_STACK=16777216
+
+---
+
+etc/recent.sh 23712910 10
+
+- 23713970 
+  - 50
+  - 227: missing account 0xdb38e3ba484f46412d434656d160a8c89585318d
+  - 230
+- 23713971
+  - 38
+- 23713972
+  - 0
+  - 2: executor.rs:1478:41: index out of bounds: the len is 11219 but the index is 15104
+
+---
+
+etc/recent.sh 23705690 10
+
+---
+
 - 23678686
 - 23678721
   - 137: JUMP 'the len is 11219 but the index is 15616'

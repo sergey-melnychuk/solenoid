@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::{pin::Pin, sync::Arc};
 
 use evm_tracer::alloy_eips::BlockNumberOrTag;
@@ -98,6 +99,12 @@ async fn main() -> eyre::Result<()> {
     let url = std::env::var("URL")?;
     let eth = eth::EthClient::new(&url);
 
+    // Fail fast if the RPC URL is invalid or unresponsive
+    let chain_id = eth.chain_id().await?;
+    if chain_id != 1 {
+        eyre::bail!("Unexpected chain ID: {chain_id}");
+    }
+
     let block_number = std::env::args().nth(1);
     let block_number = if block_number.as_ref().map(|s| s.as_str()) == Some("latest") {
         let (block_number, _) = eth.get_latest_block().await?;
@@ -149,6 +156,9 @@ async fn main() -> eyre::Result<()> {
 
     let mut matched = 0;
     for idx in 0..len {
+        eprint!("\rTX: {idx:>3}/{:>3}", len-1);
+        std::io::stdout().flush().unwrap();
+
         let tx = txs[idx].clone();
         let (revm_result, revm_traces) = g(tx)?;
 
