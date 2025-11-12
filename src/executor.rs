@@ -347,12 +347,14 @@ impl<T: EventTracer> Executor<T> {
             }
             .into());
         }
-        ext.account_mut(&call.from).value -= gas_prepayment;
-        evm.touches.push(AccountTouch::SetValue(
-            call.from,
-            sender_balance,
-            sender_balance - gas_prepayment,
-        ));
+        if !gas_prepayment.is_zero() {
+            ext.account_mut(&call.from).value -= gas_prepayment;
+            evm.touches.push(AccountTouch::SetValue(
+                call.from,
+                sender_balance,
+                sender_balance - gas_prepayment,
+            ));
+        }
 
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
