@@ -22,7 +22,7 @@ impl Address {
         buffer.push(0xffu8);
         buffer.extend_from_slice(&self.0);  // Use 'this' (current contract), not call.from
         buffer.extend_from_slice(&salt.into_bytes());
-        buffer.extend_from_slice(&keccak256(&code));  // Use raw bytecode from memory
+        buffer.extend_from_slice(&keccak256(code));  // Use raw bytecode from memory
         let mut hash = keccak256(&buffer);
         hash[0..12].copy_from_slice(&[0u8; 12]);
         Address::from(&Word::from_bytes(&hash))
@@ -48,10 +48,8 @@ impl Address {
         
         // Calculate the total payload size for the list
         // Payload includes: address_prefix (1) + address (20) + nonce_encoding
-        let nonce_encoding_len = if nonce_bytes.is_empty() {
-            1  // 0x80 for integer 0
-        } else if nonce_bytes.len() == 1 && nonce_bytes[0] < 0x80 {
-            1  // single byte for integers 1-127
+        let nonce_encoding_len = if nonce_bytes.is_empty() || nonce_bytes.len() == 1 && nonce_bytes[0] < 0x80 {
+            1  // 0x80 for integer 0 OR single byte for integers 1-127
         } else {
             1 + nonce_bytes.len()  // prefix + bytes for integers > 127
         };

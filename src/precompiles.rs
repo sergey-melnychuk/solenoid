@@ -253,7 +253,7 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
                         break;
                     }
                 }
-                8 * (exp_len - 32) + bit_len.saturating_sub(1).max(0)
+                8 * (exp_len - 32) + bit_len.saturating_sub(1)
             } else {
                 8 * (exp_len - 32)
             }

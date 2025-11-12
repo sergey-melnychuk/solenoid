@@ -760,7 +760,7 @@ impl<T: EventTracer> Executor<T> {
                 let r = if m.is_zero() {
                     Word::zero()
                 } else {
-                    (&a).add_modulo(&b, &m)
+                    a.add_modulo(&b, &m)
                 };
                 self.debug["ADDMOD"] = json!({
                     "a": a,
@@ -2014,7 +2014,7 @@ impl<T: EventTracer> Executor<T> {
                     evm.touches.push(AccountTouch::SetValue(address, receiver_balance, new_receiver_balance));
                     self.tracer.push(Event {
                         data: EventData::Account(AccountEvent::SetValue {
-                            address: address,
+                            address,
                             val: receiver_balance,
                             new: new_receiver_balance,
                         }),
@@ -2336,7 +2336,7 @@ impl<T: EventTracer> Executor<T> {
                 address: created,
                 creator: this,
                 nonce: Word::one(),
-                value: value,
+                value,
                 codehash: Word::from_bytes(&hash),
                 bytecode: code.into(),
             }),
