@@ -337,6 +337,23 @@ impl<T: EventTracer> Executor<T> {
             evm.touches.push(AccountTouch::WarmUp(coinbase));
         }
         
+        // Deduct upfront gas payment before execution
+        let gas_prepayment = call.gas * ext.gas_price;
+        let sender_balance = ext.balance(&call.from).await?;
+        if sender_balance < gas_prepayment {
+            return Err(ExecutorError::InsufficientFunds {
+                have: sender_balance,
+                need: gas_prepayment,
+            }
+            .into());
+        }
+        ext.account_mut(&call.from).value -= gas_prepayment;
+        evm.touches.push(AccountTouch::SetValue(
+            call.from,
+            sender_balance,
+            sender_balance - gas_prepayment,
+        ));
+        
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
         gas -= call_cost;
@@ -451,33 +468,31 @@ impl<T: EventTracer> Executor<T> {
         };
 
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);
-        let gas_fee = Word::from(gas_final) * ext.gas_price;
-        let src = ext.balance(&call.from).await?;
-
-        if src < gas_fee {
-            return Err(ExecutorError::InsufficientFunds {
-                have: src,
-                need: gas_fee,
-            }
-            .into());
-        }
-        if !gas_fee.is_zero() {
-            ext.account_mut(&call.from).value -= gas_fee;
+        let gas_used_fee = Word::from(gas_final) * ext.gas_price;
+        let gas_refund = gas_prepayment - gas_used_fee;
+        
+        // Refund unused gas to sender
+        if !gas_refund.is_zero() {
+            let src = ext.balance(&call.from).await?;
+            let new_balance = src + gas_refund;
+            ext.account_mut(&call.from).value = new_balance;
             evm.touches.push(AccountTouch::SetValue(
                 call.from,
                 src,
-                src - gas_fee,
+                new_balance,
             ));
-            self.tracer.push(Event {
-                data: EventData::Fee { 
-                    gas: Word::from(gas_final), 
-                    price: ext.gas_price, 
-                    total: gas_fee,
-                },
-                depth: 0,
-                reverted: false,
-            });
         }
+        
+        // Emit fee event showing gas consumed
+        self.tracer.push(Event {
+            data: EventData::Fee { 
+                gas: Word::from(gas_final), 
+                price: ext.gas_price, 
+                total: gas_used_fee,
+            },
+            depth: 0,
+            reverted: false,
+        });
 
         Ok((self.tracer, ret))
     }
@@ -2052,7 +2067,7 @@ impl<T: EventTracer> Executor<T> {
                 gas_left: evm.gas.remaining() - total_gas_cost_for_tracing,
                 debug: json!({
                     "is_call": true,
-                    "gas_left": evm.gas.remaining() - base_gas_cost,
+                    "gas_left": evm.gas.remaining() - total_gas_cost_for_tracing,
                     "gas_cost": total_gas_cost_for_tracing,
                     "evm.gas.used": evm.gas.used,
                     "evm.gas.refund": evm.gas.refund,
@@ -2199,8 +2214,7 @@ impl<T: EventTracer> Executor<T> {
         } else {
             0
         };
-        let base_gas_cost =
-            memory_expansion_cost + create_cost + init_code_cost + deployed_code_cost;
+        let base_cost_without_deploy = memory_expansion_cost + create_cost + init_code_cost;
     
         // HERE: TODO: remove this label
         let total_gas_cost_for_tracing = memory_expansion_cost + create_cost + init_code_cost + gas_to_forward;
@@ -2236,14 +2250,18 @@ impl<T: EventTracer> Executor<T> {
 
         self.tracer.join(tracer, inner_evm.reverted);
 
-        if gas_to_forward < base_gas_cost + inner_evm.gas.used {
-            evm.gas.used += gas_to_forward + base_gas_cost - deployed_code_cost;
+        // Check if there's enough gas left to pay for deployed code
+        // gas_to_forward is what was given to inner call
+        // After inner execution, we need: inner_evm.gas.used + deployed_code_cost <= gas_to_forward
+        if gas_to_forward < inner_evm.gas.used + deployed_code_cost {
+            // Not enough gas to deploy the code - creation fails
+            evm.gas.used += base_cost_without_deploy + gas_to_forward;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
             return Ok(());
         }
 
-        evm.gas.used += base_gas_cost + inner_evm.gas.used;
+        evm.gas.used += base_cost_without_deploy + deployed_code_cost + inner_evm.gas.used;
         *gas = Word::zero();
 
         if inner_evm.reverted {
