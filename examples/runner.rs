@@ -20,7 +20,11 @@ use solenoid::{
 use evm_tracer::{OpcodeTrace, run::TxResult};
 
 fn as_tx_result(gas_costs: i64, gas_floor: i64, result: CallResult<LoggingTracer>) -> TxResult {
-    let gas = result.evm.gas.finalized(gas_costs, result.evm.reverted).max(gas_floor);
+    let gas = result
+        .evm
+        .gas
+        .finalized(gas_costs, result.evm.reverted)
+        .max(gas_floor);
     TxResult {
         gas,
         ret: result.ret,
@@ -156,7 +160,7 @@ async fn main() -> eyre::Result<()> {
 
     let mut matched = 0;
     for idx in 0..len {
-        eprint!("\rTX: {idx:>3}/{:>3}", len-1);
+        eprint!("\rTX: {idx:>3}/{:>3}", len - 1);
         std::io::stdout().flush().unwrap();
 
         let tx = txs[idx].clone();
@@ -181,19 +185,25 @@ async fn main() -> eyre::Result<()> {
                 let revm_trace_file = format!("revm.{}.{}.log", block_number, idx);
                 let sole_trace_file = format!("sole.{}.{}.log", block_number, idx);
 
-                std::fs::write(&revm_trace_file,
-                    revm_traces.iter()
+                std::fs::write(
+                    &revm_trace_file,
+                    revm_traces
+                        .iter()
                         .map(|t| serde_json::to_string(t).unwrap())
                         .collect::<Vec<_>>()
-                        .join("\n")
-                ).ok();
+                        .join("\n"),
+                )
+                .ok();
 
-                std::fs::write(&sole_trace_file,
-                    sole_traces.iter()
+                std::fs::write(
+                    &sole_trace_file,
+                    sole_traces
+                        .iter()
                         .map(|t| serde_json::to_string(t).unwrap())
                         .collect::<Vec<_>>()
-                        .join("\n")
-                ).ok();
+                        .join("\n"),
+                )
+                .ok();
 
                 let ret = if revm_result.ret.is_empty() {
                     "empty".to_string()

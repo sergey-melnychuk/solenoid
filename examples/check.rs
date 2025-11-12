@@ -1,5 +1,5 @@
 use crossterm::{
-    event::{read, KeyCode, KeyModifiers},
+    event::{KeyCode, KeyModifiers, read},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
 use evm_tracer::OpcodeTrace;
@@ -126,12 +126,12 @@ fn main() -> eyre::Result<()> {
                     KeyCode::Char('d') | KeyCode::Char('D') => {
                         p = Predicate::Depth(b.depth + 1);
                         explore = false;
-                        step = if !shift {1} else {-1};
+                        step = if !shift { 1 } else { -1 };
                     }
                     KeyCode::Char('c') | KeyCode::Char('C') => {
                         p = Predicate::IsCall;
                         explore = false;
-                        step = if !shift {1} else {-1};
+                        step = if !shift { 1 } else { -1 };
                     }
                     KeyCode::Char('g') | KeyCode::Char('G') => {
                         explore = true;
@@ -148,7 +148,7 @@ fn main() -> eyre::Result<()> {
             }
         }
 
-        if !failed && index == len-1 && step > 0 {
+        if !failed && index == len - 1 && step > 0 {
             explore = true;
         }
         if index == 0 && step < 0 {

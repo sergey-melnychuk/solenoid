@@ -65,26 +65,31 @@ async fn main() -> Result<()> {
         // let json = serde_json::to_string_pretty(&result.state)?;
         // eprintln!("{json}");
 
-        let state= result.state.iter().map(|(address, account)| {
-            let state = account.storage.iter()
-                .filter(|(_, value)| value.present_value != value.original_value)
-                .map(|(key, value)| -> (StorageKey, StorageValue) {
-                    (key.clone(), value.present_value.clone())
-                })
-                .collect::<HashMap<_, _>>();
-            let mut json = json!({
-                "balance": account.info.balance,
-                "nonce": account.info.nonce,
-                "code": account.info.code_hash,
-            });
-            if !state.is_empty() {
-                json["state"] = serde_json::to_value(state).unwrap();
-            }
-            (*address, json)
-        }).collect::<HashMap<_, _>>();
+        let state = result
+            .state
+            .iter()
+            .map(|(address, account)| {
+                let state = account
+                    .storage
+                    .iter()
+                    .filter(|(_, value)| value.present_value != value.original_value)
+                    .map(|(key, value)| -> (StorageKey, StorageValue) {
+                        (key.clone(), value.present_value.clone())
+                    })
+                    .collect::<HashMap<_, _>>();
+                let mut json = json!({
+                    "balance": account.info.balance,
+                    "nonce": account.info.nonce,
+                    "code": account.info.code_hash,
+                });
+                if !state.is_empty() {
+                    json["state"] = serde_json::to_value(state).unwrap();
+                }
+                (*address, json)
+            })
+            .collect::<HashMap<_, _>>();
         let json = serde_json::to_string_pretty(&state)?;
         eprintln!("{json}");
-
     }
     Ok(())
 }

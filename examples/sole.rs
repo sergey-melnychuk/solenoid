@@ -96,7 +96,10 @@ async fn main() -> eyre::Result<()> {
                     tx.input.as_ref().iter().filter(|byte| *byte != &0).count();
                 nonzero_bytes_count * 16 + (total_calldata_len - nonzero_bytes_count) * 4
             } as i64;
-            let total_gas = result.evm.gas.finalized(call_cost + data_cost, result.evm.reverted);
+            let total_gas = result
+                .evm
+                .gas
+                .finalized(call_cost + data_cost, result.evm.reverted);
             let total_gas = total_gas.max(gas_floor);
 
             eprintln!("GAS: {total_gas}");

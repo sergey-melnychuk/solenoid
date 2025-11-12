@@ -20,9 +20,9 @@ impl Address {
         // address = keccak256(0xff + sender_address + salt + keccak256(initialisation_code))[12:]
         let mut buffer = Vec::with_capacity(1 + 20 + 32 + 32);
         buffer.push(0xffu8);
-        buffer.extend_from_slice(&self.0);  // Use 'this' (current contract), not call.from
+        buffer.extend_from_slice(&self.0); // Use 'this' (current contract), not call.from
         buffer.extend_from_slice(&salt.into_bytes());
-        buffer.extend_from_slice(&keccak256(code));  // Use raw bytecode from memory
+        buffer.extend_from_slice(&keccak256(code)); // Use raw bytecode from memory
         let mut hash = keccak256(&buffer);
         hash[0..12].copy_from_slice(&[0u8; 12]);
         Address::from(&Word::from_bytes(&hash))
@@ -45,20 +45,21 @@ impl Address {
             .collect::<Vec<_>>();
 
         let mut buffer = Vec::new();
-        
+
         // Calculate the total payload size for the list
         // Payload includes: address_prefix (1) + address (20) + nonce_encoding
-        let nonce_encoding_len = if nonce_bytes.is_empty() || nonce_bytes.len() == 1 && nonce_bytes[0] < 0x80 {
-            1  // 0x80 for integer 0 OR single byte for integers 1-127
-        } else {
-            1 + nonce_bytes.len()  // prefix + bytes for integers > 127
-        };
+        let nonce_encoding_len =
+            if nonce_bytes.is_empty() || nonce_bytes.len() == 1 && nonce_bytes[0] < 0x80 {
+                1 // 0x80 for integer 0 OR single byte for integers 1-127
+            } else {
+                1 + nonce_bytes.len() // prefix + bytes for integers > 127
+            };
         let payload_len = 1 + address_bytes.len() + nonce_encoding_len;
-        
+
         buffer.push(0xc0u8 + payload_len as u8);
         buffer.push(0x80u8 + address_bytes.len() as u8);
         buffer.extend_from_slice(&address_bytes);
-        
+
         // RLP encode the nonce according to spec
         if nonce_bytes.is_empty() {
             // Integer 0 is encoded as 0x80 (empty byte string)

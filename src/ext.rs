@@ -80,9 +80,7 @@ impl Ext {
         self.created_accounts.clear();
 
         // Apply SELFDESTRUCT
-        let destroyed = self.destroyed_accounts
-            .drain()
-            .collect::<Vec<_>>();
+        let destroyed = self.destroyed_accounts.drain().collect::<Vec<_>>();
         for addr in destroyed {
             self.state.remove(&addr);
         }

@@ -336,7 +336,7 @@ impl<T: EventTracer> Executor<T> {
             ext.warm_address(&coinbase);
             evm.touches.push(AccountTouch::WarmUp(coinbase));
         }
-        
+
         // Deduct upfront gas payment before execution
         let gas_prepayment = call.gas * ext.gas_price;
         let sender_balance = ext.balance(&call.from).await?;
@@ -353,7 +353,7 @@ impl<T: EventTracer> Executor<T> {
             sender_balance,
             sender_balance - gas_prepayment,
         ));
-        
+
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
         gas -= call_cost;
@@ -470,24 +470,21 @@ impl<T: EventTracer> Executor<T> {
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);
         let gas_used_fee = Word::from(gas_final) * ext.gas_price;
         let gas_refund = gas_prepayment - gas_used_fee;
-        
+
         // Refund unused gas to sender
         if !gas_refund.is_zero() {
             let src = ext.balance(&call.from).await?;
             let new_balance = src + gas_refund;
             ext.account_mut(&call.from).value = new_balance;
-            evm.touches.push(AccountTouch::SetValue(
-                call.from,
-                src,
-                new_balance,
-            ));
+            evm.touches
+                .push(AccountTouch::SetValue(call.from, src, new_balance));
         }
-        
+
         // Emit fee event showing gas consumed
         self.tracer.push(Event {
-            data: EventData::Fee { 
-                gas: Word::from(gas_final), 
-                price: ext.gas_price, 
+            data: EventData::Fee {
+                gas: Word::from(gas_final),
+                price: ext.gas_price,
                 total: gas_used_fee,
             },
             depth: 0,
@@ -529,7 +526,8 @@ impl<T: EventTracer> Executor<T> {
             let instruction = &code.instructions[pc];
             match self
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
-                .await {
+                .await
+            {
                 Ok(cost) => {
                     let cost = cost.as_i64();
                     let charged_cost = cost.min(evm.gas.remaining());
@@ -1062,7 +1060,7 @@ impl<T: EventTracer> Executor<T> {
                 if code.len() < offset + size {
                     if offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + size).into());
-                    }        
+                    }
                     code.resize(offset + size, 0);
                 }
                 evm.memory[dest_offset..dest_offset + size]
@@ -1295,7 +1293,8 @@ impl<T: EventTracer> Executor<T> {
                 }
                 let val = evm.get(ext, &this, &key).await?;
                 evm.push(val)?;
-                evm.touches.push(AccountTouch::GetState(this, key, val, is_warm));
+                evm.touches
+                    .push(AccountTouch::GetState(this, key, val, is_warm));
                 self.tracer.push(Event {
                     data: EventData::State(StateEvent::Get {
                         address: this,
@@ -1478,7 +1477,9 @@ impl<T: EventTracer> Executor<T> {
                 let dest = evm.pop()?.as_usize();
                 let dest = code.resolve_jump(dest).unwrap_or(dest);
                 if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
-                    evm.error(ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into())?;
+                    evm.error(
+                        ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into(),
+                    )?;
                 }
                 evm.pc = dest;
                 pc_increment = false;
@@ -1491,7 +1492,9 @@ impl<T: EventTracer> Executor<T> {
                 let cond = evm.pop()?;
                 if !cond.is_zero() {
                     if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
-                        evm.error(ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into())?;
+                        evm.error(
+                            ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into(),
+                        )?;
                     }
                     evm.pc = dest;
                     pc_increment = false;
@@ -1619,7 +1622,7 @@ impl<T: EventTracer> Executor<T> {
                 let data = if offset + size > evm.memory.len() {
                     if offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(offset + size).into());
-                    }        
+                    }
                     let mut data = evm.memory.clone();
                     data.resize(offset + size, 0);
                     data
@@ -1770,7 +1773,7 @@ impl<T: EventTracer> Executor<T> {
                     0
                 };
 
-                let total_gas_cost = opcode_cost + access_cost + create_cost; 
+                let total_gas_cost = opcode_cost + access_cost + create_cost;
                 gas = total_gas_cost.into();
             }
             _ => {
@@ -1811,8 +1814,16 @@ impl<T: EventTracer> Executor<T> {
         let ret_size = evm.pop()?.as_usize();
 
         // Handle memory expansion for arguments and return data
-        let args_max = if args_size > 0 { args_offset + args_size } else { 0 };
-        let ret_max = if ret_size > 0 { ret_offset + ret_size } else { 0 };
+        let args_max = if args_size > 0 {
+            args_offset + args_size
+        } else {
+            0
+        };
+        let ret_max = if ret_size > 0 {
+            ret_offset + ret_size
+        } else {
+            0
+        };
         let size = args_max.max(ret_max);
         if size > evm.memory.len() {
             if size > ALLOCATION_SANITY_LIMIT {
@@ -1999,7 +2010,11 @@ impl<T: EventTracer> Executor<T> {
                 if this != address {
                     let new_sender_balance = sender_balance - value;
                     ext.account_mut(&this).value = new_sender_balance;
-                    evm.touches.push(AccountTouch::SetValue(this, sender_balance, new_sender_balance));
+                    evm.touches.push(AccountTouch::SetValue(
+                        this,
+                        sender_balance,
+                        new_sender_balance,
+                    ));
                     self.tracer.push(Event {
                         data: EventData::Account(AccountEvent::SetValue {
                             address: this,
@@ -2011,7 +2026,11 @@ impl<T: EventTracer> Executor<T> {
                     });
                     let new_receiver_balance = receiver_balance + value;
                     ext.account_mut(&address).value = new_receiver_balance;
-                    evm.touches.push(AccountTouch::SetValue(address, receiver_balance, new_receiver_balance));
+                    evm.touches.push(AccountTouch::SetValue(
+                        address,
+                        receiver_balance,
+                        new_receiver_balance,
+                    ));
                     self.tracer.push(Event {
                         data: EventData::Account(AccountEvent::SetValue {
                             address,
@@ -2155,11 +2174,11 @@ impl<T: EventTracer> Executor<T> {
 
         let bytecode = evm.memory[offset..offset + size].to_vec();
         let word_size = bytecode.len().div_ceil(32) as i64;
-        let init_code_cost = 2 * word_size + 
-            if matches!(ctx.call_type, CallType::Create2) {  
-                6 * word_size 
-            } else { 
-                0 
+        let init_code_cost = 2 * word_size
+            + if matches!(ctx.call_type, CallType::Create2) {
+                6 * word_size
+            } else {
+                0
             };
         let code = Decoder::decode(bytecode);
 
@@ -2215,9 +2234,10 @@ impl<T: EventTracer> Executor<T> {
             0
         };
         let base_cost_without_deploy = memory_expansion_cost + create_cost + init_code_cost;
-    
+
         // HERE: TODO: remove this label
-        let total_gas_cost_for_tracing = memory_expansion_cost + create_cost + init_code_cost + gas_to_forward;
+        let total_gas_cost_for_tracing =
+            memory_expansion_cost + create_cost + init_code_cost + gas_to_forward;
         self.tracer.push(Event {
             depth: ctx.depth,
             reverted: false,
@@ -2280,7 +2300,11 @@ impl<T: EventTracer> Executor<T> {
             if sender_balance >= value {
                 let new_sender_balance = sender_balance - value;
                 ext.account_mut(&this).value = new_sender_balance;
-                evm.touches.push(AccountTouch::SetValue(this, sender_balance, new_sender_balance));
+                evm.touches.push(AccountTouch::SetValue(
+                    this,
+                    sender_balance,
+                    new_sender_balance,
+                ));
                 self.tracer.push(Event {
                     data: EventData::Account(AccountEvent::SetValue {
                         address: this,
@@ -2292,7 +2316,11 @@ impl<T: EventTracer> Executor<T> {
                 });
                 let new_receiver_balance = receiver_balance + value;
                 ext.account_mut(&created).value = new_receiver_balance;
-                evm.touches.push(AccountTouch::SetValue(created, receiver_balance, new_receiver_balance));
+                evm.touches.push(AccountTouch::SetValue(
+                    created,
+                    receiver_balance,
+                    new_receiver_balance,
+                ));
                 self.tracer.push(Event {
                     data: EventData::Account(AccountEvent::SetValue {
                         address: created,

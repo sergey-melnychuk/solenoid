@@ -159,7 +159,7 @@ pub enum EventData {
         gas: Word,
         price: Word,
         total: Word,
-    }
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
