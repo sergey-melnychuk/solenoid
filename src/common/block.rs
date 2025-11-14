@@ -14,6 +14,10 @@ pub struct Tx {
     pub value: Word,
     #[serde(rename = "gasPrice")]
     pub gas_price: Word,
+    #[serde(rename = "maxFeePerGas")]
+    pub max_fee_per_gas: Option<Word>,
+    #[serde(rename = "maxPriorityFeePerGas")]
+    pub max_priority_fee_per_gas: Option<Word>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

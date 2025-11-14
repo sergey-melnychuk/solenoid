@@ -36,6 +36,8 @@ pub struct Ext {
     pub destroyed_accounts: HashSet<Address>,
 
     pub gas_price: Word,
+    pub gas_max_fee: Word,
+    pub gas_max_priority_fee: Word,
 }
 
 impl Ext {
@@ -54,6 +56,8 @@ impl Ext {
             created_accounts: HashSet::default(),
             destroyed_accounts: HashSet::default(),
             gas_price: Word::zero(),
+            gas_max_fee: Word::zero(),
+            gas_max_priority_fee: Word::zero(),
         }
     }
 
@@ -67,8 +71,10 @@ impl Ext {
         Ok(Self::at_hash(block_hash, eth))
     }
 
-    pub fn reset(&mut self, gas_price: Word) {
+    pub fn reset(&mut self, gas_price: Word, gas_max_fee: Word, gas_max_priority_fee: Word) {
         self.gas_price = gas_price;
+        self.gas_max_fee = gas_max_fee;
+        self.gas_max_priority_fee = gas_max_priority_fee;
         self.original.clear();
 
         // Clear transient storage (EIP-1153)

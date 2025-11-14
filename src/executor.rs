@@ -355,6 +355,9 @@ impl<T: EventTracer> Executor<T> {
                 sender_balance - gas_prepayment,
             ));
         }
+        // Note: Gas prepayment is deducted from sender but NOT transferred to coinbase yet.
+        // The base fee will be burned (removed from circulation), and only the priority fee
+        // will be transferred to the coinbase after execution completes (see below).
 
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
@@ -441,6 +444,10 @@ impl<T: EventTracer> Executor<T> {
             ..Context::default()
         };
 
+        // Store coinbase and base_fee for later use (before moving self.header)
+        let coinbase = self.header.miner;
+        let base_fee = self.header.base_fee;
+
         let tracer = self.tracer.fork();
         let mut executor = Executor::<T>::with_tracer(tracer).with_header(self.header);
         executor.set_log(self.log);
@@ -448,6 +455,10 @@ impl<T: EventTracer> Executor<T> {
             .execute_with_context(code, call, evm, ext, ctx)
             .await;
         self.tracer.join(tracer, evm.reverted);
+
+        if evm.reverted {
+            evm.revert(ext).await?;
+        }
 
         // Calculate gas costs and transaction fee
 
@@ -473,13 +484,49 @@ impl<T: EventTracer> Executor<T> {
         let gas_used_fee = Word::from(gas_final) * ext.gas_price;
         let gas_refund = gas_prepayment - gas_used_fee;
 
-        // Refund unused gas to sender
+        // Refund unused gas to sender and adjust coinbase balance
         if !gas_refund.is_zero() {
             let src = ext.balance(&call.from).await?;
             let new_balance = src + gas_refund;
             ext.account_mut(&call.from).value = new_balance;
             evm.touches
                 .push(AccountTouch::SetValue(call.from, src, new_balance));
+        }
+
+        // Transfer priority fee to coinbase (base fee is burned per EIP-1559)
+        // Priority fee = min(max_priority_fee, gas_price - base_fee)
+        if !coinbase.is_zero() {
+            let priority_fee_per_gas = if ext.gas_max_priority_fee.is_zero() {
+                // Legacy transaction (type 0): entire gas_price goes to miner
+                ext.gas_price
+            } else {
+                // EIP-1559 transaction (type 2): only priority fee goes to miner
+                let max_priority = ext.gas_max_priority_fee;
+                let actual_priority = ext.gas_price.saturating_sub(base_fee);
+                Word::min(max_priority, actual_priority)
+            };
+
+            let priority_fee_total = Word::from(gas_final) * priority_fee_per_gas;
+
+            if !priority_fee_total.is_zero() {
+                let coinbase_balance = ext.balance(&coinbase).await?;
+                let new_coinbase_balance = coinbase_balance + priority_fee_total;
+                ext.account_mut(&coinbase).value = new_coinbase_balance;
+                evm.touches.push(AccountTouch::SetValue(
+                    coinbase,
+                    coinbase_balance,
+                    new_coinbase_balance,
+                ));
+                self.tracer.push(Event {
+                    data: EventData::Account(AccountEvent::SetValue {
+                        address: coinbase,
+                        val: coinbase_balance,
+                        new: new_coinbase_balance,
+                    }),
+                    depth: 0,
+                    reverted: false,
+                });
+            }
         }
 
         // Emit fee event showing gas consumed
@@ -1336,8 +1383,6 @@ impl<T: EventTracer> Executor<T> {
                 let val = evm.get(ext, &this, &key).await?;
                 let original = ext.original.get(&(this, key)).cloned().unwrap_or_default();
 
-                evm.put(ext, &this, key, new).await?;
-
                 /*
                 new: value from the stack input.
                 val: current value of the storage slot.
@@ -1437,6 +1482,12 @@ impl<T: EventTracer> Executor<T> {
 
                 // EIP-2200: Check gas stipend (must have at least 2300 gas remaining)
                 if evm.gas.remaining() + gas_refund < gas_cost {
+                    // Calculate how much gas we can actually charge
+                    let actual_gas_cost = evm.gas.remaining();
+
+                    // Apply the refund first (before consuming gas)
+                    evm.gas.refund(gas_refund);
+
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: false,
@@ -1445,10 +1496,10 @@ impl<T: EventTracer> Executor<T> {
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
-                            gas_cost: 0,
-                            gas_used: evm.gas.used,
-                            gas_back: 0,
-                            gas_left: evm.gas.remaining(),
+                            gas_cost: actual_gas_cost,
+                            gas_used: evm.gas.used + actual_gas_cost,
+                            gas_back: gas_refund,
+                            gas_left: 0,
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
@@ -1457,6 +1508,8 @@ impl<T: EventTracer> Executor<T> {
                     // TODO: make OOG detection more generic
                     evm.error(ExecutorError::OutOfGas().into())?;
                 }
+
+                evm.put(ext, &this, key, new).await?;
 
                 evm.gas.refund(gas_refund);
                 gas = gas_cost.into();

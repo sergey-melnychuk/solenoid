@@ -62,7 +62,7 @@ pub fn runner(
         Box::pin(async move {
             let mut result = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
-                guard.reset(tx.gas_price);
+                guard.reset(tx.gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
                 let result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
                     .with_header(header.clone())

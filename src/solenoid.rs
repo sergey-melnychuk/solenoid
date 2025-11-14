@@ -197,8 +197,15 @@ pub struct Runner {
 
 impl Runner {
     pub async fn apply(self, ext: &mut Ext) -> eyre::Result<CallResult<LoggingTracer>> {
+        let coinbase = self.header.miner;
+
         let exe = Executor::<LoggingTracer>::with_tracer(LoggingTracer::default());
         let exe = exe.with_header(self.header);
+
+        // EIP-3651 (Shanghai): Pre-warm coinbase address
+        if !coinbase.is_zero() {
+            ext.warm_address(&coinbase);
+        }
 
         let code = if self.call.to.is_zero() {
             self.call.data.clone()
