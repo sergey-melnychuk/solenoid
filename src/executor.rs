@@ -494,19 +494,24 @@ impl<T: EventTracer> Executor<T> {
         }
 
         // Transfer priority fee to coinbase (base fee is burned per EIP-1559)
-        // Priority fee = min(max_priority_fee, gas_price - base_fee)
+        // Match revm's calculation: recalculate effective_gas_price from max_fee and max_priority
+        // then coinbase_gas_price = effective_gas_price - basefee
         if !coinbase.is_zero() {
-            let priority_fee_per_gas = if ext.gas_max_priority_fee.is_zero() {
+            let coinbase_gas_price = if ext.gas_max_priority_fee.is_zero() {
                 // Legacy transaction (type 0): entire gas_price goes to miner
                 ext.gas_price
             } else {
-                // EIP-1559 transaction (type 2): only priority fee goes to miner
-                let max_priority = ext.gas_max_priority_fee;
-                let actual_priority = ext.gas_price.saturating_sub(base_fee);
-                Word::min(max_priority, actual_priority)
+                // EIP-1559 transaction (type 2): recalculate effective_gas_price like revm does
+                // effective_gas_price = min(max_fee_per_gas, base_fee + max_priority_fee_per_gas)
+                let effective_gas_price = {
+                    let base_plus_priority = base_fee + ext.gas_max_priority_fee;
+                    Word::min(ext.gas_max_fee, base_plus_priority)
+                };
+                // coinbase_gas_price = effective_gas_price - basefee
+                effective_gas_price.saturating_sub(base_fee)
             };
 
-            let priority_fee_total = Word::from(gas_final) * priority_fee_per_gas;
+            let priority_fee_total = Word::from(gas_final) * coinbase_gas_price;
 
             if !priority_fee_total.is_zero() {
                 let coinbase_balance = ext.balance(&coinbase).await?;
@@ -1821,7 +1826,11 @@ impl<T: EventTracer> Executor<T> {
                 // TODO: add traces and account/state events
 
                 let opcode_cost = 5000;
-                let access_cost = evm.address_access_cost(&address, ext).as_i64();
+                let access_cost = if ext.is_address_warm(&address) {
+                    0 
+                } else {
+                    2600
+                };
                 let create_cost = if ext.is_empty(&address).await? {
                     25000 // account creation cost
                 } else {

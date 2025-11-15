@@ -44,15 +44,10 @@ async fn main() -> eyre::Result<()> {
     let txs = txs.skip(skip).take(1);
     for tx in txs {
         let idx = tx.index.as_u64();
-
-        // eprintln!("TX: {tx:#?}");
         eprintln!("TX hash={:#064x} index={}", tx.hash, tx.index.as_usize());
-        eprintln!("GAS PRICE: {}", tx.gas_price.as_u64());
-        eprintln!("MAX FEE: {}", tx.max_fee_per_gas.unwrap_or_default().as_u64());
-        eprintln!("MAX PRIORITY: {}", tx.max_priority_fee_per_gas.unwrap_or_default().as_u64());
-        eprintln!("BASE FEE: {}", block.header.base_fee.as_u64());
 
-        ext.reset(tx.gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
+        let effective_gas_price = tx.effective_gas_price(block.header.base_fee);
+        ext.reset(effective_gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
             .with_header(block.header.clone())

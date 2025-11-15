@@ -12,12 +12,28 @@ pub struct Tx {
     pub input: Hex,
     pub to: Option<Address>,
     pub value: Word,
-    #[serde(rename = "gasPrice")]
-    pub gas_price: Word,
-    #[serde(rename = "maxFeePerGas")]
+    #[serde(rename = "gasPrice", default)]
+    pub gas_price: Option<Word>,
+    #[serde(rename = "maxFeePerGas", default)]
     pub max_fee_per_gas: Option<Word>,
-    #[serde(rename = "maxPriorityFeePerGas")]
+    #[serde(rename = "maxPriorityFeePerGas", default)]
     pub max_priority_fee_per_gas: Option<Word>,
+}
+
+impl Tx {
+    /// Calculate the effective gas price for this transaction
+    /// For EIP-1559: min(maxFeePerGas, baseFeePerGas + maxPriorityFeePerGas)
+    /// For legacy: gasPrice
+    pub fn effective_gas_price(&self, base_fee: Word) -> Word {
+        if let (Some(max_fee), Some(max_priority)) = (self.max_fee_per_gas, self.max_priority_fee_per_gas) {
+            // EIP-1559 transaction
+            let base_plus_priority = base_fee + max_priority;
+            Word::min(max_fee, base_plus_priority)
+        } else {
+            // Legacy transaction - use gasPrice (default to 0 if not present)
+            self.gas_price.unwrap_or_default()
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

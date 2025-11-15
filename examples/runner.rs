@@ -37,7 +37,9 @@ pub fn runner(
     ext: Ext,
 ) -> impl FnMut(Tx) -> Pin<Box<dyn Future<Output = eyre::Result<(TxResult, Vec<OpcodeTrace>)>>>> {
     let ext = Arc::new(Mutex::new(ext));
+    let base_fee = header.base_fee;
     move |tx| {
+        let effective_gas_price = tx.effective_gas_price(base_fee);
         let calldata = tx.input.as_ref().to_vec();
 
         let call_cost = 21000i64;
@@ -62,7 +64,7 @@ pub fn runner(
         Box::pin(async move {
             let mut result = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
-                guard.reset(tx.gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
+                guard.reset(effective_gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
                 let result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
                     .with_header(header.clone())
@@ -222,15 +224,20 @@ async fn main() -> eyre::Result<()> {
                     revm_traces.len()
                 );
 
+                let ret_diff = if revm_result.ret == sole_result.ret {
+                    "match".to_string()
+                } else {
+                    format!("<{}>", sole_result.ret.len())
+                };
                 let gas_diff = if revm_result.gas == sole_result.gas {
                     "match".to_string()
                 } else {
                     format!("{:+5}", sole_result.gas - revm_result.gas)
                 };
                 println!(
-                    "sole \tOK={} \tRET={:4}\tGAS={}\tTRACES={}",
+                    "sole \tOK={} \tRET={}\tGAS={}\tTRACES={}",
                     !sole_result.rev,
-                    sole_result.ret == revm_result.ret,
+                    ret_diff,
                     gas_diff,
                     sole_traces.len()
                 );
