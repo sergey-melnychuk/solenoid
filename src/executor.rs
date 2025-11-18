@@ -27,8 +27,8 @@ pub enum ExecutorError {
     CallDepthLimitReached,
     #[error("Out of memory: {0} bytes requested")]
     OutOfMemory(usize),
-    #[error("Expected JUMPDEST but got: {0}")]
-    InvalidJump(u8),
+    #[error("Invalid jump to offset: {0}")]
+    InvalidJump(usize),
     #[error("Missing data")]
     MissingData,
     #[error("Wrong returned data size: expected {exp} but got {got}")]
@@ -1536,10 +1536,15 @@ impl<T: EventTracer> Executor<T> {
                 // JUMP
                 let dest = evm.pop()?.as_usize();
                 let dest = code.resolve_jump(dest).unwrap_or(dest);
+                if dest >= code.instructions.len() {
+                    evm.stopped = true;
+                    evm.reverted = true;
+                    return Ok(gas);
+                }
                 if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
-                    evm.error(
-                        ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into(),
-                    )?;
+                    evm.stopped = true;
+                    evm.reverted = true;
+                    return Ok(gas);
                 }
                 evm.pc = dest;
                 pc_increment = false;
@@ -1550,16 +1555,21 @@ impl<T: EventTracer> Executor<T> {
                 let dest = evm.pop()?.as_usize();
                 let dest = code.resolve_jump(dest).unwrap_or(dest);
                 let cond = evm.pop()?;
+                gas = 10.into();
                 if !cond.is_zero() {
+                    if dest >= code.instructions.len() {
+                        evm.stopped = true;
+                        evm.reverted = true;
+                        return Ok(gas);
+                    }
                     if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
-                        evm.error(
-                            ExecutorError::InvalidJump(code.instructions[dest].opcode.code).into(),
-                        )?;
+                        evm.stopped = true;
+                        evm.reverted = true;
+                        return Ok(gas);
                     }
                     evm.pc = dest;
                     pc_increment = false;
                 }
-                gas = 10.into();
             }
             0x58 => {
                 // PC
@@ -1611,16 +1621,25 @@ impl<T: EventTracer> Executor<T> {
                 let dest_offset = evm.pop()?.as_usize();
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
-                if dest_offset + size > evm.memory.len() || size > ALLOCATION_SANITY_LIMIT {
-                    if dest_offset + size > ALLOCATION_SANITY_LIMIT {
-                        return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
+                if size > 0 {
+                    if dest_offset + size > evm.memory.len() {
+                        if dest_offset + size > ALLOCATION_SANITY_LIMIT {
+                            return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
+                        }
+                        let padding = 32 - (dest_offset + size) % 32;
+                        evm.memory.resize(dest_offset + size + padding % 32, 0);
                     }
-                    let padding = 32 - (dest_offset + size) % 32;
-                    evm.memory.resize(dest_offset + size + padding % 32, 0);
+                    let mut buffer = vec![0u8; size];
+                    buffer.copy_from_slice(&evm.memory[offset..offset + size]);
+                    evm.memory[dest_offset..dest_offset + size].copy_from_slice(&buffer);    
                 }
-                let mut buffer = vec![0u8; size];
-                buffer.copy_from_slice(&evm.memory[offset..offset + size]);
-                evm.memory[dest_offset..dest_offset + size].copy_from_slice(&buffer);
+
+                self.debug["MCOPY"] = json!({
+                    "dest_offset": dest_offset,
+                    "offset": offset,
+                    "size": size,
+                    "mem.len": evm.memory.len(),
+                });
 
                 let words = size.div_ceil(32);
                 gas = (3 + 3 * words).into();

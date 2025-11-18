@@ -213,7 +213,7 @@ async fn main() -> eyre::Result<()> {
                     format!("<{}>", revm_result.ret.len())
                 };
                 println!(
-                    "---\n### block={block_number} index={idx} hash={}",
+                    "---\n### {block_number} {idx} hash={}",
                     txs[idx].info().hash.unwrap_or_default()
                 );
                 println!(
@@ -244,7 +244,7 @@ async fn main() -> eyre::Result<()> {
             }
             Err(e) => {
                 println!(
-                    "---\n### block={block_number} index={idx} hash={}",
+                    "---\n### {block_number} {idx} hash={}",
                     txs[idx].info().hash.unwrap_or_default()
                 );
                 println!(
