@@ -1,0 +1,16 @@
+📦 Fetched block number: 23828643 [with 308 txs]
+📦 Fetched block number: 23828643 [with 308 txs]
+---
+### 23828643 11 hash=0xdc3e84df00ff8ff2dbb5dfb8a5c6bb4e04ef9fb2e74b22885ae2380e0a0631d8
+REVM 	OK=false 	RET=empty	GAS=134700	TRACES=4357
+sole 	OK=true 	RET=match	GAS=-7375	TRACES=4358
+---
+### 23828643 35 hash=0xc4b66b64a0f32f3ef3725f78d20fe430bc6bf0919195a94ca3444595e712040a
+REVM 	OK=true 	RET=empty	GAS=310265	TRACES=26512
+sole 	OK=true 	RET=match	GAS=match	TRACES=26512
+---
+### 23828643 174 hash=0x3e55abd6a1a9446373f75c93364ce761e95c14adf0cd2bab8bd6dba7e99f916b
+REVM 	OK=true 	RET=empty	GAS=287272	TRACES=21869
+sole 	OK=true 	RET=match	GAS=match	TRACES=21869
+
+(total: 308, matched: 305, invalid: 3)

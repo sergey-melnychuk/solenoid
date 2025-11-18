@@ -161,18 +161,6 @@ impl Ext {
         Ok(is_empty)
     }
 
-    // pub async fn create(&mut self, addr: &Address, value: Word, nonce: Word, code: Vec<u8>) -> eyre::Result<Word> {
-    //     let hash = Word::from_bytes(&keccak256(&code));
-    //     self.state.insert(*addr, Account {
-    //         value,
-    //         nonce,
-    //         code: (code, hash),
-    //         root: Word::zero(),
-    //         state: Default::default(),
-    //     });
-    //     Ok(hash)
-    // }
-
     pub async fn code(&mut self, addr: &Address) -> eyre::Result<(Vec<u8>, Word)> {
         if let Some(code) = self.state.get(addr).map(|s| s.code.clone()) {
             Ok(code)

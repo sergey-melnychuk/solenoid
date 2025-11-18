@@ -1837,13 +1837,6 @@ impl<T: EventTracer> Executor<T> {
 
                 let address: Address = (&evm.pop()?).into();
 
-                let balance = ext.balance(&this).await?;
-                ext.account_mut(&this).value = Word::zero();
-                ext.account_mut(&address).value += balance;
-                ext.destroyed_accounts.insert(this);
-
-                // TODO: add traces and account/state events
-
                 let opcode_cost = 5000;
                 let access_cost = if ext.is_address_warm(&address) {
                     0 
@@ -1858,6 +1851,13 @@ impl<T: EventTracer> Executor<T> {
 
                 let total_gas_cost = opcode_cost + access_cost + create_cost;
                 gas = total_gas_cost.into();
+
+                let balance = ext.balance(&this).await?;
+                ext.account_mut(&this).value = Word::zero();
+                ext.account_mut(&address).value += balance;
+                ext.destroyed_accounts.insert(this);
+
+                // TODO: add traces and account/state events
             }
             _ => {
                 return Err(ExecutorError::UnknownOpcode(opcode).into());
