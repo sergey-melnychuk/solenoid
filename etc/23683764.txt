@@ -1,20 +1,12 @@
 📦 Fetched block number: 23683764 [with 209 txs]
 📦 Fetched block number: 23683764 [with 209 txs]
 ---
-### block=23683764 index=39 hash=0xd71e628e2ae9c8833e8c9d5e18eacf893620e6e919f380f3b2be5bcc3107694f
-REVM 	OK=true 	RET=empty	GAS=293829	TRACES=15848
-sole 	OK=true 	RET=true	GAS=match	TRACES=15848
----
-### block=23683764 index=86 hash=0xd0337a89cd62fc2b07471c31aa1d920dc7b3112903797b5f8bb33438fac55516
+### 23683764 86 hash=0xd0337a89cd62fc2b07471c31aa1d920dc7b3112903797b5f8bb33438fac55516
 REVM 	OK=false 	RET=empty	GAS=21000	TRACES=1
-sole 	OK=false 	RET=true	GAS=match	TRACES=1
+sole 	OK=false 	RET=match	GAS=match	TRACES=1
 ---
-### block=23683764 index=87 hash=0xb3110f9983343508f0cc6a41cf17362cc286779761bba3e87a738bdd0d27f07a
+### 23683764 87 hash=0xb3110f9983343508f0cc6a41cf17362cc286779761bba3e87a738bdd0d27f07a
 REVM 	OK=false 	RET=empty	GAS=21000	TRACES=1
-sole 	OK=false 	RET=true	GAS=match	TRACES=1
----
-### block=23683764 index=202 hash=0x4da70b9e12300b64bd68bb77cff6a4a8b37f31e25dfc1d51e89846f54d0365e5
-REVM 	OK=true 	RET=<96>	GAS=186533	TRACES=10188
-sole 	OK=true 	RET=true	GAS=match	TRACES=10188
+sole 	OK=false 	RET=match	GAS=match	TRACES=1
 
-(total: 209, matched: 205, invalid: 4)
+(total: 209, matched: 207, invalid: 2)

@@ -1,8 +1,8 @@
 #!/bin/sh
 rm *.log
 
-etc/recent.sh 23728678 10
-etc/recent.sh 23820674 10
+etc/recent.sh 23728678 10 > etc/23728669-23728678.txt
+etc/recent.sh 23820674 10 > etc/23820665-23820674.txt
 
 cargo run --release --example runner -- 23027350 > etc/23027350.txt
 cargo run --release --example runner -- 23624962 > etc/23624962.txt

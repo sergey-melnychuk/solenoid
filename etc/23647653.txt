@@ -1,12 +1,12 @@
 📦 Fetched block number: 23647653 [with 249 txs]
 📦 Fetched block number: 23647653 [with 249 txs]
 ---
-### block=23647653 index=212 hash=0x8adfffaebf44cf435ba20599c11b9870729cc363427cbd1357a06fcaeb4ed030
+### 23647653 212 hash=0x8adfffaebf44cf435ba20599c11b9870729cc363427cbd1357a06fcaeb4ed030
 REVM 	OK=true 	RET=empty	GAS=592947	TRACES=41219
-sole 	OK=true 	RET=true	GAS=match	TRACES=41219
+sole 	OK=true 	RET=match	GAS=match	TRACES=41219
 ---
-### block=23647653 index=225 hash=0xb708a69e0a696d9d833a5ccaaa62849ec4d57619186eee9b49a314bc42014871
+### 23647653 225 hash=0xb708a69e0a696d9d833a5ccaaa62849ec4d57619186eee9b49a314bc42014871
 REVM 	OK=true 	RET=empty	GAS=262419	TRACES=23889
-sole 	OK=true 	RET=true	GAS=match	TRACES=23889
+sole 	OK=true 	RET=match	GAS=match	TRACES=23889
 
 (total: 249, matched: 247, invalid: 2)
