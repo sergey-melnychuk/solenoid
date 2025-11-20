@@ -72,3 +72,49 @@ curl -s -X POST \
     "params": ["0x93F730AB81f4B72f778d25dA321dda2e4570597f","0x168a664"],
     "id": 1
   }' http://127.0.0.1:8080 | jq
+
+curl "https://www.4byte.directory/api/v1/signatures/?hex_signature=0x3850c7bd" | jq '.results[0].text_signature'
+"slot0()"
+
+curl "https://www.4byte.directory/api/v1/signatures/?hex_signature=0x3850c7bd" | jq
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 178654,
+      "created_at": "2021-04-22T20:07:09.415160Z",
+      "text_signature": "slot0()",
+      "hex_signature": "0x3850c7bd",
+      "bytes_signature": "8PÇ½"
+    }
+  ]
+}
+
+curl "https://www.4byte.directory/api/v1/signatures/?page=11496" | jq
+{
+  "count": 1149612,
+  "next": "http://www.4byte.directory/api/v1/signatures/?page=11497",
+  "previous": "http://www.4byte.directory/api/v1/signatures/?page=11495",
+  "results": [
+    {
+      "id": 408,
+      "created_at": "2016-07-09T04:00:44.274050Z",
+      "text_signature": "scheduleCall(bytes,bytes)",
+      "hex_signature": "0xf4bbfd6a",
+      "bytes_signature": "ô»ýj"
+    },
+    ...
+  ]
+}
+
+curl "https://www.4byte.directory/api/v1/signatures/?page=11497" | jq
+{
+  "count": 1149612,
+  "next": null,
+  "previous": "http://www.4byte.directory/api/v1/signatures/?page=11496",
+  "results": [
+    ...
+  ]
+}

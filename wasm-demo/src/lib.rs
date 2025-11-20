@@ -1,13 +1,13 @@
 use wasm_bindgen::prelude::*;
 use solenoid::{
     common::{
-        address::{addr, Address},
+        address::{Address, addr},
         hash::keccak256,
         word::Word,
     },
     eth::EthClient,
     ext::Ext,
-    solenoid::{Builder, Solenoid}, tracer::EventTracer,
+    solenoid::{Builder, Solenoid}, tracer::{EventData, EventTracer},
 };
 
 #[wasm_bindgen(start)]
@@ -199,9 +199,13 @@ pub async fn quote_weth_to_usdc_solenoid(
 
     let traces = result.tracer.take();
     web_sys::console::log_1(&format!("Solenoid - traces: {}", traces.len()).into());
-    for event in traces.iter().take(10) {
-        let json = serde_json_wasm::to_string(&event).unwrap();
-        web_sys::console::log_1(&json.into());
+    for event in traces {
+        let keep = matches!(event.data, 
+            EventData::Call { .. } | EventData::Return { .. } | EventData::State(_) | EventData::Account(_));
+        if keep {
+            let json = serde_json_wasm::to_string(&event).unwrap();
+            web_sys::console::log_1(&json.into());
+        }
     }
 
     // Decode the result
