@@ -1,11 +1,8 @@
-use std::collections::HashMap;
 
 use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::network::primitives::BlockTransactions;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::eyre::{self, Result};
-use evm_tracer::revm::primitives::{StorageKey, StorageValue};
-use serde_json::json;
 use solenoid::common::hash;
 use solenoid::common::word::Word;
 
@@ -65,6 +62,9 @@ async fn main() -> Result<()> {
         // let json = serde_json::to_string_pretty(&result.state)?;
         // eprintln!("{json}");
 
+        /*use std::collections::HashMap;
+        use evm_tracer::revm::primitives::{StorageKey, StorageValue};
+        use serde_json::json;
         let state = result
             .state
             .iter()
@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
             })
             .collect::<HashMap<_, _>>();
         let json = serde_json::to_string_pretty(&state)?;
-        eprintln!("{json}");
+        eprintln!("{json}");*/
     }
     Ok(())
 }

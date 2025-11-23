@@ -117,8 +117,10 @@ impl Ext {
             self.pull(addr).await?;
         }
         if let Some(val) = self.state.get(addr).and_then(|s| s.state.get(key)).copied() {
+
             #[cfg(feature = "tracing")]
-            tracing::debug!("GET: {addr}[{key:#x}]={val:#064x} [cached value]");
+            tracing::debug!("GET: {addr}[{key:#x}]={val:#064x} [cached]");
+
             self.original.entry((*addr, *key)).or_insert(val);
             Ok(val)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
@@ -136,7 +138,7 @@ impl Ext {
             self.original.entry((*addr, *key)).or_insert(val);
 
             #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
-            tracing::debug!("GET: {addr:#}[{key:#x}]={val:#064x} [took {ms} ms]");
+            tracing::debug!("GET: {addr:#}[{key:#x}]={val:#064x} [remote {ms} ms]");
 
             Ok(val)
         } else {
@@ -145,11 +147,19 @@ impl Ext {
     }
 
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
-        let _ = self.get(addr, &key).await?;
-        let state = self.state.entry(*addr).or_default();
-        state.state.insert(key, val);
-        #[cfg(feature = "tracing")]
-        tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}");
+        let old = self.get(addr, &key).await?;
+        let label = if old != val {
+            self.state.entry(*addr)
+                .or_default()
+                .state.insert(key, val);
+            ""
+        } else {
+            " [NOOP]"
+        };
+
+        #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
+        tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}{label}");
+
         Ok(())
     }
 
