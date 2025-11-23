@@ -69,6 +69,8 @@ pub enum AccountTouch {
     SetValue(Address, Word, Word),
     SetState(Address, Word, Word, Word, bool),
 
+    SetTransientState(Address, Word, Word, Word),
+
     Create(Address, Word, Word, Vec<u8>, Word),
 }
 
@@ -178,16 +180,18 @@ impl Evm {
         for t in self.touches.iter().rev() {
             match t {
                 AccountTouch::SetState(address, key, val, _, is_warm) => {
-                    if *is_warm {
-                        ext.put(address, *key, *val).await?
-                    } else {
+                    // Always restore the storage value, regardless of warm/cold status
+                    // Directly set storage without calling get() to avoid polluting ext.original
+                    ext.state.entry(*address).or_default().state.insert(*key, *val);
+                    if !*is_warm {
                         ext.accessed_storage.remove(&(*address, *key));
                     }
                 }
+                AccountTouch::SetTransientState(address, key, val, _) => {
+                    ext.transient.insert((*address, *key), *val);
+                }
                 AccountTouch::GetState(address, key, _, is_warm) => {
-                    if *is_warm {
-                        // nothing to do
-                    } else {
+                    if !*is_warm {
                         ext.accessed_storage.remove(&(*address, *key));
                     }
                 }
@@ -484,7 +488,7 @@ impl<T: EventTracer> Executor<T> {
         let gas_used_fee = Word::from(gas_final) * ext.gas_price;
         let gas_refund = gas_prepayment - gas_used_fee;
 
-        // Refund unused gas to sender and adjust coinbase balance
+        // Refund unused gas to sender
         if !gas_refund.is_zero() {
             let src = ext.balance(&call.from).await?;
             let new_balance = src + gas_refund;
@@ -1024,6 +1028,7 @@ impl<T: EventTracer> Executor<T> {
                 self.debug["BALANCE"] = json!({
                     "address": addr,
                     "balance": value,
+                    "is_coinbase": addr == self.header.miner,
                 });
                 evm.push(value)?;
             }
@@ -1609,7 +1614,9 @@ impl<T: EventTracer> Executor<T> {
                 let val = evm.pop()?;
                 let old = ext.transient.insert((this, key), val).unwrap_or_default();
                 gas = 100.into();
-                self.debug["STORE"] = json!({
+                evm.touches
+                    .push(AccountTouch::SetTransientState(this, key, old, val));
+                self.debug["TSTORE"] = json!({
                     "address": this,
                     "key": key,
                     "val": val,
@@ -1622,15 +1629,22 @@ impl<T: EventTracer> Executor<T> {
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
                 if size > 0 {
-                    if dest_offset + size > evm.memory.len() {
+                    let len = (dest_offset + size).max(offset + size);
+                    if len > evm.memory.len() {
                         if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                             return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
                         }
-                        let padding = 32 - (dest_offset + size) % 32;
-                        evm.memory.resize(dest_offset + size + padding % 32, 0);
+                        let padding = 32 - len % 32;
+                        evm.memory.resize(len + padding % 32, 0);
                     }
                     let mut buffer = vec![0u8; size];
-                    buffer.copy_from_slice(&evm.memory[offset..offset + size]);
+                    if offset + size <= evm.memory.len() {
+                        buffer.copy_from_slice(&evm.memory[offset..offset + size]);                        
+                    } else {
+                        let copy = evm.memory.len().min(offset + size) - offset;
+                        buffer[..copy].copy_from_slice(&evm.memory[offset..offset + copy]);
+                        buffer[copy..].copy_from_slice(&vec![0u8; size - copy]);
+                    }
                     evm.memory[dest_offset..dest_offset + size].copy_from_slice(&buffer);    
                 }
 
