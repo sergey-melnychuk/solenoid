@@ -448,8 +448,7 @@ impl<T: EventTracer> Executor<T> {
             ..Context::default()
         };
 
-        // Store coinbase and base_fee for later use (before moving self.header)
-        let coinbase = self.header.miner;
+        // Store base_fee for later use (before moving self.header)
         let base_fee = self.header.base_fee;
 
         let tracer = self.tracer.fork();
@@ -502,8 +501,9 @@ impl<T: EventTracer> Executor<T> {
         // then coinbase_gas_price = effective_gas_price - basefee
         if !coinbase.is_zero() {
             let coinbase_gas_price = if ext.gas_max_priority_fee.is_zero() {
-                // Legacy transaction (type 0): entire gas_price goes to miner
-                ext.gas_price
+                // Legacy transaction (type 0): gas_price - base_fee goes to miner (base fee is burned)
+                // COINBASE BALANCE fix 1/1: legacy tx effective gas price
+                ext.gas_price.saturating_sub(base_fee)
             } else {
                 // EIP-1559 transaction (type 2): recalculate effective_gas_price like revm does
                 // effective_gas_price = min(max_fee_per_gas, base_fee + max_priority_fee_per_gas)
@@ -518,21 +518,19 @@ impl<T: EventTracer> Executor<T> {
             let priority_fee_total = Word::from(gas_final) * coinbase_gas_price;
 
             if !priority_fee_total.is_zero() {
-                let coinbase_balance = ext.balance(&coinbase).await?;
-                let new_coinbase_balance = coinbase_balance + priority_fee_total;
+                // Ensure coinbase is in state (it may not be if no code accessed it during execution)
+                let current_coinbase_balance = ext.balance(&coinbase).await?;
+                let new_coinbase_balance = current_coinbase_balance + priority_fee_total;
                 ext.account_mut(&coinbase).value = new_coinbase_balance;
-                evm.touches.push(AccountTouch::SetValue(
-                    coinbase,
-                    coinbase_balance,
-                    new_coinbase_balance,
-                ));
+                // DO NOT add to evm.touches - fee additions are final and should never be reverted
+                // COINBASE BALANCE fix 1/2: do not revert unreversible fee charge
                 self.tracer.push(Event {
                     data: EventData::Account(AccountEvent::SetValue {
                         address: coinbase,
-                        val: coinbase_balance,
+                        val: current_coinbase_balance,
                         new: new_coinbase_balance,
                     }),
-                    depth: 0,
+                    depth: 1,
                     reverted: false,
                 });
             }
@@ -545,7 +543,7 @@ impl<T: EventTracer> Executor<T> {
                 price: ext.gas_price,
                 total: gas_used_fee,
             },
-            depth: 0,
+            depth: 1,
             reverted: false,
         });
 
