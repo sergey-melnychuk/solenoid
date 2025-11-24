@@ -1,7 +1,10 @@
 /target
 /tmp
 
+*.tmp
 *.log
+*.jsonl
+
 .env
 
 /cache

@@ -23,16 +23,12 @@
 ==========================================
 📦 Fetched block number: 23728671 [with 134 txs]
 📦 Fetched block number: 23728671 [with 134 txs]
-TX:   0/133TX:   1/133TX:   2/133TX:   3/133TX:   4/133TX:   5/133TX:   6/133TX:   7/133TX:   8/133TX:   9/133TX:  10/133TX:  11/133TX:  12/133TX:  13/133TX:  14/133TX:  15/133TX:  16/133TX:  17/133TX:  18/133---
-### 23728671 18 hash=0x7f9156c2a5fddfb084304386bc9882a35db5e9d51e0fae0c56f420dcb2fcc8f6
-REVM 	OK=true 	RET=<64>	GAS=856860	TRACES=84972
-sole 	OK=true 	RET=<64>	GAS=-1107	TRACES=84907
-TX:  19/133TX:  20/133TX:  21/133TX:  22/133TX:  23/133TX:  24/133TX:  25/133TX:  26/133TX:  27/133TX:  28/133TX:  29/133TX:  30/133TX:  31/133TX:  32/133TX:  33/133TX:  34/133TX:  35/133TX:  36/133---
+TX:   0/133TX:   1/133TX:   2/133TX:   3/133TX:   4/133TX:   5/133TX:   6/133TX:   7/133TX:   8/133TX:   9/133TX:  10/133TX:  11/133TX:  12/133TX:  13/133TX:  14/133TX:  15/133TX:  16/133TX:  17/133TX:  18/133TX:  19/133TX:  20/133TX:  21/133TX:  22/133TX:  23/133TX:  24/133TX:  25/133TX:  26/133TX:  27/133TX:  28/133TX:  29/133TX:  30/133TX:  31/133TX:  32/133TX:  33/133TX:  34/133TX:  35/133TX:  36/133---
 ### 23728671 36 hash=0x67c600d82bb0d430944c3bb22859a9257a0cd400b9430744dc2a153f693e7a7e
 REVM 	OK=true 	RET=<32>	GAS=431807	TRACES=42480
 sole 	OK=true 	RET=match	GAS=match	TRACES=42480
 TX:  37/133TX:  38/133TX:  39/133TX:  40/133TX:  41/133TX:  42/133TX:  43/133TX:  44/133TX:  45/133TX:  46/133TX:  47/133TX:  48/133TX:  49/133TX:  50/133TX:  51/133TX:  52/133TX:  53/133TX:  54/133TX:  55/133TX:  56/133TX:  57/133TX:  58/133TX:  59/133TX:  60/133TX:  61/133TX:  62/133TX:  63/133TX:  64/133TX:  65/133TX:  66/133TX:  67/133TX:  68/133TX:  69/133TX:  70/133TX:  71/133TX:  72/133TX:  73/133TX:  74/133TX:  75/133TX:  76/133TX:  77/133TX:  78/133TX:  79/133TX:  80/133TX:  81/133TX:  82/133TX:  83/133TX:  84/133TX:  85/133TX:  86/133TX:  87/133TX:  88/133TX:  89/133TX:  90/133TX:  91/133TX:  92/133TX:  93/133TX:  94/133TX:  95/133TX:  96/133TX:  97/133TX:  98/133TX:  99/133TX: 100/133TX: 101/133TX: 102/133TX: 103/133TX: 104/133TX: 105/133TX: 106/133TX: 107/133TX: 108/133TX: 109/133TX: 110/133TX: 111/133TX: 112/133TX: 113/133TX: 114/133TX: 115/133TX: 116/133TX: 117/133TX: 118/133TX: 119/133TX: 120/133TX: 121/133TX: 122/133TX: 123/133TX: 124/133TX: 125/133TX: 126/133TX: 127/133TX: 128/133TX: 129/133TX: 130/133TX: 131/133TX: 132/133TX: 133/133
-(total: 134, matched: 132, invalid: 2)
+(total: 134, matched: 133, invalid: 1)
 ✅ Block 23728671 completed successfully
 
 ==========================================
@@ -82,40 +78,12 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=14727
 ### 23728674 12 hash=0xe7d2cfacc3e577934de7642bf4818fc4fefbab151893fe60ff3274edc940dcb1
 REVM 	OK=true 	RET=empty	GAS=245558	TRACES=28676
 sole 	OK=true 	RET=match	GAS=match	TRACES=28676
-TX:  13/ 99TX:  14/ 99TX:  15/ 99TX:  16/ 99---
-### 23728674 16 hash=0x2ba58149c7bd54debc187a8201aafabb91a5d738cdefd57c3d135dcd25eaa3ae
-REVM 	OK=true 	RET=<64>	GAS=893265	TRACES=84488
-sole 	OK=false 	RET=<0>	GAS=-495066	TRACES=37926
-TX:  17/ 99TX:  18/ 99TX:  19/ 99---
+TX:  13/ 99TX:  14/ 99TX:  15/ 99TX:  16/ 99TX:  17/ 99TX:  18/ 99TX:  19/ 99---
 ### 23728674 19 hash=0xf8152fa5a3151a3bb16b6b3984547b77ff395a31888542556ca3457ce78bc034
 REVM 	OK=true 	RET=empty	GAS=185231	TRACES=14920
 sole 	OK=true 	RET=match	GAS=match	TRACES=14920
-TX:  20/ 99TX:  21/ 99TX:  22/ 99TX:  23/ 99TX:  24/ 99TX:  25/ 99TX:  26/ 99TX:  27/ 99TX:  28/ 99TX:  29/ 99TX:  30/ 99TX:  31/ 99TX:  32/ 99TX:  33/ 99TX:  34/ 99TX:  35/ 99TX:  36/ 99TX:  37/ 99TX:  38/ 99TX:  39/ 99---
-### 23728674 39 hash=0x26275e748cb48e3733bfe5e131f1bb1f09b90eb5c7d44c8604b4879edfcfb171
-REVM 	OK=true 	RET=<64>	GAS=738457	TRACES=76896
-sole 	OK=true 	RET=match	GAS=match	TRACES=76896
-TX:  40/ 99TX:  41/ 99---
-### 23728674 41 hash=0x747b66a0c91b05cf07f7a3af20da2b5cc33221c7577fdcd2ef0c70c9cd99d331
-REVM 	OK=true 	RET=<32>	GAS=1259418	TRACES=111397
-sole 	OK=true 	RET=<32>	GAS=match	TRACES=111397
-TX:  42/ 99TX:  43/ 99TX:  44/ 99TX:  45/ 99TX:  46/ 99
-thread 'tokio-runtime-worker' (2495294) panicked at /Users/sergey/Private/solenoid/src/executor.rs:1633:55:
-range end index 544 out of range for slice of length 512
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
----
-### 23728674 46 hash=0x26a1ed90a39d13cbbc85578f3aa30d1e7165f04395be26122beeea01552dcbea
-REVM 	OK=true 	RET=true	GAS=692303	TRACES=47979
-sole 	PANIC: 'task 588 panicked with message "range end index 544 out of range for slice of length 512"'
-TX:  47/ 99TX:  48/ 99TX:  49/ 99TX:  50/ 99TX:  51/ 99TX:  52/ 99TX:  53/ 99TX:  54/ 99TX:  55/ 99TX:  56/ 99TX:  57/ 99TX:  58/ 99TX:  59/ 99TX:  60/ 99TX:  61/ 99TX:  62/ 99TX:  63/ 99TX:  64/ 99TX:  65/ 99TX:  66/ 99TX:  67/ 99TX:  68/ 99TX:  69/ 99TX:  70/ 99TX:  71/ 99TX:  72/ 99TX:  73/ 99TX:  74/ 99TX:  75/ 99TX:  76/ 99TX:  77/ 99TX:  78/ 99TX:  79/ 99TX:  80/ 99TX:  81/ 99TX:  82/ 99TX:  83/ 99TX:  84/ 99TX:  85/ 99TX:  86/ 99TX:  87/ 99TX:  88/ 99TX:  89/ 99TX:  90/ 99---
-### 23728674 90 hash=0xac78dd23aaa4b47146d3c6a9dd0bf69f8425535ba840ee1429ee94507a0e299d
-REVM 	OK=false 	RET=<68>	GAS=460542	TRACES=24442
-sole 	OK=false 	RET=<68>	GAS=match	TRACES=24442
-TX:  91/ 99TX:  92/ 99TX:  93/ 99TX:  94/ 99TX:  95/ 99TX:  96/ 99---
-### 23728674 96 hash=0xac8b9780b5e0d2ace37d73e451056a2724740bd19d5038a1a18800bca90d55c8
-REVM 	OK=true 	RET=empty	GAS=489878	TRACES=29768
-sole 	OK=true 	RET=match	GAS=match	TRACES=29768
-TX:  97/ 99TX:  98/ 99TX:  99/ 99
-(total: 100, matched: 90, invalid: 10)
+TX:  20/ 99TX:  21/ 99TX:  22/ 99TX:  23/ 99TX:  24/ 99TX:  25/ 99TX:  26/ 99TX:  27/ 99TX:  28/ 99TX:  29/ 99TX:  30/ 99TX:  31/ 99TX:  32/ 99TX:  33/ 99TX:  34/ 99TX:  35/ 99TX:  36/ 99TX:  37/ 99TX:  38/ 99TX:  39/ 99TX:  40/ 99TX:  41/ 99TX:  42/ 99TX:  43/ 99TX:  44/ 99TX:  45/ 99TX:  46/ 99TX:  47/ 99TX:  48/ 99TX:  49/ 99TX:  50/ 99TX:  51/ 99TX:  52/ 99TX:  53/ 99TX:  54/ 99TX:  55/ 99TX:  56/ 99TX:  57/ 99TX:  58/ 99TX:  59/ 99TX:  60/ 99TX:  61/ 99TX:  62/ 99TX:  63/ 99TX:  64/ 99TX:  65/ 99TX:  66/ 99TX:  67/ 99TX:  68/ 99TX:  69/ 99TX:  70/ 99TX:  71/ 99TX:  72/ 99TX:  73/ 99TX:  74/ 99TX:  75/ 99TX:  76/ 99TX:  77/ 99TX:  78/ 99TX:  79/ 99TX:  80/ 99TX:  81/ 99TX:  82/ 99TX:  83/ 99TX:  84/ 99TX:  85/ 99TX:  86/ 99TX:  87/ 99TX:  88/ 99TX:  89/ 99TX:  90/ 99TX:  91/ 99TX:  92/ 99TX:  93/ 99TX:  94/ 99TX:  95/ 99TX:  96/ 99TX:  97/ 99TX:  98/ 99TX:  99/ 99
+(total: 100, matched: 96, invalid: 4)
 ✅ Block 23728674 completed successfully
 
 ==========================================
@@ -123,20 +91,12 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=29768
 ==========================================
 📦 Fetched block number: 23728675 [with 57 txs]
 📦 Fetched block number: 23728675 [with 57 txs]
-TX:   0/ 56TX:   1/ 56TX:   2/ 56TX:   3/ 56TX:   4/ 56TX:   5/ 56TX:   6/ 56TX:   7/ 56TX:   8/ 56TX:   9/ 56TX:  10/ 56TX:  11/ 56TX:  12/ 56TX:  13/ 56TX:  14/ 56TX:  15/ 56TX:  16/ 56TX:  17/ 56TX:  18/ 56TX:  19/ 56TX:  20/ 56TX:  21/ 56TX:  22/ 56TX:  23/ 56TX:  24/ 56TX:  25/ 56TX:  26/ 56TX:  27/ 56TX:  28/ 56TX:  29/ 56TX:  30/ 56TX:  31/ 56TX:  32/ 56TX:  33/ 56TX:  34/ 56TX:  35/ 56TX:  36/ 56TX:  37/ 56
-thread 'tokio-runtime-worker' (2500160) panicked at /Users/sergey/Private/solenoid/src/executor.rs:1633:55:
-range end index 544 out of range for slice of length 512
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
----
-### 23728675 37 hash=0x355e61f5a1dd9a27f2438965f7806dda8b1936df5ab564a0af12bdd198beda90
-REVM 	OK=true 	RET=true	GAS=709840	TRACES=48544
-sole 	PANIC: 'task 408 panicked with message "range end index 544 out of range for slice of length 512"'
-TX:  38/ 56TX:  39/ 56TX:  40/ 56TX:  41/ 56TX:  42/ 56TX:  43/ 56TX:  44/ 56TX:  45/ 56TX:  46/ 56TX:  47/ 56TX:  48/ 56---
+TX:   0/ 56TX:   1/ 56TX:   2/ 56TX:   3/ 56TX:   4/ 56TX:   5/ 56TX:   6/ 56TX:   7/ 56TX:   8/ 56TX:   9/ 56TX:  10/ 56TX:  11/ 56TX:  12/ 56TX:  13/ 56TX:  14/ 56TX:  15/ 56TX:  16/ 56TX:  17/ 56TX:  18/ 56TX:  19/ 56TX:  20/ 56TX:  21/ 56TX:  22/ 56TX:  23/ 56TX:  24/ 56TX:  25/ 56TX:  26/ 56TX:  27/ 56TX:  28/ 56TX:  29/ 56TX:  30/ 56TX:  31/ 56TX:  32/ 56TX:  33/ 56TX:  34/ 56TX:  35/ 56TX:  36/ 56TX:  37/ 56TX:  38/ 56TX:  39/ 56TX:  40/ 56TX:  41/ 56TX:  42/ 56TX:  43/ 56TX:  44/ 56TX:  45/ 56TX:  46/ 56TX:  47/ 56TX:  48/ 56---
 ### 23728675 48 hash=0x3d684384aaa463a2d8a1d423b03baea9fe9861ea6d4b5cf2522cf35c217b17e2
 REVM 	OK=false 	RET=empty	GAS=240210	TRACES=12668
 sole 	OK=false 	RET=match	GAS=match	TRACES=12668
 TX:  49/ 56TX:  50/ 56TX:  51/ 56TX:  52/ 56TX:  53/ 56TX:  54/ 56TX:  55/ 56TX:  56/ 56
-(total: 57, matched: 55, invalid: 2)
+(total: 57, matched: 56, invalid: 1)
 ✅ Block 23728675 completed successfully
 
 ==========================================
@@ -157,11 +117,7 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=104650
 ==========================================
 📦 Fetched block number: 23728677 [with 33 txs]
 📦 Fetched block number: 23728677 [with 33 txs]
-TX:   0/ 32TX:   1/ 32TX:   2/ 32TX:   3/ 32TX:   4/ 32TX:   5/ 32TX:   6/ 32TX:   7/ 32TX:   8/ 32TX:   9/ 32TX:  10/ 32---
-### 23728677 10 hash=0xfe41d1511d08c721168404208f9255dbd6cba97709e2cf24a45bf30b900cc86a
-REVM 	OK=true 	RET=<64>	GAS=1015291	TRACES=88658
-sole 	OK=true 	RET=<64>	GAS=-19900	TRACES=88658
-TX:  11/ 32TX:  12/ 32TX:  13/ 32TX:  14/ 32TX:  15/ 32TX:  16/ 32TX:  17/ 32TX:  18/ 32TX:  19/ 32TX:  20/ 32---
+TX:   0/ 32TX:   1/ 32TX:   2/ 32TX:   3/ 32TX:   4/ 32TX:   5/ 32TX:   6/ 32TX:   7/ 32TX:   8/ 32TX:   9/ 32TX:  10/ 32TX:  11/ 32TX:  12/ 32TX:  13/ 32TX:  14/ 32TX:  15/ 32TX:  16/ 32TX:  17/ 32TX:  18/ 32TX:  19/ 32TX:  20/ 32---
 ### 23728677 20 hash=0x7c45cac3e2815fcab40f527d0e9f17483d50c160cf15e130ff60c6ddb9d301b9
 REVM 	OK=true 	RET=empty	GAS=316234	TRACES=24872
 sole 	OK=true 	RET=match	GAS=match	TRACES=24872
@@ -170,7 +126,7 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=24872
 REVM 	OK=true 	RET=empty	GAS=1921407	TRACES=236908
 sole 	OK=true 	RET=match	GAS=match	TRACES=236908
 TX:  23/ 32TX:  24/ 32TX:  25/ 32TX:  26/ 32TX:  27/ 32TX:  28/ 32TX:  29/ 32TX:  30/ 32TX:  31/ 32TX:  32/ 32
-(total: 33, matched: 30, invalid: 3)
+(total: 33, matched: 31, invalid: 2)
 ✅ Block 23728677 completed successfully
 
 ==========================================
