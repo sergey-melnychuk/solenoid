@@ -1,15 +1,17 @@
 #!/bin/bash
 
 # Script to run runner on a range of blocks
-# Usage: etc/recent.sh <end_block> <number_of_blocks>
+# Usage: etc/run.sh <end_block> [number_of_blocks=1]
 
 set -e
 
 # Check if arguments are provided
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 <end_block> <number_of_blocks>"
+if [ $# -lt 1 ]; then
+    echo "Usage: $0 <end_block> [number_of_blocks=1]"
     echo "Examples:"
+    echo "  $0 latest          # runs runner on the latest block"
     echo "  $0 latest 10       # runs runner on the last 10 blocks ending at latest"
+    echo "  $0 23000000        # runs runner on block 23000000"
     echo "  $0 23000000 5      # runs runner on 5 blocks ending at block 23000000"
     exit 1
 fi
@@ -17,7 +19,7 @@ fi
 export RUST_MIN_STACK=16777216
 
 END_BLOCK_ARG=$1
-NUM_BLOCKS=$2
+NUM_BLOCKS=${2:-1}
 
 # Validate that number of blocks is a positive number
 if ! [[ "$NUM_BLOCKS" =~ ^[0-9]+$ ]] || [ "$NUM_BLOCKS" -le 0 ]; then

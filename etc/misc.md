@@ -25,20 +25,6 @@ curl -s -X POST -H "Content-Type: application/json" --data '{
     "id":1
 }' http://127.0.0.1:8080
 
-export HASH=0x073c6e8b5b748dff4d58bdb59fa2705f7ce9e32682678ca0aa541ace3b7eee52 && curl -s -X POST -H "Content-Type: application/json" --data '{
-    "jsonrpc": "2.0",
-    "method": "eth_getTransactionByHash",
-    "params": ["$HASH"],
-    "id": 1
-}' http://127.0.0.1:8080 | jq > $HASH.tx.json
-
-curl -s -X POST -H "Content-Type: application/json" --data '{
-    "jsonrpc": "2.0",
-    "method": "eth_getTransactionByHash",
-    "params": ["0xaf9bc110613cd93023b42756665d659c363a16823587642bc97555780df0a894"],
-    "id": 1
-}' http://127.0.0.1:8080 | jq
-
 curl -s -X POST -H "Content-Type: application/json" --data '{
     "jsonrpc": "2.0",
     "method": "eth_getCode",
@@ -46,23 +32,35 @@ curl -s -X POST -H "Content-Type: application/json" --data '{
     "id":1
 }' http://127.0.0.1:8080
 
-export HASH=0x073c6e8b5b748dff4d58bdb59fa2705f7ce9e32682678ca0aa541ace3b7eee52 && curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -d '{
+curl -s -X POST -H "Content-Type: application/json" --data '{
     "jsonrpc": "2.0",
-    "method": "eth_getTransactionReceipt",
-    "params": ["$HASH"],
-    "id": 1
-  }' http://127.0.0.1:8080 | jq > $HASH.r.json
+    "method": "eth_getBalance",
+    "params": ["0x4838b106fce9647bdf1e7877bf73ce8b0bad5f97","0x168c0b6"],
+    "id":1
+}' http://127.0.0.1:8080
+# result: 0x10ed3718e8fb9b189 (COINBASE BALANCE)
+
+---
+
+export HASH=0xc90b93f50ccbc3f1238b8a7d4ea8fe40c09cbb43d958e88974a11a84eea7b41f
 
 curl -s -X POST \
   -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "eth_getTransactionReceipt",
-    "params": ["0xaf9bc110613cd93023b42756665d659c363a16823587642bc97555780df0a894"],
-    "id": 1
-  }' http://127.0.0.1:8080 | jq
+  -d "{
+    \"jsonrpc\": \"2.0\",
+    \"method\": \"eth_getTransactionByHash\",
+    \"params\": [\"$HASH\"],
+    \"id\": 1
+  }" http://127.0.0.1:8080 | jq .result > etc/tx/$HASH.tx.json
+
+curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"jsonrpc\": \"2.0\",
+    \"method\": \"eth_getTransactionReceipt\",
+    \"params\": [\"$HASH\"],
+    \"id\": 1
+  }" http://127.0.0.1:8080 | jq .result > etc/tx/$HASH.txr.json
 
 curl -s -X POST \
   -H "Content-Type: application/json" \
@@ -72,6 +70,8 @@ curl -s -X POST \
     "params": ["0x93F730AB81f4B72f778d25dA321dda2e4570597f","0x168a664"],
     "id": 1
   }' http://127.0.0.1:8080 | jq
+
+---
 
 curl "https://www.4byte.directory/api/v1/signatures/?hex_signature=0x3850c7bd" | jq '.results[0].text_signature'
 "slot0()"

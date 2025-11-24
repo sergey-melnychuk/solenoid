@@ -21,3 +21,5 @@ cargo run --release --example runner -- 23683035 > etc/23683035.txt
 cargo run --release --example runner -- 23678007 > etc/23678007.txt
 cargo run --release --example runner -- 23690323 > etc/23690323.txt
 cargo run --release --example runner -- 23828643 > etc/23828643.txt
+
+etc/todo.sh
