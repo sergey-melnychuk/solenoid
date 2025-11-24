@@ -39,6 +39,8 @@ fn main() -> eyre::Result<()> {
 
     let is_compact = args.iter().skip(2).any(|arg| arg == "--compact");
 
+    let non_interactive = args.iter().skip(2).any(|arg| arg == "--noninteractive");
+
     let revm = std::fs::read_to_string(&revm_path).expect("traces");
     let revm = revm
         .split('\n')
@@ -90,6 +92,21 @@ fn main() -> eyre::Result<()> {
         let r = std::panic::catch_unwind(|| {
             pretty_assertions::assert_eq!(b, a);
         });
+
+        if r.is_err() && non_interactive {
+            let suffix = if a.gas_left <= 0 || b.gas_left <= 0 {
+                format!(",[out-of-gas]revm.gas_left={},sole.gas_left={}", a.gas_left, b.gas_left)
+            } else if b.name == "BALANCE" {
+                format!(",revm.stack[0]=0x{},sole.stack[0]=0x{}", 
+                    a.stack[0].replace("00", ""),
+                    b.stack[0].replace("00", ""),
+                )
+            } else {
+                String::from("")
+            };
+            println!("{block_number} {skip} pc={},op={}{suffix}", b.pc, b.name);
+            return Ok(());
+        }
 
         let is_failed = r.is_err();
         if is_failed && matches!(p, Predicate::None) {
@@ -158,7 +175,11 @@ fn main() -> eyre::Result<()> {
     }
 
     if !failed {
-        println!("OK");
+        if non_interactive {
+            println!("{block_number} {skip} OK");
+        } else {
+            println!("OK");
+        }
     }
     Ok(())
 }

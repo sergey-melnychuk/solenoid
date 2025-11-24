@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::{pin::Pin, sync::Arc};
 
 use evm_tracer::alloy_eips::BlockNumberOrTag;
@@ -65,6 +64,10 @@ pub fn runner(
             let mut result = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
                 guard.reset(effective_gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
+
+                // let coinbase_balance = guard.balance(&header.miner).await?;
+                // println!("[SOLE] COINBASE BALANCE: {coinbase_balance:#x}");
+
                 let result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
                     .with_header(header.clone())
@@ -162,8 +165,9 @@ async fn main() -> eyre::Result<()> {
 
     let mut matched = 0;
     for idx in 0..len {
-        eprint!("\rTX: {idx:>3}/{:>3}", len - 1);
-        std::io::stdout().flush().unwrap();
+        // use std::io::Write;
+        // eprint!("\rTX: {idx:>3}/{:>3}", len - 1);
+        // std::io::stdout().flush().unwrap();
 
         let tx = txs[idx].clone();
         let (revm_result, revm_traces) = g(tx)?;
