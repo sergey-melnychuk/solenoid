@@ -32,16 +32,8 @@
 ==========================================
 📦 Fetched block number: 23820668 [with 243 txs]
 📦 Fetched block number: 23820668 [with 243 txs]
----
-### 23820668 72 hash=0xa9eb4beae12b607c99447bd6d810ea628766d6c73e49ee8867705eda6942e44f
-REVM 	OK=true 	RET=empty	GAS=567962	TRACES=44749
-sole 	OK=true 	RET=match	GAS=match	TRACES=44749
----
-### 23820668 212 hash=0xf33c1e4741cb82a0b73436eb72d8c797cfadb9d25df1e115b76f2c43013be5e7
-REVM 	OK=false 	RET=<100>	GAS=344104	TRACES=9171
-sole 	OK=false 	RET=match	GAS=match	TRACES=9171
 
-(total: 243, matched: 241, invalid: 2)
+(total: 243, matched: 243, invalid: 0)
 ✅ Block 23820668 completed successfully
 
 ==========================================

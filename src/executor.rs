@@ -89,7 +89,7 @@ pub struct Evm {
     pub logs: Vec<Log>,
     pub touches: Vec<AccountTouch>,
 
-    pub mem_cost: Word,
+    pub mem_cost: i64,
     pub refund: i64,
 }
 
@@ -98,19 +98,18 @@ impl Evm {
         Self::default()
     }
 
-    pub(crate) fn memory_expansion_cost(&mut self) -> Word {
-        let mem_len = self.memory.len().div_ceil(32);
+    pub(crate) fn memory_expansion_cost(&mut self) -> i64 {
+        let mem_len = self.memory.len().div_ceil(32) as i64;
         let mem_cost = (mem_len * mem_len) / 512 + (3 * mem_len);
-        let mem_cost = Word::from(mem_cost);
         let exp_cost = mem_cost - self.mem_cost;
         self.mem_cost = mem_cost;
         exp_cost
     }
 
-    pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &mut Ext) -> Word {
+    pub(crate) fn address_access_cost(&mut self, address: &Address, ext: &mut Ext) -> i64 {
         // EIP-2929: Check if address has been accessed during this transaction
         if precompiles::is_precompile(address) {
-            return Word::from(100);
+            return 100;
         }
         let is_warm = ext.is_address_warm(address);
         if !is_warm {
@@ -118,9 +117,9 @@ impl Evm {
             self.touches.push(AccountTouch::WarmUp(*address));
         }
         if is_warm {
-            Word::from(100) // warm access
+            100 // warm access
         } else {
-            Word::from(2600) // cold access
+            2600 // cold access
         }
     }
 
@@ -290,6 +289,11 @@ pub struct Context {
 
     pub call_type: CallType,
     // block, gas price, etc
+}
+
+pub enum StepResult {
+    Ok(i64),
+    Halt(i64),
 }
 
 #[derive(Default)]
@@ -619,11 +623,23 @@ impl<T: EventTracer> Executor<T> {
                 .execute_instruction(code, call, evm, ext, ctx, instruction)
                 .await
             {
-                Ok(cost) => {
-                    let cost = cost.as_i64();
-                    let charged_cost = cost.min(evm.gas.remaining());
-                    if !instruction.is_call() {
+                Ok(result) => {
+                    let (cost, halt) = match result {
+                        StepResult::Ok(cost) => {
+                            (cost, false)
+                        }
+                        StepResult::Halt(cost) => {
+                            // let cost = evm.gas.remaining();
+                            // evm.gas(cost).ok();
+                            evm.stopped = true;
+                            evm.reverted = true;
+                            (cost, true)
+                        }
+                    };
+
+                    if !instruction.is_call() && !(halt && instruction.opcode.name == "SSTORE") {
                         // HERE: TODO: remove this label
+                        let charged_cost = cost.min(evm.gas.remaining());
                         let refund = evm.gas.refund - evm.refund;
                         evm.refund = evm.gas.refund;
 
@@ -636,7 +652,7 @@ impl<T: EventTracer> Executor<T> {
                                 name: instruction.opcode.name(),
                                 data: instruction.argument.clone().map(Into::into),
                                 gas_cost: charged_cost,
-                                gas_used: (evm.gas.used + charged_cost),
+                                gas_used: evm.gas.used + charged_cost,
                                 gas_back: refund,
                                 gas_left: evm.gas.remaining() - charged_cost,
                                 stack: evm.stack.clone(),
@@ -645,7 +661,7 @@ impl<T: EventTracer> Executor<T> {
                             },
                         });
                     }
-                    if instruction.opcode.code == 0xfe {
+                    if halt || instruction.opcode.code == 0xfe {
                         // INVALID opcode
                         // eprintln!("OPCODE INVALID: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                         evm.gas.sub(evm.gas.remaining()).expect("must succeed");
@@ -732,9 +748,9 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
         ctx: Context,
         instruction: &Instruction,
-    ) -> eyre::Result<Word> {
+    ) -> eyre::Result<StepResult> {
         self.debug = json!({});
-        let mut gas = Word::zero();
+        let mut gas = 0i64;
         let mut pc_increment = true;
 
         let this = if call.to.is_zero() {
@@ -762,35 +778,48 @@ impl<T: EventTracer> Executor<T> {
                     depth: ctx.depth,
                     reverted: evm.reverted,
                 });
-                return Ok(gas);
+                return Ok(StepResult::Ok(0));
             }
             // 0x01..0x0b: Arithmetic Operations
             0x01 => {
                 // ADD
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let (res, _) = a.overflowing_add(b);
                 evm.push(res)?;
-                gas = 3.into();
             }
             0x02 => {
                 // MUL
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let (res, _) = a.overflowing_mul(b);
                 evm.push(res)?;
-                gas = 5.into();
             }
             0x03 => {
                 // SUB
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let (res, _) = a.overflowing_sub(b);
                 evm.push(res)?;
-                gas = 3.into();
             }
             0x04 => {
                 // DIV
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 if b.is_zero() || a.is_zero() {
@@ -798,10 +827,13 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     evm.push(a / b)?;
                 }
-                gas = 5.into();
             }
             0x05 => {
                 // SDIV
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.into_bytes());
@@ -814,10 +846,13 @@ impl<T: EventTracer> Executor<T> {
                     a_signed / b_signed
                 };
                 evm.push(Word::from_bytes(&res.to_be_bytes()))?;
-                gas = 5.into();
             }
             0x06 => {
                 // MOD
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 if b.is_zero() {
@@ -825,10 +860,13 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     evm.push(a % b)?;
                 }
-                gas = 5.into();
             }
             0x07 => {
                 // SMOD
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.into_bytes());
@@ -839,10 +877,13 @@ impl<T: EventTracer> Executor<T> {
                     a_signed % b_signed
                 };
                 evm.push(Word::from_bytes(&res.to_be_bytes()))?;
-                gas = 5.into();
             }
             0x08 => {
                 // ADDMOD
+                gas = 8;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let m = evm.pop()?;
@@ -858,32 +899,40 @@ impl<T: EventTracer> Executor<T> {
                     "r": r,
                 });
                 evm.push(r)?;
-                gas = 8.into();
             }
             0x09 => {
                 // MULMOD
+                gas = 8;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let m = evm.pop()?;
                 let res = a.mul_modulo(&b, &m);
                 evm.push(res)?;
-                gas = 8.into();
             }
             0x0a => {
                 // EXP
                 let base = evm.pop()?;
                 let exponent = evm.pop()?;
-                evm.push(base.pow(exponent))?;
-
                 let exp_bytes = exponent
                     .into_bytes()
                     .into_iter()
                     .skip_while(|byte| byte == &0)
-                    .count();
-                gas = (10 + exp_bytes * 50).into();
+                    .count() as i64;
+                gas = 10 + exp_bytes * 50;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
+                evm.push(base.pow(exponent))?;
             }
             0x0b => {
                 // SIGNEXTEND
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let x = evm.pop()?.as_usize();
                 let b = evm.pop()?;
 
@@ -893,26 +942,35 @@ impl<T: EventTracer> Executor<T> {
                 let mask = Word::max() << (bit + 1);
                 let y = if neg { b | mask } else { b & !mask };
                 evm.push(y)?;
-                gas = 5.into();
             }
 
             // 0x10s: Comparison & Bitwise Logic
             0x10 => {
                 // LT
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 evm.push(if a < b { Word::one() } else { Word::zero() })?;
-                gas = 3.into();
             }
             0x11 => {
                 // GT
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 evm.push(if a > b { Word::one() } else { Word::zero() })?;
-                gas = 3.into();
             }
             0x12 => {
                 // SLT
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.into_bytes());
@@ -922,10 +980,13 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     Word::zero()
                 })?;
-                gas = 3.into();
             }
             0x13 => {
                 // SGT
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 let a_signed = I256::from_be_bytes(a.into_bytes());
@@ -935,54 +996,75 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     Word::zero()
                 })?;
-                gas = 3.into();
             }
             0x14 => {
                 // EQ
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 evm.push(if a == b { Word::one() } else { Word::zero() })?;
-                gas = 3.into();
             }
             0x15 => {
                 // ISZERO
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 evm.push(if a.is_zero() {
                     Word::one()
                 } else {
                     Word::zero()
                 })?;
-                gas = 3.into();
             }
             0x16 => {
                 // AND
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 evm.push(a & b)?;
-                gas = 3.into();
             }
             0x17 => {
                 // OR
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 evm.push(a | b)?;
-                gas = 3.into();
             }
             0x18 => {
                 // XOR
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 let b = evm.pop()?;
                 evm.push(a ^ b)?;
-                gas = 3.into();
             }
             0x19 => {
                 // NOT
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let a = evm.pop()?;
                 evm.push(!a)?;
-                gas = 3.into();
             }
             0x1a => {
                 // BYTE
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let index = evm.pop()?.as_usize();
                 let value: Word = evm.pop()?;
                 if index < 32 {
@@ -990,33 +1072,40 @@ impl<T: EventTracer> Executor<T> {
                 } else {
                     evm.push(Word::zero())?;
                 }
-                gas = 3.into();
             }
             0x1b => {
                 // SHL
-                let shift = evm.pop()?.as_usize();
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }                let shift = evm.pop()?.as_usize();
                 let value = evm.pop()?;
                 let ret = value << shift;
                 evm.push(ret)?;
-                gas = 3.into();
             }
             0x1c => {
                 // SHR
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let shift = evm.pop()?.as_usize();
                 let value = evm.pop()?;
                 let ret = value >> shift;
                 evm.push(ret)?;
-                gas = 3.into();
             }
             0x1d => {
                 // SAR
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let shift = evm.pop()?.as_usize();
                 let value = evm.pop()?;
                 let value = I256::from_be_bytes(value.into_bytes());
                 let ret = value >> shift;
                 let ret = Word::from_bytes(&ret.to_be_bytes());
                 evm.push(ret)?;
-                gas = 3.into();
             }
 
             0x20 => {
@@ -1042,21 +1131,30 @@ impl<T: EventTracer> Executor<T> {
                     depth: ctx.depth,
                     reverted: false,
                 });
+                gas = 30 + 6 * size.div_ceil(32) as i64;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(hash)?;
-                gas = (30 + 6 * size.div_ceil(32)).into();
             }
 
             // 30-3f
             0x30 => {
                 // ADDRESS
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push((&this).into())?;
-                gas = 2.into();
             }
             0x31 => {
                 // BALANCE
                 let addr = (&evm.pop()?).into();
                 // EIP-2929: Use proper address access tracking
                 gas = evm.address_access_cost(&addr, ext);
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let value = ext.balance(&addr).await?;
                 self.debug["BALANCE"] = json!({
                     "address": addr,
@@ -1067,26 +1165,39 @@ impl<T: EventTracer> Executor<T> {
             }
             0x32 => {
                 // ORIGIN
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push((&ctx.origin).into())?;
-                gas = 2.into();
             }
             0x33 => {
                 // CALLER
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push((&call.from).into())?;
-                gas = 2.into();
             }
             0x34 => {
                 // CALLVALUE
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let value = if matches!(ctx.call_type, CallType::Static) {
                     Word::zero()
                 } else {
                     call.value
                 };
                 evm.push(value)?;
-                gas = 2.into();
             }
             0x35 => {
                 // CALLDATALOAD
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let offset = evm.pop()?.as_usize();
                 if offset > call.data.len() {
                     evm.push(Word::zero())?;
@@ -1096,12 +1207,14 @@ impl<T: EventTracer> Executor<T> {
                     data[0..copy].copy_from_slice(&call.data[offset..offset + copy]);
                     evm.push(Word::from_bytes(&data))?;
                 }
-                gas = 3.into();
             }
             0x36 => {
                 // CALLDATASIZE
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(Word::from(call.data.len()))?;
-                gas = 2.into();
             }
             0x37 => {
                 // CALLDATACOPY
@@ -1127,14 +1240,17 @@ impl<T: EventTracer> Executor<T> {
                     evm.memory[dest_offset..dest_offset + size]
                         .copy_from_slice(&buffer[offset..offset + size]);
                 }
-                gas = (3 + 3 * size.div_ceil(32)).into();
+                gas = 3 + 3 * size.div_ceil(32) as i64;
                 gas += evm.memory_expansion_cost();
             }
             0x38 => {
                 // CODESIZE
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let len = code.bytecode.len();
                 evm.push(len.into())?;
-                gas = 2.into();
             }
             0x39 => {
                 // CODECOPY
@@ -1157,18 +1273,24 @@ impl<T: EventTracer> Executor<T> {
                 }
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&code[offset..offset + size]);
-                gas = (3 + 3 * size.div_ceil(32)).into();
+                gas = 3 + 3 * size.div_ceil(32) as i64;
                 gas += evm.memory_expansion_cost();
             }
             0x3a => {
                 // GASPRICE
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(ext.gas_info.gas_price)?;
-                gas = 2.into();
             }
             0x3b => {
                 // EXTCODESIZE
                 let address: Address = (&evm.pop()?).into();
                 gas = evm.address_access_cost(&address, ext);
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let code_size = ext.code(&address).await?.0.len();
                 evm.push(Word::from(code_size))?;
             }
@@ -1195,13 +1317,16 @@ impl<T: EventTracer> Executor<T> {
                 }
                 evm.memory[dest_offset..dest_offset + size]
                     .copy_from_slice(&code[offset..offset + size]);
-                gas = (3 * size.div_ceil(32)).into();
+                gas = 3 * size.div_ceil(32) as i64;
                 gas += evm.memory_expansion_cost();
                 gas += evm.address_access_cost(&address, ext);
             }
             0x3d => {
                 // RETURNDATASIZE
-                gas = 2.into();
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(self.ret.len().into())?;
             }
             0x3e => {
@@ -1229,12 +1354,16 @@ impl<T: EventTracer> Executor<T> {
                         *b = 0;
                     }
                 }
-                gas = (3 + 3 * size.div_ceil(32)).into();
+                gas = 3 + 3 * size.div_ceil(32) as i64;
                 gas += evm.memory_expansion_cost();
             }
             0x3f => {
                 // EXTCODEHASH
                 let address: Address = (&evm.pop()?).into();
+                gas = evm.address_access_cost(&address, ext);
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let is_empty = ext.is_empty(&address).await?;
                 if is_empty {
                     evm.push(Word::zero())?;
@@ -1242,49 +1371,73 @@ impl<T: EventTracer> Executor<T> {
                     let (_, hash) = ext.code(&address).await?;
                     evm.push(hash)?;
                 }
-                gas = evm.address_access_cost(&address, ext);
             }
 
             // 40-4a
             0x40 => {
                 // BLOCKHASH
+                gas = 20;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let block_number = evm.pop()?;
                 let block_hash = ext.get_block_hash(block_number).await?;
                 evm.push(block_hash)?;
-                gas = 20.into();
             }
             0x41 => {
                 // COINBASE
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push((&self.header.miner).into())?;
-                gas = 2.into();
             }
             0x42 => {
                 // TIMESTAMP
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(self.header.timestamp)?;
-                gas = 2.into();
             }
             0x43 => {
                 // NUMBER
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(self.header.number)?;
-                gas = 2.into();
             }
             0x44 => {
                 // PREVRANDAO
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(Word::zero())?;
-                gas = 2.into();
             }
             0x45 => {
                 // GASLIMIT
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(self.header.gas_limit)?;
-                gas = 2.into();
             }
             0x46 => {
                 // CHAINID
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(Word::one())?; // TODO: From TX
-                gas = 2.into();
             }
             0x47 => {
                 // SELFBALANCE
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let balance = ext.balance(&this).await?;
 
                 self.debug["SELFBALANCE"] = json!({
@@ -1293,15 +1446,21 @@ impl<T: EventTracer> Executor<T> {
                 });
 
                 evm.push(balance)?;
-                gas = 5.into();
             }
             0x48 => {
                 // BASEFEE
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(self.header.base_fee)?;
-                gas = 2.into();
             }
             0x49 => {
                 // BLOBHASH
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let _index = evm.pop()?;
                 // evm.push(self.header.extra_data)?;
                 evm.push(Word::zero())?;
@@ -1309,18 +1468,26 @@ impl<T: EventTracer> Executor<T> {
                 // > tx.blob_versioned_hashes[index] if index < len(tx.blob_versioned_hashes),
                 // > and otherwise with a zeroed bytes32 value."
                 // (See: https://www.evm.codes/?fork=prague#49)
-                gas = 3.into();
             }
             0x4a => {
                 // BLOBBASEFEE
-                todo!("BLOBBASEFEE")
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
+                // https://eips.ethereum.org/EIPS/eip-4844#gas-accounting
+                let word = self.header.blob_gas_price();
+                evm.push(word)?;
             }
 
             // 0x50s: Stack, Memory, Storage and Flow Operations
             0x50 => {
                 // POP
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.pop()?;
-                gas = 2.into();
             }
             0x51 => {
                 // MLOAD
@@ -1333,10 +1500,13 @@ impl<T: EventTracer> Executor<T> {
                     let padding = 32 - end % 32;
                     evm.memory.resize(end + padding % 32, 0);
                 }
+                gas = 3;
+                gas += evm.memory_expansion_cost();
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let value = Word::from_bytes(&evm.memory[offset..end]);
                 evm.push(value)?;
-                gas = 3.into();
-                gas += evm.memory_expansion_cost();
             }
             0x52 => {
                 // MSTORE
@@ -1350,10 +1520,13 @@ impl<T: EventTracer> Executor<T> {
                     let padding = 32 - end % 32;
                     evm.memory.resize(end + padding % 32, 0);
                 }
+                gas = 3;
+                gas += evm.memory_expansion_cost();
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let bytes = &value.into_bytes();
                 evm.memory[offset..end].copy_from_slice(bytes);
-                gas = 3.into();
-                gas += evm.memory_expansion_cost();
             }
             0x53 => {
                 // MSTORE8
@@ -1366,6 +1539,11 @@ impl<T: EventTracer> Executor<T> {
                     let padding = 32 - (offset + 1) % 32;
                     evm.memory.resize(offset + 1 + padding % 32, 0);
                 }
+                gas = 3;
+                gas += evm.memory_expansion_cost();
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.memory[offset] = value
                     .into_bytes()
                     .iter()
@@ -1373,16 +1551,24 @@ impl<T: EventTracer> Executor<T> {
                     .nth(0)
                     .copied()
                     .unwrap_or_default();
-                gas = 3.into();
-                gas += evm.memory_expansion_cost();
             }
             0x54 => {
                 // SLOAD
-                let key = evm.pop()?;
+                let [key] = evm.peek()?;
                 let is_warm = ext.is_storage_warm(&this, &key);
                 if !is_warm {
                     ext.warm_storage(&this, &key);
                 }
+                gas = if is_warm {
+                    100.into() // warm
+                } else {
+                    2100.into() // cold
+                };
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
+
+                evm.pop()?;
                 let val = evm.get(ext, &this, &key).await?;
                 evm.push(val)?;
                 evm.touches
@@ -1396,11 +1582,6 @@ impl<T: EventTracer> Executor<T> {
                     depth: ctx.depth,
                     reverted: false,
                 });
-                gas = if is_warm {
-                    100.into() // warm
-                } else {
-                    2100.into() // cold
-                };
 
                 self.debug["SLOAD"] = json!({
                     "address": this,
@@ -1533,24 +1714,24 @@ impl<T: EventTracer> Executor<T> {
 
                     self.tracer.push(Event {
                         depth: ctx.depth,
-                        reverted: false,
+                        reverted: true,
                         data: EventData::OpCode {
                             pc: instruction.offset,
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
-                            gas_cost: 0,
-                            gas_used: evm.gas.used,
+                            gas_cost: actual_gas_cost,
+                            gas_used: evm.gas.used + actual_gas_cost,
                             gas_back: 0,
-                            gas_left: actual_gas_cost,
+                            gas_left: 0,
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
                         },
                     });
                     // TODO: make OOG detection more generic
-                    evm.error(ExecutorError::OutOfGas().into())?;
-                    return Ok(Word::zero());
+                    // evm.error(ExecutorError::OutOfGas().into())?;
+                    return Ok(StepResult::Halt(0));
                 }
 
                 evm.put(ext, &this, key, new).await?;
@@ -1573,38 +1754,36 @@ impl<T: EventTracer> Executor<T> {
             }
             0x56 => {
                 // JUMP
+                gas = 8;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let dest = evm.pop()?.as_usize();
                 let dest = code.resolve_jump(dest).unwrap_or(dest);
                 if dest >= code.instructions.len() {
-                    evm.stopped = true;
-                    evm.reverted = true;
-                    return Ok(gas);
+                    return Ok(StepResult::Halt(gas));
                 }
-                if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
-                    evm.stopped = true;
-                    evm.reverted = true;
-                    return Ok(gas);
+                if code.instructions[dest].opcode.code != 0x5b {
+                    return Ok(StepResult::Halt(gas));
                 }
                 evm.pc = dest;
                 pc_increment = false;
-                gas = 8.into();
             }
             0x57 => {
                 // JUMPI
+                gas = 10;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let dest = evm.pop()?.as_usize();
                 let dest = code.resolve_jump(dest).unwrap_or(dest);
                 let cond = evm.pop()?;
-                gas = 10.into();
                 if !cond.is_zero() {
                     if dest >= code.instructions.len() {
-                        evm.stopped = true;
-                        evm.reverted = true;
-                        return Ok(gas);
+                        return Ok(StepResult::Halt(gas));
                     }
                     if code.instructions[dest].opcode.code != 0x5b && dest != 0 {
-                        evm.stopped = true;
-                        evm.reverted = true;
-                        return Ok(gas);
+                        return Ok(StepResult::Halt(gas));
                     }
                     evm.pc = dest;
                     pc_increment = false;
@@ -1612,30 +1791,45 @@ impl<T: EventTracer> Executor<T> {
             }
             0x58 => {
                 // PC
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(Word::from(instruction.offset))?;
-                gas = 2.into();
             }
             0x59 => {
                 // MSIZE
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(Word::from(evm.memory.len()))?;
-                gas = 2.into();
             }
             0x5a => {
                 // GAS
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let val = (evm.gas.remaining() - 2) as u64;
                 evm.push(val.into())?;
-                gas = 2.into();
             }
             0x5b => {
                 // JUMPDEST: noop, a valid destination for JUMP/JUMPI
-                gas = 1.into();
+                gas = 1;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
             }
             0x5c => {
                 // TLOAD
+                gas = 100;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let key = evm.pop()?;
                 let val = ext.transient.get(&(this, key)).copied().unwrap_or_default();
                 evm.push(val)?;
-                gas = 100.into();
                 self.debug["TLOAD"] = json!({
                     "address": this,
                     "key": key,
@@ -1644,10 +1838,13 @@ impl<T: EventTracer> Executor<T> {
             }
             0x5d => {
                 // TSTORE
+                gas = 100;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let key = evm.pop()?;
                 let val = evm.pop()?;
                 let old = ext.transient.insert((this, key), val).unwrap_or_default();
-                gas = 100.into();
                 evm.touches
                     .push(AccountTouch::SetTransientState(this, key, old, val));
                 self.debug["TSTORE"] = json!({
@@ -1662,6 +1859,13 @@ impl<T: EventTracer> Executor<T> {
                 let dest_offset = evm.pop()?.as_usize();
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
+
+                let words = size.div_ceil(32);
+                gas = 3 + 3 * words as i64;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
+
                 if size > 0 {
                     let len = (dest_offset + size).max(offset + size);
                     if len > evm.memory.len() {
@@ -1679,6 +1883,11 @@ impl<T: EventTracer> Executor<T> {
                         buffer[..copy].copy_from_slice(&evm.memory[offset..offset + copy]);
                         buffer[copy..].copy_from_slice(&vec![0u8; size - copy]);
                     }
+
+                    gas += evm.memory_expansion_cost();
+                    if evm.gas.remaining() < gas {
+                        return Ok(StepResult::Halt(gas));
+                    }
                     evm.memory[dest_offset..dest_offset + size].copy_from_slice(&buffer);    
                 }
 
@@ -1688,47 +1897,55 @@ impl<T: EventTracer> Executor<T> {
                     "size": size,
                     "mem.len": evm.memory.len(),
                 });
-
-                let words = size.div_ceil(32);
-                gas = (3 + 3 * words).into();
-                gas += evm.memory_expansion_cost();
             }
             0x5f => {
                 // PUSH0
+                gas = 2;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 evm.push(Word::zero())?;
-                gas = 2.into();
             }
 
             0x60..=0x7f => {
                 // PUSH1..PUSH32
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let arg = instruction
                     .argument
                     .as_ref()
                     .ok_or(ExecutorError::MissingData)?;
                 evm.push(Word::from_bytes(arg))?;
-                gas = 3.into();
             }
 
             0x80..=0x8f => {
                 // DUP1..DUP16
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let n = instruction.opcode.n as usize;
                 if evm.stack.len() < n {
                     evm.error(ExecutorError::StackUnderflow.into())?;
                 }
                 let val = evm.stack[evm.stack.len() - n];
                 evm.push(val)?;
-                gas = 3.into();
             }
 
             0x90..=0x9f => {
                 // SWAP1..SWAP16
+                gas = 3;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
                 let n = instruction.opcode.n as usize;
                 if evm.stack.len() <= n {
                     evm.error(ExecutorError::StackUnderflow.into())?;
                 }
                 let stack_len = evm.stack.len();
                 evm.stack.swap(stack_len - 1, stack_len - 1 - n);
-                gas = 3.into();
             }
 
             0xa0..=0xa4 => {
@@ -1739,6 +1956,13 @@ impl<T: EventTracer> Executor<T> {
                 let n = instruction.opcode.n as usize;
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
+
+                gas = 375;
+                gas += 375 * n as i64 + 8 * size as i64;
+                gas += evm.memory_expansion_cost();
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
 
                 let mut topics = Vec::with_capacity(n);
                 for _ in 0..n {
@@ -1757,10 +1981,6 @@ impl<T: EventTracer> Executor<T> {
                     evm.memory[offset..offset + size].to_vec()
                 };
                 evm.logs.push(Log(this, topics, data));
-
-                gas = 375.into();
-                gas += (375 * n + 8 * size).into();
-                gas += evm.memory_expansion_cost();
             }
 
             0xf0 => {
@@ -1788,9 +2008,14 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Call,
                     ..ctx
                 };
-                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
                     .await
-                    .with_context(|| "opcode: CALL")?;
+                    .with_context(|| "opcode: CALL") {
+                        Ok(()) => {} // ignore
+                        Err(_) => {
+                            return Ok(StepResult::Halt(evm.gas.remaining()));
+                        }
+                    }
             }
             0xf2 => {
                 // CALLCODE
@@ -1801,8 +2026,13 @@ impl<T: EventTracer> Executor<T> {
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage [, the current sender and the current value] remain the same.
                 // DELEGATECALL difference:  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
-                    .await?;
+                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await {
+                        Ok(()) => {} // ignore
+                        Err(_) => {
+                            return Ok(StepResult::Halt(evm.gas.remaining()));
+                        }
+                    }
             }
             0xf3 | 0xfd => {
                 // RETURN
@@ -1850,8 +2080,13 @@ impl<T: EventTracer> Executor<T> {
                 };
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage, the current sender and the current value remain the same.
-                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
-                    .await?;
+                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await {
+                        Ok(()) => {} // ignore
+                        Err(_) => {
+                            return Ok(StepResult::Halt(evm.gas.remaining()));
+                        }
+                    }
             }
             0xf5 => {
                 // CREATE2
@@ -1871,8 +2106,13 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Static,
                     ..ctx
                 };
-                self.call(instruction, this, call, &mut gas, evm, ext, ctx)
-                    .await?;
+                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await {
+                        Ok(()) => {} // ignore
+                        Err(_) => {
+                            return Ok(StepResult::Halt(evm.gas.remaining()));
+                        }
+                    }
             }
             0xfe => {
                 // INVALID: handled outside of `execute_instruction`
@@ -1916,7 +2156,7 @@ impl<T: EventTracer> Executor<T> {
             evm.pc += 1;
         }
 
-        Ok(gas)
+        Ok(StepResult::Ok(gas))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1925,7 +2165,7 @@ impl<T: EventTracer> Executor<T> {
         instruction: &Instruction,
         this: Address,
         call: &Call,
-        gas: &mut Word,
+        gas: &mut i64,
         evm: &mut Evm,
         ext: &mut Ext,
         ctx: Context,
@@ -1963,7 +2203,7 @@ impl<T: EventTracer> Executor<T> {
             let size = size.div_ceil(32) * 32;
             evm.memory.resize(size, 0);
         }
-        let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
+        let memory_expansion_cost = evm.memory_expansion_cost();
 
         let mut create_cost = 0;
         let is_empty = !precompiles::is_precompile(&address) && ext.is_empty(&address).await?;
@@ -1973,7 +2213,7 @@ impl<T: EventTracer> Executor<T> {
 
         // Calculate address access cost (EIP-2929)
         let (code, codehash) = ext.code(&address).await?;
-        let mut access_cost = evm.address_access_cost(&address, ext).as_i64();
+        let mut access_cost = evm.address_access_cost(&address, ext);
 
         // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
         let is_delegated = code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]);
@@ -1981,7 +2221,7 @@ impl<T: EventTracer> Executor<T> {
             access_cost += 100;
             let target = Address::try_from(&code[3..]).expect("must succeed");
             let (code, _) = ext.code(&target).await?;
-            let target_cost = evm.address_access_cost(&target, ext).as_i64();
+            let target_cost = evm.address_access_cost(&target, ext);
             access_cost += target_cost - 100;
             code
         } else {
@@ -2035,7 +2275,7 @@ impl<T: EventTracer> Executor<T> {
             // Don't add refunds from reverted calls
             evm.refund = evm.gas.refund;
             evm.push(Word::zero())?;
-            return Ok(());
+            return Err(ExecutorError::OutOfGas().into());
         }
 
         // Calculate available gas for forwarding using "all but one 64th" rule
@@ -2045,7 +2285,7 @@ impl<T: EventTracer> Executor<T> {
 
         // For EVM accounting: only charge the outer EVM for base cost
         // (forwarded gas was already "spent" by allocating it to inner call)
-        *gas = base_gas_cost.unsigned_abs().into();
+        *gas = base_gas_cost;
 
         // For tracing: report the total cost including forwarded gas (to match REVM)
         let total_gas_cost_for_tracing = base_gas_cost + gas_to_forward - gas_stipend_adjustment;
@@ -2276,7 +2516,7 @@ impl<T: EventTracer> Executor<T> {
         &mut self,
         instruction: &Instruction,
         this: Address,
-        gas: &mut Word,
+        gas: &mut i64,
         evm: &mut Evm,
         ext: &mut Ext,
         ctx: Context,
@@ -2298,7 +2538,7 @@ impl<T: EventTracer> Executor<T> {
             evm.memory.resize(offset + size + padding % 32, 0);
         }
 
-        let memory_expansion_cost = evm.memory_expansion_cost().as_i64();
+        let memory_expansion_cost = evm.memory_expansion_cost();
 
         let bytecode = evm.memory[offset..offset + size].to_vec();
         let word_size = bytecode.len().div_ceil(32) as i64;
@@ -2410,7 +2650,7 @@ impl<T: EventTracer> Executor<T> {
         }
 
         evm.gas.used += base_cost_without_deploy + deployed_code_cost + inner_evm.gas.used;
-        *gas = Word::zero();
+        *gas = 0;
 
         if inner_evm.reverted {
             evm.push(Word::zero())?;

@@ -59,12 +59,8 @@
 ==========================================
 📦 Fetched block number: 23728675 [with 57 txs]
 📦 Fetched block number: 23728675 [with 57 txs]
----
-### 23728675 48 hash=0x3d684384aaa463a2d8a1d423b03baea9fe9861ea6d4b5cf2522cf35c217b17e2
-REVM 	OK=false 	RET=empty	GAS=240210	TRACES=12668
-sole 	OK=false 	RET=match	GAS=match	TRACES=12668
 
-(total: 57, matched: 56, invalid: 1)
+(total: 57, matched: 57, invalid: 0)
 ✅ Block 23728675 completed successfully
 
 ==========================================

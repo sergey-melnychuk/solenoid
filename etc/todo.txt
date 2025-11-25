@@ -1,12 +1,4 @@
-23634227 238 pc=3404,op=SSTORE,[out-of-gas]revm.gas_left=145,sole.gas_left=0
-23647631 49 pc=128,op=ADD,[out-of-gas]revm.gas_left=0,sole.gas_left=0
 23678686 0 pc=95,op=RETURNDATASIZE,[out-of-gas]revm.gas_left=455496,sole.gas_left=0
-23678721 137 OK
-23683764 86 pc=0,op=PUSH1,[out-of-gas]revm.gas_left=0,sole.gas_left=0
-23683764 87 pc=0,op=PUSH1,[out-of-gas]revm.gas_left=0,sole.gas_left=0
-23690323 24 pc=9801,op=LOG3,[out-of-gas]revm.gas_left=0,sole.gas_left=0
-23728675 48 pc=5257,op=LOG3,[out-of-gas]revm.gas_left=0,sole.gas_left=0
-23820668 212 pc=7410,op=LOG3,[out-of-gas]revm.gas_left=0,sole.gas_left=0
-23820668 72 pc=15795,op=NOT,[out-of-gas]revm.gas_left=0,sole.gas_left=0
+23678721 137 OK,[access-list]
 23820673 10 pc=2725,op=SWAP4,[out-of-gas]revm.gas_left=110,sole.gas_left=0
-23828643 11 OK
+23828643 11 OK,[access-list]
