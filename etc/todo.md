@@ -7,22 +7,6 @@ RUST_MIN_STACK=16777216
 
 ---
 
-COINBASE BALANCE:
-
-etc/ck.sh 23728671 36
-   value: 0x166605a78ad81c (sent to miner in a tx)
-
-NO FEES:
-expected: 0xb033a129cea32f7e0
- but got: 0xafff3303ff6a69b5a // initial balance at block start
-
-WITH FEES:
-expected: 0xb033a129cea32f7e0
- but got: 0xb03c479b79f6cbb06 // cumulative fees (too big)
-    diff:    0x8a671ab539c326
-
----
-
 23828643 11
 GAS=-7375
 0xdc3e84df00ff8ff2dbb5dfb8a5c6bb4e04ef9fb2e74b22885ae2380e0a0631d8

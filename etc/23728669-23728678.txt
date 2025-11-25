@@ -5,7 +5,7 @@
 ==========================================
 📦 Fetched block number: 23728669 [with 45 txs]
 📦 Fetched block number: 23728669 [with 45 txs]
-TX:   0/ 44TX:   1/ 44TX:   2/ 44TX:   3/ 44TX:   4/ 44TX:   5/ 44TX:   6/ 44TX:   7/ 44TX:   8/ 44TX:   9/ 44TX:  10/ 44TX:  11/ 44TX:  12/ 44TX:  13/ 44TX:  14/ 44TX:  15/ 44TX:  16/ 44TX:  17/ 44TX:  18/ 44TX:  19/ 44TX:  20/ 44TX:  21/ 44TX:  22/ 44TX:  23/ 44TX:  24/ 44TX:  25/ 44TX:  26/ 44TX:  27/ 44TX:  28/ 44TX:  29/ 44TX:  30/ 44TX:  31/ 44TX:  32/ 44TX:  33/ 44TX:  34/ 44TX:  35/ 44TX:  36/ 44TX:  37/ 44TX:  38/ 44TX:  39/ 44TX:  40/ 44TX:  41/ 44TX:  42/ 44TX:  43/ 44TX:  44/ 44
+
 (total: 45, matched: 45, invalid: 0)
 ✅ Block 23728669 completed successfully
 
@@ -14,7 +14,7 @@
 ==========================================
 📦 Fetched block number: 23728670 [with 117 txs]
 📦 Fetched block number: 23728670 [with 117 txs]
-TX:   0/116TX:   1/116TX:   2/116TX:   3/116TX:   4/116TX:   5/116TX:   6/116TX:   7/116TX:   8/116TX:   9/116TX:  10/116TX:  11/116TX:  12/116TX:  13/116TX:  14/116TX:  15/116TX:  16/116TX:  17/116TX:  18/116TX:  19/116TX:  20/116TX:  21/116TX:  22/116TX:  23/116TX:  24/116TX:  25/116TX:  26/116TX:  27/116TX:  28/116TX:  29/116TX:  30/116TX:  31/116TX:  32/116TX:  33/116TX:  34/116TX:  35/116TX:  36/116TX:  37/116TX:  38/116TX:  39/116TX:  40/116TX:  41/116TX:  42/116TX:  43/116TX:  44/116TX:  45/116TX:  46/116TX:  47/116TX:  48/116TX:  49/116TX:  50/116TX:  51/116TX:  52/116TX:  53/116TX:  54/116TX:  55/116TX:  56/116TX:  57/116TX:  58/116TX:  59/116TX:  60/116TX:  61/116TX:  62/116TX:  63/116TX:  64/116TX:  65/116TX:  66/116TX:  67/116TX:  68/116TX:  69/116TX:  70/116TX:  71/116TX:  72/116TX:  73/116TX:  74/116TX:  75/116TX:  76/116TX:  77/116TX:  78/116TX:  79/116TX:  80/116TX:  81/116TX:  82/116TX:  83/116TX:  84/116TX:  85/116TX:  86/116TX:  87/116TX:  88/116TX:  89/116TX:  90/116TX:  91/116TX:  92/116TX:  93/116TX:  94/116TX:  95/116TX:  96/116TX:  97/116TX:  98/116TX:  99/116TX: 100/116TX: 101/116TX: 102/116TX: 103/116TX: 104/116TX: 105/116TX: 106/116TX: 107/116TX: 108/116TX: 109/116TX: 110/116TX: 111/116TX: 112/116TX: 113/116TX: 114/116TX: 115/116TX: 116/116
+
 (total: 117, matched: 117, invalid: 0)
 ✅ Block 23728670 completed successfully
 
@@ -23,12 +23,8 @@
 ==========================================
 📦 Fetched block number: 23728671 [with 134 txs]
 📦 Fetched block number: 23728671 [with 134 txs]
-TX:   0/133TX:   1/133TX:   2/133TX:   3/133TX:   4/133TX:   5/133TX:   6/133TX:   7/133TX:   8/133TX:   9/133TX:  10/133TX:  11/133TX:  12/133TX:  13/133TX:  14/133TX:  15/133TX:  16/133TX:  17/133TX:  18/133TX:  19/133TX:  20/133TX:  21/133TX:  22/133TX:  23/133TX:  24/133TX:  25/133TX:  26/133TX:  27/133TX:  28/133TX:  29/133TX:  30/133TX:  31/133TX:  32/133TX:  33/133TX:  34/133TX:  35/133TX:  36/133---
-### 23728671 36 hash=0x67c600d82bb0d430944c3bb22859a9257a0cd400b9430744dc2a153f693e7a7e
-REVM 	OK=true 	RET=<32>	GAS=431807	TRACES=42480
-sole 	OK=true 	RET=match	GAS=match	TRACES=42480
-TX:  37/133TX:  38/133TX:  39/133TX:  40/133TX:  41/133TX:  42/133TX:  43/133TX:  44/133TX:  45/133TX:  46/133TX:  47/133TX:  48/133TX:  49/133TX:  50/133TX:  51/133TX:  52/133TX:  53/133TX:  54/133TX:  55/133TX:  56/133TX:  57/133TX:  58/133TX:  59/133TX:  60/133TX:  61/133TX:  62/133TX:  63/133TX:  64/133TX:  65/133TX:  66/133TX:  67/133TX:  68/133TX:  69/133TX:  70/133TX:  71/133TX:  72/133TX:  73/133TX:  74/133TX:  75/133TX:  76/133TX:  77/133TX:  78/133TX:  79/133TX:  80/133TX:  81/133TX:  82/133TX:  83/133TX:  84/133TX:  85/133TX:  86/133TX:  87/133TX:  88/133TX:  89/133TX:  90/133TX:  91/133TX:  92/133TX:  93/133TX:  94/133TX:  95/133TX:  96/133TX:  97/133TX:  98/133TX:  99/133TX: 100/133TX: 101/133TX: 102/133TX: 103/133TX: 104/133TX: 105/133TX: 106/133TX: 107/133TX: 108/133TX: 109/133TX: 110/133TX: 111/133TX: 112/133TX: 113/133TX: 114/133TX: 115/133TX: 116/133TX: 117/133TX: 118/133TX: 119/133TX: 120/133TX: 121/133TX: 122/133TX: 123/133TX: 124/133TX: 125/133TX: 126/133TX: 127/133TX: 128/133TX: 129/133TX: 130/133TX: 131/133TX: 132/133TX: 133/133
-(total: 134, matched: 133, invalid: 1)
+
+(total: 134, matched: 134, invalid: 0)
 ✅ Block 23728671 completed successfully
 
 ==========================================
@@ -36,20 +32,8 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=42480
 ==========================================
 📦 Fetched block number: 23728672 [with 20 txs]
 📦 Fetched block number: 23728672 [with 20 txs]
-TX:   0/ 19TX:   1/ 19TX:   2/ 19TX:   3/ 19TX:   4/ 19TX:   5/ 19TX:   6/ 19TX:   7/ 19---
-### 23728672 7 hash=0xbfcc1e1b4a536db7e7619afcbb3c5693d968db531c2dacddc6966d1651e65456
-REVM 	OK=true 	RET=empty	GAS=798008	TRACES=115218
-sole 	OK=true 	RET=match	GAS=match	TRACES=115218
-TX:   8/ 19TX:   9/ 19TX:  10/ 19TX:  11/ 19---
-### 23728672 11 hash=0x3d1576393b4fb6d235eb6056409ff23d8c4f11776b5431c4e03dc08a59d332cd
-REVM 	OK=true 	RET=empty	GAS=441103	TRACES=59266
-sole 	OK=true 	RET=match	GAS=match	TRACES=59266
-TX:  12/ 19TX:  13/ 19---
-### 23728672 13 hash=0xe251aef9bb1e1bee9fa47f6e4d392b06d845e2af7bde4a9e75f85647d812bd9b
-REVM 	OK=true 	RET=empty	GAS=238248	TRACES=21408
-sole 	OK=true 	RET=match	GAS=match	TRACES=21408
-TX:  14/ 19TX:  15/ 19TX:  16/ 19TX:  17/ 19TX:  18/ 19TX:  19/ 19
-(total: 20, matched: 17, invalid: 3)
+
+(total: 20, matched: 20, invalid: 0)
 ✅ Block 23728672 completed successfully
 
 ==========================================
@@ -57,7 +41,7 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=21408
 ==========================================
 📦 Fetched block number: 23728673 [with 34 txs]
 📦 Fetched block number: 23728673 [with 34 txs]
-TX:   0/ 33TX:   1/ 33TX:   2/ 33TX:   3/ 33TX:   4/ 33TX:   5/ 33TX:   6/ 33TX:   7/ 33TX:   8/ 33TX:   9/ 33TX:  10/ 33TX:  11/ 33TX:  12/ 33TX:  13/ 33TX:  14/ 33TX:  15/ 33TX:  16/ 33TX:  17/ 33TX:  18/ 33TX:  19/ 33TX:  20/ 33TX:  21/ 33TX:  22/ 33TX:  23/ 33TX:  24/ 33TX:  25/ 33TX:  26/ 33TX:  27/ 33TX:  28/ 33TX:  29/ 33TX:  30/ 33TX:  31/ 33TX:  32/ 33TX:  33/ 33
+
 (total: 34, matched: 34, invalid: 0)
 ✅ Block 23728673 completed successfully
 
@@ -66,24 +50,8 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=21408
 ==========================================
 📦 Fetched block number: 23728674 [with 100 txs]
 📦 Fetched block number: 23728674 [with 100 txs]
-TX:   0/ 99TX:   1/ 99TX:   2/ 99TX:   3/ 99TX:   4/ 99TX:   5/ 99TX:   6/ 99TX:   7/ 99TX:   8/ 99TX:   9/ 99---
-### 23728674 9 hash=0xab10b4304513bf31e939709ff502cc4d55a5e687d7155f3142ac62480976c828
-REVM 	OK=true 	RET=empty	GAS=408345	TRACES=50827
-sole 	OK=true 	RET=match	GAS=match	TRACES=50827
-TX:  10/ 99TX:  11/ 99---
-### 23728674 11 hash=0xdbaf7ec5e840b4c3cb1e8af33ad3e5d601bc6dc4e2f3066b7d6ad84d68f75b52
-REVM 	OK=true 	RET=empty	GAS=184513	TRACES=14727
-sole 	OK=true 	RET=match	GAS=match	TRACES=14727
-TX:  12/ 99---
-### 23728674 12 hash=0xe7d2cfacc3e577934de7642bf4818fc4fefbab151893fe60ff3274edc940dcb1
-REVM 	OK=true 	RET=empty	GAS=245558	TRACES=28676
-sole 	OK=true 	RET=match	GAS=match	TRACES=28676
-TX:  13/ 99TX:  14/ 99TX:  15/ 99TX:  16/ 99TX:  17/ 99TX:  18/ 99TX:  19/ 99---
-### 23728674 19 hash=0xf8152fa5a3151a3bb16b6b3984547b77ff395a31888542556ca3457ce78bc034
-REVM 	OK=true 	RET=empty	GAS=185231	TRACES=14920
-sole 	OK=true 	RET=match	GAS=match	TRACES=14920
-TX:  20/ 99TX:  21/ 99TX:  22/ 99TX:  23/ 99TX:  24/ 99TX:  25/ 99TX:  26/ 99TX:  27/ 99TX:  28/ 99TX:  29/ 99TX:  30/ 99TX:  31/ 99TX:  32/ 99TX:  33/ 99TX:  34/ 99TX:  35/ 99TX:  36/ 99TX:  37/ 99TX:  38/ 99TX:  39/ 99TX:  40/ 99TX:  41/ 99TX:  42/ 99TX:  43/ 99TX:  44/ 99TX:  45/ 99TX:  46/ 99TX:  47/ 99TX:  48/ 99TX:  49/ 99TX:  50/ 99TX:  51/ 99TX:  52/ 99TX:  53/ 99TX:  54/ 99TX:  55/ 99TX:  56/ 99TX:  57/ 99TX:  58/ 99TX:  59/ 99TX:  60/ 99TX:  61/ 99TX:  62/ 99TX:  63/ 99TX:  64/ 99TX:  65/ 99TX:  66/ 99TX:  67/ 99TX:  68/ 99TX:  69/ 99TX:  70/ 99TX:  71/ 99TX:  72/ 99TX:  73/ 99TX:  74/ 99TX:  75/ 99TX:  76/ 99TX:  77/ 99TX:  78/ 99TX:  79/ 99TX:  80/ 99TX:  81/ 99TX:  82/ 99TX:  83/ 99TX:  84/ 99TX:  85/ 99TX:  86/ 99TX:  87/ 99TX:  88/ 99TX:  89/ 99TX:  90/ 99TX:  91/ 99TX:  92/ 99TX:  93/ 99TX:  94/ 99TX:  95/ 99TX:  96/ 99TX:  97/ 99TX:  98/ 99TX:  99/ 99
-(total: 100, matched: 96, invalid: 4)
+
+(total: 100, matched: 100, invalid: 0)
 ✅ Block 23728674 completed successfully
 
 ==========================================
@@ -91,11 +59,11 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=14920
 ==========================================
 📦 Fetched block number: 23728675 [with 57 txs]
 📦 Fetched block number: 23728675 [with 57 txs]
-TX:   0/ 56TX:   1/ 56TX:   2/ 56TX:   3/ 56TX:   4/ 56TX:   5/ 56TX:   6/ 56TX:   7/ 56TX:   8/ 56TX:   9/ 56TX:  10/ 56TX:  11/ 56TX:  12/ 56TX:  13/ 56TX:  14/ 56TX:  15/ 56TX:  16/ 56TX:  17/ 56TX:  18/ 56TX:  19/ 56TX:  20/ 56TX:  21/ 56TX:  22/ 56TX:  23/ 56TX:  24/ 56TX:  25/ 56TX:  26/ 56TX:  27/ 56TX:  28/ 56TX:  29/ 56TX:  30/ 56TX:  31/ 56TX:  32/ 56TX:  33/ 56TX:  34/ 56TX:  35/ 56TX:  36/ 56TX:  37/ 56TX:  38/ 56TX:  39/ 56TX:  40/ 56TX:  41/ 56TX:  42/ 56TX:  43/ 56TX:  44/ 56TX:  45/ 56TX:  46/ 56TX:  47/ 56TX:  48/ 56---
+---
 ### 23728675 48 hash=0x3d684384aaa463a2d8a1d423b03baea9fe9861ea6d4b5cf2522cf35c217b17e2
 REVM 	OK=false 	RET=empty	GAS=240210	TRACES=12668
 sole 	OK=false 	RET=match	GAS=match	TRACES=12668
-TX:  49/ 56TX:  50/ 56TX:  51/ 56TX:  52/ 56TX:  53/ 56TX:  54/ 56TX:  55/ 56TX:  56/ 56
+
 (total: 57, matched: 56, invalid: 1)
 ✅ Block 23728675 completed successfully
 
@@ -104,11 +72,11 @@ sole 	OK=false 	RET=match	GAS=match	TRACES=12668
 ==========================================
 📦 Fetched block number: 23728676 [with 25 txs]
 📦 Fetched block number: 23728676 [with 25 txs]
-TX:   0/ 24TX:   1/ 24TX:   2/ 24TX:   3/ 24TX:   4/ 24TX:   5/ 24TX:   6/ 24TX:   7/ 24TX:   8/ 24TX:   9/ 24TX:  10/ 24TX:  11/ 24TX:  12/ 24TX:  13/ 24TX:  14/ 24TX:  15/ 24TX:  16/ 24TX:  17/ 24---
+---
 ### 23728676 17 hash=0xe8c807037c655e80a7857d7b662b027af4a2f52285b463369009a18cd939c116
 REVM 	OK=true 	RET=empty	GAS=838442	TRACES=104650
 sole 	OK=true 	RET=match	GAS=match	TRACES=104650
-TX:  18/ 24TX:  19/ 24TX:  20/ 24TX:  21/ 24TX:  22/ 24TX:  23/ 24TX:  24/ 24
+
 (total: 25, matched: 24, invalid: 1)
 ✅ Block 23728676 completed successfully
 
@@ -117,15 +85,15 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=104650
 ==========================================
 📦 Fetched block number: 23728677 [with 33 txs]
 📦 Fetched block number: 23728677 [with 33 txs]
-TX:   0/ 32TX:   1/ 32TX:   2/ 32TX:   3/ 32TX:   4/ 32TX:   5/ 32TX:   6/ 32TX:   7/ 32TX:   8/ 32TX:   9/ 32TX:  10/ 32TX:  11/ 32TX:  12/ 32TX:  13/ 32TX:  14/ 32TX:  15/ 32TX:  16/ 32TX:  17/ 32TX:  18/ 32TX:  19/ 32TX:  20/ 32---
+---
 ### 23728677 20 hash=0x7c45cac3e2815fcab40f527d0e9f17483d50c160cf15e130ff60c6ddb9d301b9
 REVM 	OK=true 	RET=empty	GAS=316234	TRACES=24872
 sole 	OK=true 	RET=match	GAS=match	TRACES=24872
-TX:  21/ 32TX:  22/ 32---
+---
 ### 23728677 22 hash=0xaa5fded6fc7544c5a9707d9b9f92fa8d1f480e695049c36f9420df25d81784ac
 REVM 	OK=true 	RET=empty	GAS=1921407	TRACES=236908
 sole 	OK=true 	RET=match	GAS=match	TRACES=236908
-TX:  23/ 32TX:  24/ 32TX:  25/ 32TX:  26/ 32TX:  27/ 32TX:  28/ 32TX:  29/ 32TX:  30/ 32TX:  31/ 32TX:  32/ 32
+
 (total: 33, matched: 31, invalid: 2)
 ✅ Block 23728677 completed successfully
 
@@ -134,11 +102,11 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=236908
 ==========================================
 📦 Fetched block number: 23728678 [with 111 txs]
 📦 Fetched block number: 23728678 [with 111 txs]
-TX:   0/110TX:   1/110TX:   2/110TX:   3/110TX:   4/110TX:   5/110TX:   6/110TX:   7/110TX:   8/110TX:   9/110TX:  10/110TX:  11/110TX:  12/110TX:  13/110TX:  14/110TX:  15/110TX:  16/110TX:  17/110TX:  18/110TX:  19/110TX:  20/110TX:  21/110TX:  22/110TX:  23/110TX:  24/110TX:  25/110TX:  26/110TX:  27/110TX:  28/110TX:  29/110---
+---
 ### 23728678 29 hash=0x6c42d5f240cedfbef383fe3784a6471e6b2cea8ae4f02b24089368f57c5297c6
 REVM 	OK=true 	RET=empty	GAS=367955	TRACES=24515
 sole 	OK=true 	RET=match	GAS=match	TRACES=24515
-TX:  30/110TX:  31/110TX:  32/110TX:  33/110TX:  34/110TX:  35/110TX:  36/110TX:  37/110TX:  38/110TX:  39/110TX:  40/110TX:  41/110TX:  42/110TX:  43/110TX:  44/110TX:  45/110TX:  46/110TX:  47/110TX:  48/110TX:  49/110TX:  50/110TX:  51/110TX:  52/110TX:  53/110TX:  54/110TX:  55/110TX:  56/110TX:  57/110TX:  58/110TX:  59/110TX:  60/110TX:  61/110TX:  62/110TX:  63/110TX:  64/110TX:  65/110TX:  66/110TX:  67/110TX:  68/110TX:  69/110TX:  70/110TX:  71/110TX:  72/110TX:  73/110TX:  74/110TX:  75/110TX:  76/110TX:  77/110TX:  78/110TX:  79/110TX:  80/110TX:  81/110TX:  82/110TX:  83/110TX:  84/110TX:  85/110TX:  86/110TX:  87/110TX:  88/110TX:  89/110TX:  90/110TX:  91/110TX:  92/110TX:  93/110TX:  94/110TX:  95/110TX:  96/110TX:  97/110TX:  98/110TX:  99/110TX: 100/110TX: 101/110TX: 102/110TX: 103/110TX: 104/110TX: 105/110TX: 106/110TX: 107/110TX: 108/110TX: 109/110TX: 110/110
+
 (total: 111, matched: 110, invalid: 1)
 ✅ Block 23728678 completed successfully
 
