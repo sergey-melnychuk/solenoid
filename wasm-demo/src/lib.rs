@@ -10,6 +10,12 @@ use solenoid::{
     solenoid::{Builder, Solenoid}, tracer::{EventData, EventTracer},
 };
 
+// TODO: lookup Tx by hash, replay by solenoid
+
+// TODO: build nice stack-trace of calls in the Tx
+
+// TODO: pull tx receipt and validate gas usage?
+
 #[wasm_bindgen(start)]
 pub fn main() {
     console_error_panic_hook::set_once();

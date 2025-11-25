@@ -500,7 +500,10 @@ impl<T: EventTracer> Executor<T> {
         // Transfer priority fee to coinbase (base fee is burned per EIP-1559)
         // Match revm's calculation: recalculate effective_gas_price from max_fee and max_priority
         // then coinbase_gas_price = effective_gas_price - basefee
-        if !coinbase.is_zero() && ext.gas_info.blob_gas_used == 0 && !evm.reverted {
+        // Note: EIP-4844 blob transactions pay BOTH regular gas fees AND blob fees to coinbase
+        // Note: Gas fees are charged regardless of whether the transaction succeeds or reverts
+        if !coinbase.is_zero() {
+            // Effective priority to coinbase = min(max_priority, max_fee - base_fee) = min(10.01, 30.03 - 0.665752928) ≈ 10.01 Gwei
             let coinbase_gas_price = if ext.gas_info.gas_max_priority_fee.is_zero() {
                 // Legacy transaction (type 0): gas_price - base_fee goes to miner (base fee is burned)
                 // COINBASE BALANCE fix 1/1: legacy tx effective gas price
@@ -549,9 +552,7 @@ impl<T: EventTracer> Executor<T> {
                 // TODO: charge sender with `blob_fee`
 
                 // let current_coinbase_balance = ext.balance(&coinbase).await?;
-                // let new_coinbase_balance = current_coinbase_balance - blob_fee;
-                // ext.account_mut(&coinbase).value = new_coinbase_balance;
-                // println!("[SOLE] COINBASE (BLOB) : {new_coinbase_balance:#x} -{blob_fee:#x}");
+                // println!("[SOLE] COINBASE (BLOB) : {current_coinbase_balance:#x} !{blob_fee:#x}");
                 // DO NOT add to evm.touches - blob fees are final and should never be reverted
             }
         }
@@ -1983,10 +1984,8 @@ impl<T: EventTracer> Executor<T> {
             gas_stipend_adjustment = 2300;
         }
 
-        // TODO: check if there is enough gas
-
-        /*
-        if base_gas_cost >= evm.gas.remaining() {
+        // Check if there is enough gas for the base cost (out-of-gas condition)
+        if base_gas_cost > evm.gas.remaining() {
             let gas_cost = evm.gas.remaining();
             *gas = gas_cost.into();
 
@@ -2023,7 +2022,6 @@ impl<T: EventTracer> Executor<T> {
             evm.push(Word::zero())?;
             return Ok(());
         }
-        */
 
         // Calculate available gas for forwarding using "all but one 64th" rule
         let remaining_gas = evm.gas.remaining() - base_gas_cost;

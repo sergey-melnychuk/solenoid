@@ -81,9 +81,9 @@ pub fn runner(
         evm.inspector.setup(tx.info().hash.unwrap_or_default());
 
         let result = evm.inspect_tx(tx_env)?;
-        if result.result.is_success() {
-            evm.commit(result.state.clone());
-        }
+        // Note: Always commit state changes, since gas fees must be charged even for reverted transactions.
+        // In Ethereum, miners get paid for computational work regardless of transaction success/failure.
+        evm.commit(result.state.clone());
 
         // use revm::{context::ContextTr, handler::EvmTr};
         // let coinbase_balance = evm.ctx().db_ref().cache.accounts.get(&header.beneficiary)

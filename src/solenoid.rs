@@ -198,6 +198,7 @@ pub struct Runner {
 impl Runner {
     pub async fn apply(self, ext: &mut Ext) -> eyre::Result<CallResult<LoggingTracer>> {
         let coinbase = self.header.miner;
+        let base_fee = self.header.base_fee;
 
         let exe = Executor::<LoggingTracer>::with_tracer(LoggingTracer::default());
         let exe = exe.with_header(self.header);
@@ -271,6 +272,42 @@ impl Runner {
         let (tracer, ret) = exe
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
             .await;
+
+        // TODO: Avoid duplication of fee calculation code (see executor.rs)
+
+        // Calculate gas costs and transaction fee
+        let deployed_code_cost = if !evm.reverted {
+            200 * ret.len() as i64
+        } else {
+            0
+        };
+       let gas_final = evm.gas.finalized(upfront_gas_reduction + deployed_code_cost, evm.reverted);
+
+        // Transfer priority fee to coinbase (same logic as in executor.rs)
+        if !coinbase.is_zero() {
+            let coinbase_gas_price = if ext.gas_info.gas_max_priority_fee.is_zero() {
+                // Legacy transaction
+                ext.gas_info.gas_price.saturating_sub(base_fee)
+            } else {
+                // EIP-1559 transaction
+                let effective_gas_price = {
+                    let base_plus_priority = base_fee + ext.gas_info.gas_max_priority_fee;
+                    Word::min(ext.gas_info.gas_max_fee, base_plus_priority)
+                };
+                effective_gas_price.saturating_sub(base_fee)
+            };
+
+            let priority_fee_total = Word::from(gas_final) * coinbase_gas_price;
+
+            if !priority_fee_total.is_zero() {
+                // TODO charge the fee from tx.sender account
+                ext.pull(&coinbase).await?;
+                let current_coinbase_balance = ext.account_mut(&coinbase).value;
+                let new_coinbase_balance = current_coinbase_balance + priority_fee_total;
+                ext.account_mut(&coinbase).value = new_coinbase_balance;
+                // println!("[SOLE] COINBASE (GAS-C): {new_coinbase_balance:#x} *{priority_fee_total:#x}");
+            }
+        }
 
         if evm.reverted {
             evm.revert(ext).await?;

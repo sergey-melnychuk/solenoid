@@ -14,12 +14,8 @@
 ==========================================
 📦 Fetched block number: 23820666 [with 225 txs]
 📦 Fetched block number: 23820666 [with 225 txs]
----
-### 23820666 59 hash=0x227c5d12468316ab1d6547633fb083b9d0f995d442a85394df6e2ca3b2b864e7
-REVM 	OK=true 	RET=empty	GAS=225446	TRACES=14866
-sole 	OK=true 	RET=match	GAS=match	TRACES=14866
 
-(total: 225, matched: 224, invalid: 1)
+(total: 225, matched: 225, invalid: 0)
 ✅ Block 23820666 completed successfully
 
 ==========================================
@@ -53,12 +49,8 @@ sole 	OK=false 	RET=match	GAS=match	TRACES=9171
 ==========================================
 📦 Fetched block number: 23820669 [with 206 txs]
 📦 Fetched block number: 23820669 [with 206 txs]
----
-### 23820669 191 hash=0x95268d207a367d8df9e42fdc3d59357354c9e2da2cff55e7e0a1cf2c8efcefc1
-REVM 	OK=true 	RET=<32>	GAS=915229	TRACES=104227
-sole 	OK=true 	RET=match	GAS=match	TRACES=104227
 
-(total: 206, matched: 205, invalid: 1)
+(total: 206, matched: 206, invalid: 0)
 ✅ Block 23820669 completed successfully
 
 ==========================================
@@ -106,12 +98,8 @@ sole 	OK=false 	RET=match	GAS=match	TRACES=66800
 ==========================================
 📦 Fetched block number: 23820674 [with 164 txs]
 📦 Fetched block number: 23820674 [with 164 txs]
----
-### 23820674 77 hash=0xc3601cfb15cce98f4a716b062dd260f54a2f817b79eea197a793daa1874f8949
-REVM 	OK=true 	RET=empty	GAS=253223	TRACES=21882
-sole 	OK=true 	RET=match	GAS=match	TRACES=21882
 
-(total: 164, matched: 163, invalid: 1)
+(total: 164, matched: 164, invalid: 0)
 ✅ Block 23820674 completed successfully
 
 ==========================================

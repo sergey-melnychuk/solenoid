@@ -1,8 +1,4 @@
 📦 Fetched block number: 23683035 [with 208 txs]
 📦 Fetched block number: 23683035 [with 208 txs]
----
-### 23683035 164 hash=0x7420dff042cec686d5f74844fb36bf34d100036a801c34f5bf7563363aafd8b7
-REVM 	OK=true 	RET=empty	GAS=258492	TRACES=18408
-sole 	OK=true 	RET=match	GAS=match	TRACES=18408
 
-(total: 208, matched: 207, invalid: 1)
+(total: 208, matched: 208, invalid: 0)

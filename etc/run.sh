@@ -30,7 +30,7 @@ fi
 # Determine the end block
 if [ "$END_BLOCK_ARG" = "latest" ]; then
     echo "🔍 Fetching latest block number..."
-    END_BLOCK=$(cargo run --example latest --quiet 2>/dev/null)
+    END_BLOCK=$(cargo run --release --example latest --quiet 2>/dev/null)
     
     if [ -z "$END_BLOCK" ]; then
         echo "Error: Failed to fetch latest block number"
