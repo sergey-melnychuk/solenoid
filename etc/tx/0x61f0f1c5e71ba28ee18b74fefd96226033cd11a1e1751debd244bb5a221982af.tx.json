@@ -1,0 +1,28 @@
+{
+  "accessList": [],
+  "blobVersionedHashes": [
+    "0x01c92996c3c5f4f0f1c215f2c130cacd347a6a5c46775323d20727310e5787ac",
+    "0x013605a0fa20d9a123a147244895c3e9e7ed340e1562e1d185f49a1d37d08671",
+    "0x0125a945bb4e68c7d4e8126839b27858f2bd2d65d2a6a8f12bb9bc580743b9a3"
+  ],
+  "blockHash": "0x453873d2d9db74d490fe5285a517955100c770c41b3496cc787b5c99d245ad1c",
+  "blockNumber": "0x16b7982",
+  "chainId": "0x1",
+  "from": "0x5050f69a9786f081509234f1a7f4684b5e5b76c9",
+  "gas": "0x5208",
+  "gasPrice": "0x27c530fe0",
+  "hash": "0x61f0f1c5e71ba28ee18b74fefd96226033cd11a1e1751debd244bb5a221982af",
+  "input": "0x",
+  "maxFeePerBlobGas": "0x3b9aca00",
+  "maxFeePerGas": "0x6fded6f80",
+  "maxPriorityFeePerGas": "0x254a47a80",
+  "nonce": "0x19d5e3",
+  "r": "0x78eca8df02ffd697de4d775557a76370875819d4848eb94a8819e3d824e07c4c",
+  "s": "0x214c3673f0d2188e854c232f6151d194294d2b8b16c63b604be602a59edb33b8",
+  "to": "0xff00000000000000000000000000000000008453",
+  "transactionIndex": "0x43",
+  "type": "0x3",
+  "v": "0x1",
+  "value": "0x0",
+  "yParity": "0x1"
+}

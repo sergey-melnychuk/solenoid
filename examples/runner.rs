@@ -3,6 +3,7 @@ use std::{pin::Pin, sync::Arc};
 use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::alloy_rpc_types::BlockTransactions;
+use solenoid::ext::TxGasInfo;
 use tokio::sync::Mutex;
 
 use solenoid::{
@@ -60,13 +61,19 @@ pub fn runner(
 
         let header = header.clone();
         let ext = ext.clone();
+
+        let gas_info = TxGasInfo {
+            gas_price: effective_gas_price,
+            gas_max_fee: tx.gas_info.max_fee.unwrap_or_default(),
+            gas_max_priority_fee: tx.gas_info.max_priority_fee.unwrap_or_default(),
+            blob_max_fee: tx.gas_info.max_fee_per_blob.unwrap_or_default(),
+            blob_gas_used: (tx.blob_count() * 131072) as u64,
+        };
+
         Box::pin(async move {
             let mut result = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
-                guard.reset(effective_gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
-
-                // let coinbase_balance = guard.balance(&header.miner).await?;
-                // println!("[SOLE] COINBASE BALANCE: {coinbase_balance:#x}");
+                guard.reset(gas_info);
 
                 let result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
@@ -77,6 +84,10 @@ pub fn runner(
                     .ready()
                     .apply(&mut *guard)
                     .await?;
+
+                // let coinbase_balance = guard.balance(&header.miner).await?;
+                // println!("[SOLE] COINBASE BALANCE: {coinbase_balance:#x}");
+
                 Ok::<_, eyre::Report>(result)
             })
             .await??;

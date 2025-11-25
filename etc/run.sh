@@ -57,7 +57,7 @@ for ((BLOCK=$START_BLOCK; BLOCK<=END_BLOCK; BLOCK++)); do
     echo "🔄 Processing block $BLOCK ($(($BLOCK - $START_BLOCK + 1))/$NUM_BLOCKS)"
     echo "=========================================="
     
-    if cargo run --example runner --quiet -- "$BLOCK" 2>&1; then
+    if cargo run --release --example runner --quiet -- "$BLOCK" 2>&1; then
         ((SUCCESS++))
         echo "✅ Block $BLOCK completed successfully"
     else

@@ -37,14 +37,6 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=14866
 📦 Fetched block number: 23820668 [with 243 txs]
 📦 Fetched block number: 23820668 [with 243 txs]
 ---
-### 23820668 42 hash=0xae0cde9b6cb11df1cc4af9d9bdde15828fff9925ad6a10194956f4b4fde18391
-REVM 	OK=true 	RET=<32>	GAS=873677	TRACES=145406
-sole 	OK=true 	RET=match	GAS=match	TRACES=145406
----
-### 23820668 55 hash=0x4a0dfc99a916f5de6092ae1c4f0b866f73774e08f1d8b6155c6e06e4e01b5303
-REVM 	OK=true 	RET=<32>	GAS=1022727	TRACES=117735
-sole 	OK=true 	RET=match	GAS=match	TRACES=117735
----
 ### 23820668 72 hash=0xa9eb4beae12b607c99447bd6d810ea628766d6c73e49ee8867705eda6942e44f
 REVM 	OK=true 	RET=empty	GAS=567962	TRACES=44749
 sole 	OK=true 	RET=match	GAS=match	TRACES=44749
@@ -53,7 +45,7 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=44749
 REVM 	OK=false 	RET=<100>	GAS=344104	TRACES=9171
 sole 	OK=false 	RET=match	GAS=match	TRACES=9171
 
-(total: 243, matched: 239, invalid: 4)
+(total: 243, matched: 241, invalid: 2)
 ✅ Block 23820668 completed successfully
 
 ==========================================
@@ -105,12 +97,8 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=104227
 ### 23820673 10 hash=0x6fdb56dc2319a4587ba1a7f9efefb52b08f1516762f9a5d35bef5c9b2a96ff7e
 REVM 	OK=false 	RET=empty	GAS=1050982	TRACES=66799
 sole 	OK=false 	RET=match	GAS=match	TRACES=66800
----
-### 23820673 74 hash=0xc6f7218382ed3024bea12282c885edddba8a61de853c6123f75ef828aeff8632
-REVM 	OK=true 	RET=empty	GAS=223492	TRACES=14897
-sole 	OK=true 	RET=match	GAS=match	TRACES=14897
 
-(total: 199, matched: 197, invalid: 2)
+(total: 199, matched: 198, invalid: 1)
 ✅ Block 23820673 completed successfully
 
 ==========================================
@@ -119,23 +107,11 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=14897
 📦 Fetched block number: 23820674 [with 164 txs]
 📦 Fetched block number: 23820674 [with 164 txs]
 ---
-### 23820674 30 hash=0xaf7e4a7912075617a168c3b44a49c7a951e9ad8e69ee2d52d45d055be32705e4
-REVM 	OK=true 	RET=empty	GAS=225460	TRACES=14870
-sole 	OK=true 	RET=match	GAS=match	TRACES=14870
----
-### 23820674 58 hash=0xc0cd09dc4fd684a9557f6d866b23a001e9f303c2ab00fe6aa993cdc01def9b7c
-REVM 	OK=true 	RET=empty	GAS=185009	TRACES=14860
-sole 	OK=true 	RET=match	GAS=match	TRACES=14860
----
-### 23820674 59 hash=0x902c1edb3786cc89e08214aba55efaf4951cdca8e449c408d5eb9e55088c7d70
-REVM 	OK=true 	RET=empty	GAS=311660	TRACES=26365
-sole 	OK=true 	RET=match	GAS=match	TRACES=26365
----
 ### 23820674 77 hash=0xc3601cfb15cce98f4a716b062dd260f54a2f817b79eea197a793daa1874f8949
 REVM 	OK=true 	RET=empty	GAS=253223	TRACES=21882
 sole 	OK=true 	RET=match	GAS=match	TRACES=21882
 
-(total: 164, matched: 160, invalid: 4)
+(total: 164, matched: 163, invalid: 1)
 ✅ Block 23820674 completed successfully
 
 ==========================================

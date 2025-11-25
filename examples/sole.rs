@@ -2,7 +2,7 @@ use eyre::{Context, eyre};
 use solenoid::{
     common::{address::Address, hash, word::Word},
     eth,
-    ext::Ext,
+    ext::{Ext, TxGasInfo},
     solenoid::{Builder, Solenoid},
     tracer::EventTracer,
 };
@@ -46,8 +46,14 @@ async fn main() -> eyre::Result<()> {
         let idx = tx.index.as_u64();
         eprintln!("TX hash={:#064x} index={}", tx.hash, tx.index.as_usize());
 
-        let effective_gas_price = tx.effective_gas_price(block.header.base_fee);
-        ext.reset(effective_gas_price, tx.max_fee_per_gas.unwrap_or_default(), tx.max_priority_fee_per_gas.unwrap_or_default());
+        let gas_info = TxGasInfo {
+            gas_price: tx.effective_gas_price(block.header.base_fee),
+            gas_max_fee: tx.gas_info.max_fee.unwrap_or_default(),
+            gas_max_priority_fee: tx.gas_info.max_priority_fee.unwrap_or_default(),
+            blob_max_fee: tx.gas_info.max_fee_per_blob.unwrap_or_default(),
+            blob_gas_used: (tx.blob_count() * 131072) as u64,
+        };
+        ext.reset(gas_info);
         let mut result = Solenoid::new()
             .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
             .with_header(block.header.clone())

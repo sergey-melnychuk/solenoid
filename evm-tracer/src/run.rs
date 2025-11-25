@@ -80,18 +80,18 @@ pub fn runner(
 
         evm.inspector.setup(tx.info().hash.unwrap_or_default());
 
-        // use revm::context::ContextTr;
-        // use revm::handler::EvmTr;
+        let result = evm.inspect_tx(tx_env)?;
+        if result.result.is_success() {
+            evm.commit(result.state.clone());
+        }
+
+        // use revm::{context::ContextTr, handler::EvmTr};
         // let coinbase_balance = evm.ctx().db_ref().cache.accounts.get(&header.beneficiary)
         //     .and_then(|acc| acc.account_info())
         //     .unwrap_or_default()
         //     .balance;
         // println!("\n[REVM] COINBASE BALANCE: {coinbase_balance:#x}");
 
-        let result = evm.inspect_tx(tx_env)?;
-        if result.result.is_success() {
-            evm.commit(result.state.clone());
-        }
         let (_, traces) = evm.inspector.reset();
         Ok((result.into(), traces))
     }

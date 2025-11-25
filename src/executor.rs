@@ -342,7 +342,7 @@ impl<T: EventTracer> Executor<T> {
         }
 
         // Deduct upfront gas payment before execution
-        let gas_prepayment = call.gas * ext.gas_price;
+        let gas_prepayment = call.gas * ext.gas_info.gas_price;
         let sender_balance = ext.balance(&call.from).await?;
         if sender_balance < gas_prepayment {
             return Err(ExecutorError::InsufficientFunds {
@@ -437,7 +437,7 @@ impl<T: EventTracer> Executor<T> {
         if is_transfer_only {
             evm.stopped = true;
             evm.reverted = false;
-            return Ok((self.tracer, vec![]));
+            // return Ok((self.tracer, vec![]));
         }
 
         let created = call.from.create(nonce);
@@ -448,8 +448,9 @@ impl<T: EventTracer> Executor<T> {
             ..Context::default()
         };
 
-        // Store base_fee for later use (before moving self.header)
+        // Store base_fee and header info for later use (before moving self.header)
         let base_fee = self.header.base_fee;
+        let header_clone = self.header.clone();
 
         let tracer = self.tracer.fork();
         let mut executor = Executor::<T>::with_tracer(tracer).with_header(self.header);
@@ -474,7 +475,7 @@ impl<T: EventTracer> Executor<T> {
             let nonzero_bytes = call.data.len() as i64 - zero_bytes;
             zero_bytes + nonzero_bytes * 4
         };
-        let gas_floor = 21000 + 10 * calldata_tokens;
+        let gas_floor = call_cost + 10 * calldata_tokens;
 
         let gas_costs = if !call.to.is_zero() {
             call_cost + data_cost
@@ -484,7 +485,7 @@ impl<T: EventTracer> Executor<T> {
         };
 
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);
-        let gas_used_fee = Word::from(gas_final) * ext.gas_price;
+        let gas_used_fee = Word::from(gas_final) * ext.gas_info.gas_price;
         let gas_refund = gas_prepayment - gas_used_fee;
 
         // Refund unused gas to sender
@@ -499,17 +500,17 @@ impl<T: EventTracer> Executor<T> {
         // Transfer priority fee to coinbase (base fee is burned per EIP-1559)
         // Match revm's calculation: recalculate effective_gas_price from max_fee and max_priority
         // then coinbase_gas_price = effective_gas_price - basefee
-        if !coinbase.is_zero() {
-            let coinbase_gas_price = if ext.gas_max_priority_fee.is_zero() {
+        if !coinbase.is_zero() && ext.gas_info.blob_gas_used == 0 && !evm.reverted {
+            let coinbase_gas_price = if ext.gas_info.gas_max_priority_fee.is_zero() {
                 // Legacy transaction (type 0): gas_price - base_fee goes to miner (base fee is burned)
                 // COINBASE BALANCE fix 1/1: legacy tx effective gas price
-                ext.gas_price.saturating_sub(base_fee)
+                ext.gas_info.gas_price.saturating_sub(base_fee)
             } else {
                 // EIP-1559 transaction (type 2): recalculate effective_gas_price like revm does
                 // effective_gas_price = min(max_fee_per_gas, base_fee + max_priority_fee_per_gas)
                 let effective_gas_price = {
-                    let base_plus_priority = base_fee + ext.gas_max_priority_fee;
-                    Word::min(ext.gas_max_fee, base_plus_priority)
+                    let base_plus_priority = base_fee + ext.gas_info.gas_max_priority_fee;
+                    Word::min(ext.gas_info.gas_max_fee, base_plus_priority)
                 };
                 // coinbase_gas_price = effective_gas_price - basefee
                 effective_gas_price.saturating_sub(base_fee)
@@ -518,10 +519,13 @@ impl<T: EventTracer> Executor<T> {
             let priority_fee_total = Word::from(gas_final) * coinbase_gas_price;
 
             if !priority_fee_total.is_zero() {
+                // TODO: charge sender with `priority_fee_total`
+
                 // Ensure coinbase is in state (it may not be if no code accessed it during execution)
                 let current_coinbase_balance = ext.balance(&coinbase).await?;
                 let new_coinbase_balance = current_coinbase_balance + priority_fee_total;
                 ext.account_mut(&coinbase).value = new_coinbase_balance;
+                // println!("[SOLE] COINBASE (GAS)  : {new_coinbase_balance:#x} *{priority_fee_total:#x}");
                 // DO NOT add to evm.touches - fee additions are final and should never be reverted
                 // COINBASE BALANCE fix 1/2: do not revert unreversible fee charge
                 self.tracer.push(Event {
@@ -536,11 +540,27 @@ impl<T: EventTracer> Executor<T> {
             }
         }
 
+        // Add blob gas fees (EIP-4844) if this transaction used blob gas
+        if ext.gas_info.blob_gas_used > 0 && !coinbase.is_zero() {
+            let blob_gas_price = header_clone.blob_gas_price().min(ext.gas_info.blob_max_fee);
+            let blob_fee = Word::from(ext.gas_info.blob_gas_used) * blob_gas_price;
+
+            if !blob_fee.is_zero() {
+                // TODO: charge sender with `blob_fee`
+
+                // let current_coinbase_balance = ext.balance(&coinbase).await?;
+                // let new_coinbase_balance = current_coinbase_balance - blob_fee;
+                // ext.account_mut(&coinbase).value = new_coinbase_balance;
+                // println!("[SOLE] COINBASE (BLOB) : {new_coinbase_balance:#x} -{blob_fee:#x}");
+                // DO NOT add to evm.touches - blob fees are final and should never be reverted
+            }
+        }
+
         // Emit fee event showing gas consumed
         self.tracer.push(Event {
             data: EventData::Fee {
                 gas: Word::from(gas_final),
-                price: ext.gas_price,
+                price: ext.gas_info.gas_price,
                 total: gas_used_fee,
             },
             depth: 1,
@@ -1127,7 +1147,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x3a => {
                 // GASPRICE
-                evm.push(ext.gas_price)?;
+                evm.push(ext.gas_info.gas_price)?;
                 gas = 2.into();
             }
             0x3b => {

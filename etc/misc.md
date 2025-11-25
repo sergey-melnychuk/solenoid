@@ -42,7 +42,7 @@ curl -s -X POST -H "Content-Type: application/json" --data '{
 
 ---
 
-export HASH=0xc90b93f50ccbc3f1238b8a7d4ea8fe40c09cbb43d958e88974a11a84eea7b41f
+export HASH=0x61f0f1c5e71ba28ee18b74fefd96226033cd11a1e1751debd244bb5a221982af
 
 curl -s -X POST \
   -H "Content-Type: application/json" \
@@ -118,3 +118,7 @@ curl "https://www.4byte.directory/api/v1/signatures/?page=11497" | jq
     ...
   ]
 }
+
+curl -s -X POST https://eth.merkle.io \
+-H "Content-Type: application/json" \
+-d '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["0x16b7982",true],"id":1}' | jq > etc/b/23820674.json

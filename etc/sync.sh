@@ -14,11 +14,11 @@ cargo run --release --example runner -- 23641709 > etc/23641709.txt
 cargo run --release --example runner -- 23642294 > etc/23642294.txt
 cargo run --release --example runner -- 23647631 > etc/23647631.txt
 cargo run --release --example runner -- 23647653 > etc/23647653.txt
+cargo run --release --example runner -- 23678007 > etc/23678007.txt
 cargo run --release --example runner -- 23678686 > etc/23678686.txt
-cargo run --release --example runner -- 23683764 > etc/23683764.txt
 cargo run --release --example runner -- 23678721 > etc/23678721.txt
 cargo run --release --example runner -- 23683035 > etc/23683035.txt
-cargo run --release --example runner -- 23678007 > etc/23678007.txt
+cargo run --release --example runner -- 23683764 > etc/23683764.txt
 cargo run --release --example runner -- 23690323 > etc/23690323.txt
 cargo run --release --example runner -- 23828643 > etc/23828643.txt
 

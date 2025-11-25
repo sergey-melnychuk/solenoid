@@ -72,12 +72,8 @@ sole 	OK=false 	RET=match	GAS=match	TRACES=12668
 ==========================================
 📦 Fetched block number: 23728676 [with 25 txs]
 📦 Fetched block number: 23728676 [with 25 txs]
----
-### 23728676 17 hash=0xe8c807037c655e80a7857d7b662b027af4a2f52285b463369009a18cd939c116
-REVM 	OK=true 	RET=empty	GAS=838442	TRACES=104650
-sole 	OK=true 	RET=match	GAS=match	TRACES=104650
 
-(total: 25, matched: 24, invalid: 1)
+(total: 25, matched: 25, invalid: 0)
 ✅ Block 23728676 completed successfully
 
 ==========================================
@@ -85,16 +81,8 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=104650
 ==========================================
 📦 Fetched block number: 23728677 [with 33 txs]
 📦 Fetched block number: 23728677 [with 33 txs]
----
-### 23728677 20 hash=0x7c45cac3e2815fcab40f527d0e9f17483d50c160cf15e130ff60c6ddb9d301b9
-REVM 	OK=true 	RET=empty	GAS=316234	TRACES=24872
-sole 	OK=true 	RET=match	GAS=match	TRACES=24872
----
-### 23728677 22 hash=0xaa5fded6fc7544c5a9707d9b9f92fa8d1f480e695049c36f9420df25d81784ac
-REVM 	OK=true 	RET=empty	GAS=1921407	TRACES=236908
-sole 	OK=true 	RET=match	GAS=match	TRACES=236908
 
-(total: 33, matched: 31, invalid: 2)
+(total: 33, matched: 33, invalid: 0)
 ✅ Block 23728677 completed successfully
 
 ==========================================
@@ -102,12 +90,8 @@ sole 	OK=true 	RET=match	GAS=match	TRACES=236908
 ==========================================
 📦 Fetched block number: 23728678 [with 111 txs]
 📦 Fetched block number: 23728678 [with 111 txs]
----
-### 23728678 29 hash=0x6c42d5f240cedfbef383fe3784a6471e6b2cea8ae4f02b24089368f57c5297c6
-REVM 	OK=true 	RET=empty	GAS=367955	TRACES=24515
-sole 	OK=true 	RET=match	GAS=match	TRACES=24515
 
-(total: 111, matched: 110, invalid: 1)
+(total: 111, matched: 111, invalid: 0)
 ✅ Block 23728678 completed successfully
 
 ==========================================
