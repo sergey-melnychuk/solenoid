@@ -145,8 +145,22 @@ impl Evm {
             Ok(word)
         } else {
             self.error(ExecutorError::StackUnderflow.into())
-                .map(|_| Word::zero())
+                .map(|_| Word::zero()) // just for typechecker
         }
+    }
+
+    // Usage: let [a, b, c] = self.peek(); // no need to provide N
+    pub fn peek<const N: usize>(&mut self) -> eyre::Result<[Word; N]> {
+        if self.stack.len() < N {
+            self.error(ExecutorError::StackUnderflow.into())?;
+        }
+        let mut ret = [Word::zero(); N];
+        let mut i = 0;
+        while i < N {
+            ret[i] = self.stack[self.stack.len() - 1 - i];
+            i += 1;
+        }
+        Ok(ret)
     }
 
     pub fn gas(&mut self, cost: i64) -> eyre::Result<()> {
@@ -1493,7 +1507,7 @@ impl<T: EventTracer> Executor<T> {
                     }
                 }
 
-                self.debug["sstore"] = json!({
+                self.debug["SSTORE"] = json!({
                     "is_warm": is_warm,
                     "original": original,
                     "address": this,
@@ -1525,10 +1539,10 @@ impl<T: EventTracer> Executor<T> {
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
-                            gas_cost: actual_gas_cost,
-                            gas_used: evm.gas.used + actual_gas_cost,
-                            gas_back: gas_refund,
-                            gas_left: 0,
+                            gas_cost: 0,
+                            gas_used: evm.gas.used,
+                            gas_back: 0,
+                            gas_left: actual_gas_cost,
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
@@ -1536,6 +1550,7 @@ impl<T: EventTracer> Executor<T> {
                     });
                     // TODO: make OOG detection more generic
                     evm.error(ExecutorError::OutOfGas().into())?;
+                    return Ok(Word::zero());
                 }
 
                 evm.put(ext, &this, key, new).await?;
