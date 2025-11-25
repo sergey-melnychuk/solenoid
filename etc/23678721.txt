@@ -1,8 +1,4 @@
 📦 Fetched block number: 23678721 [with 227 txs]
 📦 Fetched block number: 23678721 [with 227 txs]
----
-### 23678721 137 hash=0xc90b93f50ccbc3f1238b8a7d4ea8fe40c09cbb43d958e88974a11a84eea7b41f
-REVM 	OK=false 	RET=empty	GAS=220316	TRACES=92
-sole 	OK=false 	RET=match	GAS=match	TRACES=101
 
-(total: 227, matched: 226, invalid: 1)
+(total: 227, matched: 227, invalid: 0)

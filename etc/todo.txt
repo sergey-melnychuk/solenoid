@@ -1,4 +1,1 @@
-23678686 0 pc=95,op=RETURNDATASIZE,[out-of-gas]revm.gas_left=455496,sole.gas_left=0
-23678721 137 OK,[access-list]
-23820673 10 pc=2725,op=SWAP4,[out-of-gas]revm.gas_left=110,sole.gas_left=0
-23828643 11 OK,[access-list]
+23634227 238 pc=3404,op=SSTORE,[out-of-gas]revm.gas_left=145,sole.gas_left=0

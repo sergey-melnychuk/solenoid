@@ -77,12 +77,8 @@
 ==========================================
 📦 Fetched block number: 23820673 [with 199 txs]
 📦 Fetched block number: 23820673 [with 199 txs]
----
-### 23820673 10 hash=0x6fdb56dc2319a4587ba1a7f9efefb52b08f1516762f9a5d35bef5c9b2a96ff7e
-REVM 	OK=false 	RET=empty	GAS=1050982	TRACES=66799
-sole 	OK=false 	RET=match	GAS=match	TRACES=66800
 
-(total: 199, matched: 198, invalid: 1)
+(total: 199, matched: 199, invalid: 0)
 ✅ Block 23820673 completed successfully
 
 ==========================================
