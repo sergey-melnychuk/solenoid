@@ -278,13 +278,14 @@ impl Runner {
             // Not enough gas to cover deployed code cost
             ret.clear();
             evm.reverted = true;
-            self.call.gas.as_i64()
+            let gas_limit = self.call.gas.as_i64();
+            evm.gas(gas_limit).ok();
+            gas_limit
         } else {
             evm
                 .gas
                 .finalized(upfront_gas_reduction + deployed_code_cost, evm.reverted)
         };
-        evm.gas(gas_final).ok();
 
         // Transfer priority fee to coinbase (same logic as in executor.rs)
         // TODO: Avoid duplication of fee calculation code (see executor.rs)
