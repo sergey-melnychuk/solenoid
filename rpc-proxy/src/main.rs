@@ -30,9 +30,8 @@ async fn main() {
         .parse()
         .expect("invalid BIND_ADDR");
 
-    let upstream_url = std::env::var("URL").unwrap_or_else(|_| {
-        "https://ethereum-rpc.publicnode.com".to_string()
-    });
+    let upstream_url =
+        std::env::var("URL").unwrap_or_else(|_| "https://ethereum-rpc.publicnode.com".to_string());
 
     let cache_file: PathBuf = std::env::var("CACHE_FILE")
         .map(PathBuf::from)
