@@ -1,14 +1,15 @@
-use wasm_bindgen::prelude::*;
 use solenoid::{
     common::{
-        address::{Address, addr},
+        address::{addr, Address},
         hash::keccak256,
         word::Word,
     },
     eth::EthClient,
     ext::Ext,
-    solenoid::{Builder, Solenoid}, tracer::{EventData, EventTracer},
+    solenoid::{Builder, Solenoid},
+    tracer::{EventData, EventTracer},
 };
+use wasm_bindgen::prelude::*;
 
 // TODO: lookup Tx by hash, replay by solenoid
 
@@ -26,18 +27,16 @@ pub async fn get_latest_block_number(rpc_url: String) -> Result<String, JsValue>
     let client = EthClient::new(&rpc_url);
 
     match client.get_latest_block().await {
-        Ok((block_number, block_hash)) => {
-            Ok(format!("Block Number: {}\nBlock Hash: {}", block_number, block_hash))
-        }
+        Ok((block_number, block_hash)) => Ok(format!(
+            "Block Number: {}\nBlock Hash: {}",
+            block_number, block_hash
+        )),
         Err(e) => Err(JsValue::from_str(&format!("Error: {}", e))),
     }
 }
 
 #[wasm_bindgen]
-pub async fn quote_weth_to_usdc(
-    rpc_url: String,
-    amount_weth: String,
-) -> Result<String, JsValue> {
+pub async fn quote_weth_to_usdc(rpc_url: String, amount_weth: String) -> Result<String, JsValue> {
     // Parse the amount (in WETH with 18 decimals)
     let amount_in: u128 = amount_weth
         .parse()
@@ -92,7 +91,8 @@ pub async fn quote_weth_to_usdc(
         // Calculate price
         let weth_decimals = 18;
         let usdc_decimals = 6;
-        let price_after = calculate_price_from_sqrt(sqrt_price_x96_after, usdc_decimals, weth_decimals);
+        let price_after =
+            calculate_price_from_sqrt(sqrt_price_x96_after, usdc_decimals, weth_decimals);
 
         // Format amounts
         let weth_amount = amount_in.as_u128() as f64 / 1e18;
@@ -162,7 +162,9 @@ pub async fn quote_weth_to_usdc_solenoid(
         .await
         .map_err(|e| JsValue::from_str(&format!("Failed to create Ext: {}", e)))?;
 
-    web_sys::console::log_1(&format!("Debug - Created Ext at block {}", latest_block_number - 1).into());
+    web_sys::console::log_1(
+        &format!("Debug - Created Ext at block {}", latest_block_number - 1).into(),
+    );
 
     // Prepare the call to quoteExactInputSingle
     let method = "quoteExactInputSingle((address,address,uint256,uint24,uint160))";
@@ -192,22 +194,28 @@ pub async fn quote_weth_to_usdc_solenoid(
     web_sys::console::log_1(&"Debug - Runner ready, starting execution...".into());
 
     // Execute
-    let mut result = runner
-        .apply(&mut ext)
-        .await
-        .map_err(|e| {
-            let error_string = format!("{:?}", e);
-            web_sys::console::log_1(&format!("Debug - Execution error details: {}", error_string).into());
-            JsValue::from_str(&format!("Execution failed: {}", error_string))
-        })?;
+    let mut result = runner.apply(&mut ext).await.map_err(|e| {
+        let error_string = format!("{:?}", e);
+        web_sys::console::log_1(
+            &format!("Debug - Execution error details: {}", error_string).into(),
+        );
+        JsValue::from_str(&format!("Execution failed: {}", error_string))
+    })?;
 
-    web_sys::console::log_1(&format!("Debug - Got {} bytes of return data", result.ret.len()).into());
+    web_sys::console::log_1(
+        &format!("Debug - Got {} bytes of return data", result.ret.len()).into(),
+    );
 
     let traces = result.tracer.take();
     web_sys::console::log_1(&format!("Solenoid - traces: {}", traces.len()).into());
     for event in traces {
-        let keep = matches!(event.data, 
-            EventData::Call { .. } | EventData::Return { .. } | EventData::State(_) | EventData::Account(_));
+        let keep = matches!(
+            event.data,
+            EventData::Call { .. }
+                | EventData::Return { .. }
+                | EventData::State(_)
+                | EventData::Account(_)
+        );
         if keep {
             let json = serde_json_wasm::to_string(&event).unwrap();
             web_sys::console::log_1(&json.into());
@@ -224,7 +232,8 @@ pub async fn quote_weth_to_usdc_solenoid(
         // Calculate price
         let weth_decimals = 18;
         let usdc_decimals = 6;
-        let price_after = calculate_price_from_sqrt(sqrt_price_x96_after, usdc_decimals, weth_decimals);
+        let price_after =
+            calculate_price_from_sqrt(sqrt_price_x96_after, usdc_decimals, weth_decimals);
 
         // Format amounts
         let weth_amount = amount_in.as_u128() as f64 / 1e18;

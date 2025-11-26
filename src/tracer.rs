@@ -1,4 +1,4 @@
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "testkit", not(target_arch = "wasm32")))]
 use evm_tracer::OpcodeTrace;
 
 use serde::{Deserialize, Serialize};
@@ -214,8 +214,7 @@ impl EventTracer for LoggingTracer {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(feature = "testkit")]
+#[cfg(all(feature = "testkit", not(target_arch = "wasm32")))]
 impl TryFrom<Event> for OpcodeTrace {
     type Error = eyre::Error;
 

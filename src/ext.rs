@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
 use std::time::Instant;
 
 use crate::{
@@ -126,14 +126,14 @@ impl Ext {
             self.original.entry((*addr, *key)).or_insert(val);
             Ok(val)
         } else if let Some(Remote { eth, block_hash }) = self.remote.as_ref() {
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
             let now = Instant::now();
 
             let hex = format!("{key:#064x}");
             let address = format!("0x{}", hex::encode(addr.0));
             let val = eth.get_storage_at(block_hash, &address, &hex).await?;
 
-            #[cfg(not(target_arch = "wasm32"))]
+            #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
             let ms = now.elapsed().as_millis();
 
             self.state.entry(*addr).or_default().state.insert(*key, val);
@@ -149,16 +149,14 @@ impl Ext {
     }
 
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
-        let old = self.get(addr, &key).await?;
-        let label = if old != val {
-            self.state.entry(*addr).or_default().state.insert(key, val);
-            ""
-        } else {
-            " [NOOP]"
-        };
+        self.state.entry(*addr).or_default().state.insert(key, val);
 
         #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
+        {
+        let old = self.get(addr, &key).await?;
+        let label = if old != val { "" } else { " [NOOP]" };
         tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}{label}");
+        }
 
         Ok(())
     }
