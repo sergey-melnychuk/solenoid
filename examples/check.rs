@@ -95,9 +95,13 @@ fn main() -> eyre::Result<()> {
 
         if r.is_err() && non_interactive {
             let suffix = if a.gas_left <= 0 || b.gas_left <= 0 {
-                format!(",[out-of-gas]revm.gas_left={},sole.gas_left={}", a.gas_left, b.gas_left)
+                format!(
+                    ",[out-of-gas]revm.gas_left={},sole.gas_left={}",
+                    a.gas_left, b.gas_left
+                )
             } else if b.name == "BALANCE" {
-                format!(",revm.stack[0]=0x{},sole.stack[0]=0x{}", 
+                format!(
+                    ",revm.stack[0]=0x{},sole.stack[0]=0x{}",
                     a.stack[0].replace("00", ""),
                     b.stack[0].replace("00", ""),
                 )

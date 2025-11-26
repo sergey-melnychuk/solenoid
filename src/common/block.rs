@@ -35,7 +35,9 @@ impl Tx {
     /// For EIP-1559: min(maxFeePerGas, baseFeePerGas + maxPriorityFeePerGas)
     /// For legacy: gasPrice
     pub fn effective_gas_price(&self, base_fee: Word) -> Word {
-        if let (Some(max_fee), Some(max_priority)) = (self.gas_info.max_fee, self.gas_info.max_priority_fee) {
+        if let (Some(max_fee), Some(max_priority)) =
+            (self.gas_info.max_fee, self.gas_info.max_priority_fee)
+        {
             // EIP-1559 transaction
             let base_plus_priority = base_fee + max_priority;
             Word::min(max_fee, base_plus_priority)
@@ -47,7 +49,9 @@ impl Tx {
 
     /// Check if this is a blob transaction (EIP-4844)
     pub fn is_blob_transaction(&self) -> bool {
-        self.blob_versioned_hashes.as_ref().is_some_and(|h| !h.is_empty())
+        self.blob_versioned_hashes
+            .as_ref()
+            .is_some_and(|h| !h.is_empty())
     }
 
     /// Calculate the number of blobs in this transaction
@@ -67,7 +71,7 @@ impl Header {
         // For approximation, we use the fake_exponential function from EIP-4844
         fake_exponential(
             self.excess_blob_gas.as_u64() as u128,
-            3338477 // BLOB_GASPRICE_UPDATE_FRACTION
+            3338477, // BLOB_GASPRICE_UPDATE_FRACTION
         )
     }
 }

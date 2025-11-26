@@ -281,7 +281,9 @@ impl Runner {
         } else {
             0
         };
-       let gas_final = evm.gas.finalized(upfront_gas_reduction + deployed_code_cost, evm.reverted);
+        let gas_final = evm
+            .gas
+            .finalized(upfront_gas_reduction + deployed_code_cost, evm.reverted);
 
         // Transfer priority fee to coinbase (same logic as in executor.rs)
         if !coinbase.is_zero() {

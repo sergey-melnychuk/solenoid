@@ -195,7 +195,11 @@ impl Evm {
                 AccountTouch::SetState(address, key, val, _, is_warm) => {
                     // Always restore the storage value, regardless of warm/cold status
                     // Directly set storage without calling get() to avoid polluting ext.original
-                    ext.state.entry(*address).or_default().state.insert(*key, *val);
+                    ext.state
+                        .entry(*address)
+                        .or_default()
+                        .state
+                        .insert(*key, *val);
                     if !*is_warm {
                         ext.accessed_storage.remove(&(*address, *key));
                     }
@@ -625,9 +629,7 @@ impl<T: EventTracer> Executor<T> {
             {
                 Ok(result) => {
                     let (cost, halt) = match result {
-                        StepResult::Ok(cost) => {
-                            (cost, false)
-                        }
+                        StepResult::Ok(cost) => (cost, false),
                         StepResult::Halt(cost) => {
                             // let cost = evm.gas.remaining();
                             // evm.gas(cost).ok();
@@ -1079,7 +1081,8 @@ impl<T: EventTracer> Executor<T> {
                 gas = 3;
                 if evm.gas.remaining() < gas {
                     return Ok(StepResult::Halt(gas));
-                }                let shift = evm.pop()?.as_usize();
+                }
+                let shift = evm.pop()?.as_usize();
                 let value = evm.pop()?;
                 let ret = value << shift;
                 evm.push(ret)?;
@@ -1897,7 +1900,7 @@ impl<T: EventTracer> Executor<T> {
                     }
                     let mut buffer = vec![0u8; size];
                     if offset + size <= evm.memory.len() {
-                        buffer.copy_from_slice(&evm.memory[offset..offset + size]);                        
+                        buffer.copy_from_slice(&evm.memory[offset..offset + size]);
                     } else {
                         let copy = evm.memory.len().min(offset + size) - offset;
                         buffer[..copy].copy_from_slice(&evm.memory[offset..offset + copy]);
@@ -1908,7 +1911,7 @@ impl<T: EventTracer> Executor<T> {
                     if evm.gas.remaining() < gas {
                         return Ok(StepResult::Halt(gas));
                     }
-                    evm.memory[dest_offset..dest_offset + size].copy_from_slice(&buffer);    
+                    evm.memory[dest_offset..dest_offset + size].copy_from_slice(&buffer);
                 }
 
                 self.debug["MCOPY"] = json!({
@@ -2028,14 +2031,16 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Call,
                     ..ctx
                 };
-                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
+                match self
+                    .call(instruction, this, call, &mut gas, evm, ext, ctx)
                     .await
-                    .with_context(|| "opcode: CALL") {
-                        Ok(()) => {} // ignore
-                        Err(_) => {
-                            return Ok(StepResult::Halt(evm.gas.remaining()));
-                        }
+                    .with_context(|| "opcode: CALL")
+                {
+                    Ok(()) => {} // ignore
+                    Err(_) => {
+                        return Ok(StepResult::Halt(evm.gas.remaining()));
                     }
+                }
             }
             0xf2 => {
                 // CALLCODE
@@ -2046,13 +2051,15 @@ impl<T: EventTracer> Executor<T> {
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage [, the current sender and the current value] remain the same.
                 // DELEGATECALL difference:  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
-                    .await {
-                        Ok(()) => {} // ignore
-                        Err(_) => {
-                            return Ok(StepResult::Halt(evm.gas.remaining()));
-                        }
+                match self
+                    .call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await
+                {
+                    Ok(()) => {} // ignore
+                    Err(_) => {
+                        return Ok(StepResult::Halt(evm.gas.remaining()));
                     }
+                }
             }
             0xf3 | 0xfd => {
                 // RETURN
@@ -2100,13 +2107,15 @@ impl<T: EventTracer> Executor<T> {
                 };
                 // Creates a new sub context as if calling itself, but with the code of the given account.
                 // In particular the storage, the current sender and the current value remain the same.
-                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
-                    .await {
-                        Ok(()) => {} // ignore
-                        Err(_) => {
-                            return Ok(StepResult::Halt(evm.gas.remaining()));
-                        }
+                match self
+                    .call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await
+                {
+                    Ok(()) => {} // ignore
+                    Err(_) => {
+                        return Ok(StepResult::Halt(evm.gas.remaining()));
                     }
+                }
             }
             0xf5 => {
                 // CREATE2
@@ -2126,13 +2135,15 @@ impl<T: EventTracer> Executor<T> {
                     call_type: CallType::Static,
                     ..ctx
                 };
-                match self.call(instruction, this, call, &mut gas, evm, ext, ctx)
-                    .await {
-                        Ok(()) => {} // ignore
-                        Err(_) => {
-                            return Ok(StepResult::Halt(evm.gas.remaining()));
-                        }
+                match self
+                    .call(instruction, this, call, &mut gas, evm, ext, ctx)
+                    .await
+                {
+                    Ok(()) => {} // ignore
+                    Err(_) => {
+                        return Ok(StepResult::Halt(evm.gas.remaining()));
                     }
+                }
             }
             0xfe => {
                 // INVALID: handled outside of `execute_instruction`
@@ -2147,7 +2158,7 @@ impl<T: EventTracer> Executor<T> {
 
                 let opcode_cost = 5000;
                 let access_cost = if ext.is_address_warm(&address) {
-                    0 
+                    0
                 } else {
                     2600
                 };

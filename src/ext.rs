@@ -120,7 +120,6 @@ impl Ext {
             self.pull(addr).await?;
         }
         if let Some(val) = self.state.get(addr).and_then(|s| s.state.get(key)).copied() {
-
             #[cfg(feature = "tracing")]
             tracing::debug!("GET: {addr}[{key:#x}]={val:#064x} [cached]");
 
@@ -152,9 +151,7 @@ impl Ext {
     pub async fn put(&mut self, addr: &Address, key: Word, val: Word) -> eyre::Result<()> {
         let old = self.get(addr, &key).await?;
         let label = if old != val {
-            self.state.entry(*addr)
-                .or_default()
-                .state.insert(key, val);
+            self.state.entry(*addr).or_default().state.insert(key, val);
             ""
         } else {
             " [NOOP]"
