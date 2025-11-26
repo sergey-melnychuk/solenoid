@@ -637,7 +637,8 @@ impl<T: EventTracer> Executor<T> {
                         }
                     };
 
-                    if !instruction.is_call() && !(halt && instruction.opcode.name == "SSTORE") {
+                    let is_sstore = halt && instruction.opcode.name == "SSTORE";
+                    if !instruction.is_call() && !is_sstore {
                         // HERE: TODO: remove this label
                         let charged_cost = cost.min(evm.gas.remaining());
                         let refund = evm.gas.refund - evm.refund;
@@ -1756,7 +1757,7 @@ impl<T: EventTracer> Executor<T> {
                 evm.put(ext, &this, key, new).await?;
 
                 evm.gas.refund(gas_refund);
-                gas = gas_cost.into();
+                gas = gas_cost;
                 self.tracer.push(Event {
                     data: EventData::State(StateEvent::Put {
                         address: this,
@@ -2261,7 +2262,7 @@ impl<T: EventTracer> Executor<T> {
         // Check if there is enough gas for the base cost (out-of-gas condition)
         if base_gas_cost > evm.gas.remaining() {
             let gas_cost = evm.gas.remaining();
-            *gas = gas_cost.into();
+            *gas = gas_cost;
 
             self.tracer.push(Event {
                 depth: ctx.depth,

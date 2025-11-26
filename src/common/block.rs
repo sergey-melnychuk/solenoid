@@ -47,7 +47,7 @@ impl Tx {
 
     /// Check if this is a blob transaction (EIP-4844)
     pub fn is_blob_transaction(&self) -> bool {
-        self.blob_versioned_hashes.as_ref().map_or(false, |h| !h.is_empty())
+        self.blob_versioned_hashes.as_ref().is_some_and(|h| !h.is_empty())
     }
 
     /// Calculate the number of blobs in this transaction
