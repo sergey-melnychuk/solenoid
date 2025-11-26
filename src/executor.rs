@@ -1704,14 +1704,35 @@ impl<T: EventTracer> Executor<T> {
                         .collect::<Vec<_>>()
                 });
 
-                // EIP-2200: Check gas stipend (must have at least 2300 gas remaining)
-                if evm.gas.remaining() + gas_refund < gas_cost {
-                    // Calculate how much gas we can actually charge
+                if evm.gas.remaining() + gas_refund < 0 {
                     let actual_gas_cost = evm.gas.remaining();
 
-                    // Apply the refund first (before consuming gas)
-                    evm.gas.refund(gas_refund);
+                    self.debug["SSTORE"]["is_oog"] = json!(true);
+                    self.debug["SSTORE"]["note"] = json!("edge case with negative gas refund");
+                    self.tracer.push(Event {
+                        depth: ctx.depth,
+                        reverted: true,
+                        data: EventData::OpCode {
+                            pc: instruction.offset,
+                            op: instruction.opcode.code,
+                            name: instruction.opcode.name(),
+                            data: instruction.argument.clone().map(Into::into),
+                            gas_cost: 0,
+                            gas_used: evm.gas.used,
+                            gas_back: 0,
+                            gas_left: actual_gas_cost,
+                            stack: evm.stack.clone(),
+                            memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                            debug: self.debug.take(),
+                        },
+                    });
+                    return Ok(StepResult::Halt(0));
+                }
 
+                if evm.gas.remaining() < gas_cost {
+                    let actual_gas_cost = evm.gas.remaining();
+
+                    self.debug["SSTORE"]["is_oog"] = json!(true);
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: true,
@@ -1729,8 +1750,6 @@ impl<T: EventTracer> Executor<T> {
                             debug: self.debug.take(),
                         },
                     });
-                    // TODO: make OOG detection more generic
-                    // evm.error(ExecutorError::OutOfGas().into())?;
                     return Ok(StepResult::Halt(0));
                 }
 

@@ -1,1 +1,0 @@
-23634227 238 pc=3404,op=SSTORE,[out-of-gas]revm.gas_left=145,sole.gas_left=0
