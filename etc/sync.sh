@@ -1,9 +1,6 @@
 #!/bin/sh
 rm *.log
 
-etc/run.sh 23728678 10 > etc/23728669-23728678.txt
-etc/run.sh 23820674 10 > etc/23820665-23820674.txt
-
 cargo run --release --example runner -- 23027350 > etc/23027350.txt
 cargo run --release --example runner -- 23624962 > etc/23624962.txt
 cargo run --release --example runner -- 23634227 > etc/23634227.txt
@@ -21,5 +18,10 @@ cargo run --release --example runner -- 23683035 > etc/23683035.txt
 cargo run --release --example runner -- 23683764 > etc/23683764.txt
 cargo run --release --example runner -- 23690323 > etc/23690323.txt
 cargo run --release --example runner -- 23828643 > etc/23828643.txt
+
+etc/run.sh 23728678 10 > etc/23728678_10.txt
+etc/run.sh 23820674 10 > etc/23820674_10.txt
+etc/run.sh 23884145 3 > etc/23884145_3.txt
+etc/run.sh 23882432 3 > etc/23882432_3.txt
 
 etc/todo.sh

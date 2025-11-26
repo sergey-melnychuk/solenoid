@@ -2770,6 +2770,11 @@ impl<T: EventTracer> Executor<T> {
             depth: ctx.depth,
             reverted: false,
         });
+
+        // Accumulate gas refunds from inner execution
+        evm.gas.refund += inner_evm.gas.refund;
+        evm.refund = evm.gas.refund;
+
         evm.touches.extend(inner_evm.touches.into_iter());
         evm.push((&created).into())?;
         Ok(())

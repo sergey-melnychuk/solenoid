@@ -269,23 +269,25 @@ impl Runner {
             depth: 1,
             ..Default::default()
         };
-        let (tracer, ret) = exe
+        let (tracer, mut ret) = exe
             .execute_with_context(&code, &self.call, &mut evm, ext, ctx)
             .await;
 
-        // TODO: Avoid duplication of fee calculation code (see executor.rs)
-
-        // Calculate gas costs and transaction fee
-        let deployed_code_cost = if !evm.reverted {
-            200 * ret.len() as i64
+        let deployed_code_cost = 200 * ret.len() as i64;
+        let gas_final = if !evm.reverted && evm.gas.remaining() < deployed_code_cost {
+            // Not enough gas to cover deployed code cost
+            ret.clear();
+            evm.reverted = true;
+            self.call.gas.as_i64()
         } else {
-            0
+            evm
+                .gas
+                .finalized(upfront_gas_reduction + deployed_code_cost, evm.reverted)
         };
-        let gas_final = evm
-            .gas
-            .finalized(upfront_gas_reduction + deployed_code_cost, evm.reverted);
+        evm.gas(gas_final).ok();
 
         // Transfer priority fee to coinbase (same logic as in executor.rs)
+        // TODO: Avoid duplication of fee calculation code (see executor.rs)
         if !coinbase.is_zero() {
             let coinbase_gas_price = if ext.gas_info.gas_max_priority_fee.is_zero() {
                 // Legacy transaction
@@ -313,7 +315,7 @@ impl Runner {
 
         if evm.reverted {
             evm.revert(ext).await?;
-            // Re-increment nonce (nonce is never reverted for valid transactions)
+            // Re-increment nonce (nonce is never reverted even for failed tx)
             ext.account_mut(&self.call.from).nonce += Word::one();
         } else {
             ext.pull(&address).await?;
