@@ -55,14 +55,7 @@ impl Ext {
     pub fn at_hash(block_hash: String, eth: EthClient) -> Self {
         Self {
             remote: Some(Remote { eth, block_hash }),
-            state: Default::default(),
-            original: HashMap::default(),
-            transient: HashMap::default(),
-            accessed_addresses: HashSet::default(),
-            accessed_storage: HashSet::default(),
-            created_accounts: HashSet::default(),
-            destroyed_accounts: HashSet::default(),
-            gas_info: Default::default(),
+            ..Default::default()
         }
     }
 

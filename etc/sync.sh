@@ -1,27 +1,37 @@
 #!/bin/sh
 rm *.log
 
-cargo run --release --example runner -- 23027350 > etc/23027350.txt
-cargo run --release --example runner -- 23624962 > etc/23624962.txt
-cargo run --release --example runner -- 23634227 > etc/23634227.txt
-cargo run --release --example runner -- 23635557 > etc/23635557.txt
-cargo run --release --example runner -- 23635581 > etc/23635581.txt
-cargo run --release --example runner -- 23640313 > etc/23640313.txt
-cargo run --release --example runner -- 23641709 > etc/23641709.txt
-cargo run --release --example runner -- 23642294 > etc/23642294.txt
-cargo run --release --example runner -- 23647631 > etc/23647631.txt
-cargo run --release --example runner -- 23647653 > etc/23647653.txt
-cargo run --release --example runner -- 23678007 > etc/23678007.txt
-cargo run --release --example runner -- 23678686 > etc/23678686.txt
-cargo run --release --example runner -- 23678721 > etc/23678721.txt
-cargo run --release --example runner -- 23683035 > etc/23683035.txt
-cargo run --release --example runner -- 23683764 > etc/23683764.txt
-cargo run --release --example runner -- 23690323 > etc/23690323.txt
-cargo run --release --example runner -- 23828643 > etc/23828643.txt
+# watch -n 10 'grep "###" etc/*.txt'
 
-etc/run.sh 23728678 10 > etc/23728678_10.txt
-etc/run.sh 23820674 10 > etc/23820674_10.txt
-etc/run.sh 23884145 3 > etc/23884145_3.txt
-etc/run.sh 23882432 3 > etc/23882432_3.txt
+if cargo build --release --example runner --quiet; then
+    echo "✅ Runner built successfully"
+else
+    echo "❌ Failed to build runner"
+    exit 1
+fi
+
+./target/release/example/runner 23027350 > etc/23027350.txt
+./target/release/example/runner 23624962 > etc/23624962.txt
+./target/release/example/runner 23634227 > etc/23634227.txt
+./target/release/example/runner 23635557 > etc/23635557.txt
+./target/release/example/runner 23635581 > etc/23635581.txt
+./target/release/example/runner 23640313 > etc/23640313.txt
+./target/release/example/runner 23641709 > etc/23641709.txt
+./target/release/example/runner 23642294 > etc/23642294.txt
+./target/release/example/runner 23647631 > etc/23647631.txt
+./target/release/example/runner 23647653 > etc/23647653.txt
+./target/release/example/runner 23678007 > etc/23678007.txt
+./target/release/example/runner 23678686 > etc/23678686.txt
+./target/release/example/runner 23678721 > etc/23678721.txt
+./target/release/example/runner 23683035 > etc/23683035.txt
+./target/release/example/runner 23683764 > etc/23683764.txt
+./target/release/example/runner 23690323 > etc/23690323.txt
+./target/release/example/runner 23828643 > etc/23828643.txt
+
+etc/run.sh 23728678 10
+etc/run.sh 23820674 10
+etc/run.sh 23882432 10
+etc/run.sh 23884145 10
+etc/run.sh 23884838 10
 
 etc/todo.sh

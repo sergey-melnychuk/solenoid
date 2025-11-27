@@ -1,0 +1,4 @@
+📦 Fetched block number: 23882430 [with 253 txs]
+📦 Fetched block number: 23882430 [with 253 txs]
+
+(total: 253, matched: 253, invalid: 0)

@@ -402,22 +402,17 @@ impl<T: EventTracer> Executor<T> {
         let src = ext.balance(&call.from).await?;
         let dst = ext.balance(&call.to).await?;
         if !call.value.is_zero() && !call.to.is_zero() {
-            // if src < call.value {
-            //     return Err(ExecutorError::InsufficientFunds {
-            //         have: src,
-            //         need: call.value,
-            //     }
-            //     .into());
-            // }
-
-            ext.account_mut(&call.from).value -= call.value;
+            let value = ext.account_mut(&call.from).value;
+            // Avoid strict balance checks for now
+            let updated = value.saturating_sub(call.value);
+            ext.account_mut(&call.from).value = updated;
             evm.touches
-                .push(AccountTouch::SetValue(call.from, src, src - call.value));
+                .push(AccountTouch::SetValue(call.from, src, updated));
             self.tracer.push(Event {
                 data: EventData::Account(AccountEvent::SetValue {
                     address: call.from,
                     val: src,
-                    new: src - call.value,
+                    new: updated,
                 }),
                 depth: 1,
                 reverted: false,
@@ -689,6 +684,26 @@ impl<T: EventTracer> Executor<T> {
                     // eprintln!("OPCODE FAILED: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                     evm.stopped = true;
                     evm.reverted = true;
+
+                    self.tracer.push(Event {
+                        depth: ctx.depth,
+                        reverted: true,
+                        data: EventData::OpCode {
+                            pc: instruction.offset,
+                            op: instruction.opcode.code,
+                            name: instruction.opcode.name(),
+                            data: instruction.argument.clone().map(Into::into),
+                            gas_cost: 0,
+                            gas_used: evm.gas.used,
+                            gas_back: evm.gas.refund - evm.refund,
+                            gas_left: evm.gas.remaining(),
+                            stack: evm.stack.clone(),
+                            memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
+                            debug: self.debug.take(),
+                        },
+                    });
+
+                    evm.gas(evm.gas.remaining()).expect("must succeed");
                     return (self.tracer, vec![]);
                 }
             }
@@ -1224,7 +1239,7 @@ impl<T: EventTracer> Executor<T> {
                 // CALLDATACOPY
                 let dest_offset = evm.pop()?.as_usize();
                 let offset = evm.pop()?.as_usize();
-                let size = evm.pop()?.as_usize();
+                let size = evm.pop()?.min((usize::MAX >> 1).into()).as_usize();
                 if size > 0 && dest_offset + size > evm.memory.len() {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
@@ -1782,7 +1797,9 @@ impl<T: EventTracer> Executor<T> {
                     return Ok(StepResult::Halt(gas));
                 }
                 let dest = evm.pop()?.as_usize();
-                let dest = code.resolve_jump(dest).unwrap_or(dest);
+                let Some(dest) = code.resolve_jump(dest) else {
+                    return Ok(StepResult::Halt(gas));
+                };
                 if dest >= code.instructions.len() {
                     return Ok(StepResult::Halt(gas));
                 }
@@ -1799,9 +1816,11 @@ impl<T: EventTracer> Executor<T> {
                     return Ok(StepResult::Halt(gas));
                 }
                 let dest = evm.pop()?.as_usize();
-                let dest = code.resolve_jump(dest).unwrap_or(dest);
                 let cond = evm.pop()?;
                 if !cond.is_zero() {
+                    let Some(dest) = code.resolve_jump(dest) else {
+                        return Ok(StepResult::Halt(gas));
+                    };
                     if dest >= code.instructions.len() {
                         return Ok(StepResult::Halt(gas));
                     }

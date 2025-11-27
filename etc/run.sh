@@ -27,6 +27,13 @@ if ! [[ "$NUM_BLOCKS" =~ ^[0-9]+$ ]] || [ "$NUM_BLOCKS" -le 0 ]; then
     exit 1
 fi
 
+if cargo build --release --example runner --quiet; then
+    echo "📦 Runner binary was built successfully"
+else
+    echo "❌ Failed to build runner"
+    exit 1
+fi
+
 # Determine the end block
 if [ "$END_BLOCK_ARG" = "latest" ]; then
     echo "🔍 Fetching latest block number..."
@@ -47,30 +54,16 @@ else
 fi
 
 START_BLOCK=$((END_BLOCK - NUM_BLOCKS + 1))
-echo "📦 Running runner for $NUM_BLOCKS blocks (from $START_BLOCK to $END_BLOCK)"
-echo ""
+echo "⚙️ Running $NUM_BLOCKS blocks: $START_BLOCK..$END_BLOCK"
 SUCCESS=0
 FAILED=0
 
-for ((BLOCK=$START_BLOCK; BLOCK<=END_BLOCK; BLOCK++)); do
-    echo "=========================================="
-    echo "🔄 Processing block $BLOCK ($(($BLOCK - $START_BLOCK + 1))/$NUM_BLOCKS)"
-    echo "=========================================="
-    
-    if cargo run --release --example runner --quiet -- "$BLOCK" 2>&1; then
+for ((BLOCK=$START_BLOCK; BLOCK<=END_BLOCK; BLOCK++)); do    
+    if ./target/release/examples/runner "$BLOCK" 2>&1 > etc/$BLOCK.txt; then
         ((SUCCESS++))
         echo "✅ Block $BLOCK completed successfully"
     else
         ((FAILED++))
         echo "❌ Block $BLOCK failed"
     fi
-    echo ""
 done
-
-echo "=========================================="
-echo "📈 Summary"
-echo "=========================================="
-echo "Total blocks processed: $NUM_BLOCKS"
-echo "Successful: $SUCCESS"
-echo "Failed: $FAILED"
-

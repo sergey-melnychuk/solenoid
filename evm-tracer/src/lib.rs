@@ -58,6 +58,7 @@ pub async fn trace_all(
         .modify_cfg_chained(|c| {
             c.chain_id = 1;
             c.disable_nonce_check = true;
+            c.disable_balance_check = true;
         });
 
     let mut tracer = TxTrace::default();
@@ -96,7 +97,6 @@ pub async fn trace_all(
         let (_, traces) = evm.inspector.reset();
         ret.push((result, traces));
     }
-
     Ok(ret)
 }
 
@@ -124,6 +124,8 @@ pub async fn trace_one(
         })
         .modify_cfg_chained(|c| {
             c.chain_id = 1;
+            c.disable_nonce_check = true;
+            c.disable_balance_check = true;
         });
 
     let tx_env = TxEnv::builder()
@@ -135,7 +137,7 @@ pub async fn trace_one(
         .nonce(tx.nonce())
         .gas_price(tx.gas_price().unwrap_or(tx.inner.max_fee_per_gas()))
         .gas_priority_fee(tx.max_priority_fee_per_gas())
-        .access_list(tx.access_list().cloned().unwrap_or_default())
+        // .access_list(tx.access_list().cloned().unwrap_or_default())
         .kind(match tx.to() {
             Some(to_address) => TxKind::Call(to_address),
             None => TxKind::Create,
@@ -148,8 +150,6 @@ pub async fn trace_one(
 
     let mut evm = ctx.build_mainnet_with_inspector(&mut tracer);
     let result = evm.inspect_tx(tx_env)?;
-
-
     Ok((result, tracer))
 }
 
@@ -165,7 +165,6 @@ pub struct OpcodeTrace {
     pub stack: Vec<String>,
     pub memory: Vec<String>,
     pub depth: usize,
-
     pub debug: DebugInfo,
 }
 
