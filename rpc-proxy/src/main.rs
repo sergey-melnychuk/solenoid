@@ -242,13 +242,13 @@ async fn save_persistent(state: &AppState) -> anyhow::Result<()> {
     let path = &state.cache_file;
 
     let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, pretty).await?;
+    fs::write(&tmp_path, &pretty).await?;
     if let Err(_e) = fs::rename(&tmp_path, path).await {
         let _ = fs::remove_file(path).await;
         let _ = fs::rename(&tmp_path, path).await;
     }
 
     let bak_path = path.with_extension("json.bak");
-    fs::write(&bak_path, pretty).await?;
+    fs::write(&bak_path, &pretty).await?;
     Ok(())
 }
