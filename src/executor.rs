@@ -502,7 +502,12 @@ impl<T: EventTracer> Executor<T> {
             call_cost + data_cost + access_list_cost
         } else {
             let deployed_code_cost = 200 * ret.len() as i64;
-            call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost + access_list_cost
+            call_cost
+                + data_cost
+                + create_cost
+                + init_code_cost
+                + deployed_code_cost
+                + access_list_cost
         };
 
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);

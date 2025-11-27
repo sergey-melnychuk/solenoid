@@ -167,9 +167,9 @@ impl Ext {
 
         #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
         {
-        let old = self.get(addr, &key).await?;
-        let label = if old != val { "" } else { " [NOOP]" };
-        tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}{label}");
+            let old = self.get(addr, &key).await?;
+            let label = if old != val { "" } else { " [NOOP]" };
+            tracing::debug!("PUT: {addr:#}[{key:#x}]={val:#x}{label}");
         }
 
         Ok(())

@@ -99,7 +99,12 @@ pub fn runner(
                 call_cost + data_cost + access_list_cost
             } else {
                 let deployed_code_cost = 200 * result.ret.len() as i64;
-                call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost + access_list_cost
+                call_cost
+                    + data_cost
+                    + create_cost
+                    + init_code_cost
+                    + deployed_code_cost
+                    + access_list_cost
             };
 
             let traces = result
@@ -184,7 +189,7 @@ async fn main() -> eyre::Result<()> {
         if progress {
             use std::io::Write;
             eprint!("\rTX: {idx:>3}/{:>3}", len - 1);
-            std::io::stdout().flush().unwrap();    
+            std::io::stdout().flush().unwrap();
         }
 
         let tx = txs[idx].clone();

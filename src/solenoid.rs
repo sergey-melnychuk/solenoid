@@ -285,8 +285,7 @@ impl Runner {
             evm.gas(gas_limit).ok();
             gas_limit
         } else {
-            evm
-                .gas
+            evm.gas
                 .finalized(upfront_gas_reduction + deployed_code_cost, evm.reverted)
         };
 
