@@ -1,2 +1,4 @@
 📦 Fetched block number: 23884145 [with 214 txs]
 📦 Fetched block number: 23884145 [with 214 txs]
+
+(total: 214, matched: 214, invalid: 0)

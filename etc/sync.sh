@@ -6,27 +6,27 @@ rm *.log
 if cargo build --release --example runner --quiet; then
     echo "✅ Runner built successfully"
 else
-    echo "❌ Failed to build runner"
+    echo "❌ Runner build failed"
     exit 1
 fi
 
-./target/release/example/runner 23027350 > etc/23027350.txt
-./target/release/example/runner 23624962 > etc/23624962.txt
-./target/release/example/runner 23634227 > etc/23634227.txt
-./target/release/example/runner 23635557 > etc/23635557.txt
-./target/release/example/runner 23635581 > etc/23635581.txt
-./target/release/example/runner 23640313 > etc/23640313.txt
-./target/release/example/runner 23641709 > etc/23641709.txt
-./target/release/example/runner 23642294 > etc/23642294.txt
-./target/release/example/runner 23647631 > etc/23647631.txt
-./target/release/example/runner 23647653 > etc/23647653.txt
-./target/release/example/runner 23678007 > etc/23678007.txt
-./target/release/example/runner 23678686 > etc/23678686.txt
-./target/release/example/runner 23678721 > etc/23678721.txt
-./target/release/example/runner 23683035 > etc/23683035.txt
-./target/release/example/runner 23683764 > etc/23683764.txt
-./target/release/example/runner 23690323 > etc/23690323.txt
-./target/release/example/runner 23828643 > etc/23828643.txt
+etc/run.sh 23027350 1
+etc/run.sh 23624962 1
+etc/run.sh 23634227 1
+etc/run.sh 23635557 1
+etc/run.sh 23635581 1
+etc/run.sh 23640313 1
+etc/run.sh 23641709 1
+etc/run.sh 23642294 1
+etc/run.sh 23647631 1
+etc/run.sh 23647653 1
+etc/run.sh 23678007 1
+etc/run.sh 23678686 1
+etc/run.sh 23678721 1
+etc/run.sh 23683035 1
+etc/run.sh 23683764 1
+etc/run.sh 23690323 1
+etc/run.sh 23828643 1
 
 etc/run.sh 23728678 10
 etc/run.sh 23820674 10
