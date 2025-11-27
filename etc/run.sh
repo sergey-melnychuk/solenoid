@@ -27,6 +27,8 @@ if ! [[ "$NUM_BLOCKS" =~ ^[0-9]+$ ]] || [ "$NUM_BLOCKS" -le 0 ]; then
     exit 1
 fi
 
+echo "---"
+
 if cargo build --release --example runner --quiet; then
     echo "📦 Runner binary was built successfully"
 else

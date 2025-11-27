@@ -71,7 +71,7 @@ pub fn runner(
             .nonce(tx.nonce())
             .gas_price(tx.gas_price().unwrap_or(tx.inner.max_fee_per_gas()))
             .gas_priority_fee(tx.max_priority_fee_per_gas())
-            // .access_list(tx.access_list().cloned().unwrap_or_default())
+            .access_list(tx.access_list().cloned().unwrap_or_default())
             .kind(match tx.to() {
                 Some(to_address) => TxKind::Call(to_address),
                 None => TxKind::Create,

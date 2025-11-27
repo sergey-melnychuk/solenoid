@@ -385,9 +385,13 @@ impl<T: EventTracer> Executor<T> {
         // The base fee will be burned (removed from circulation), and only the priority fee
         // will be transferred to the coinbase after execution completes (see below).
 
+        let access_list_cost = ext.tx_ctx.access_list_cost();
+
         let mut gas = call.gas.as_i64();
         let call_cost = 21000;
         gas -= call_cost;
+        gas -= access_list_cost;
+        ext.apply_access_list();
 
         let data_cost = {
             let total_calldata_len = call.data.len();
@@ -495,10 +499,10 @@ impl<T: EventTracer> Executor<T> {
         let gas_floor = call_cost + 10 * calldata_tokens;
 
         let gas_costs = if !call.to.is_zero() {
-            call_cost + data_cost
+            call_cost + data_cost + access_list_cost
         } else {
             let deployed_code_cost = 200 * ret.len() as i64;
-            call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost
+            call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost + access_list_cost
         };
 
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);

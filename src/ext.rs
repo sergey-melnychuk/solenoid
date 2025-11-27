@@ -38,7 +38,7 @@ pub struct Ext {
     pub tx_ctx: TxContext,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct TxContext {
     pub gas_price: Word,
     pub gas_max_fee: Word,
@@ -56,15 +56,6 @@ impl TxContext {
             cost += 1900 * item.storage_keys.len() as i64;
         }
         cost
-    }
-
-    pub fn apply_access_list(&self,ext: &mut Ext) {
-        for item in &self.access_list {
-            ext.warm_address(&item.address);
-            for key in &item.storage_keys {
-                ext.warm_storage(&item.address, key);
-            }
-        }
     }
 }
 
@@ -88,6 +79,15 @@ impl Ext {
     pub async fn at_latest(eth: EthClient) -> eyre::Result<Self> {
         let (_, block_hash) = eth.get_latest_block().await?;
         Ok(Self::at_hash(block_hash, eth))
+    }
+
+    pub fn apply_access_list(&mut self) {
+        for item in self.tx_ctx.access_list.clone() {
+            self.warm_address(&item.address);
+            for key in &item.storage_keys {
+                self.warm_storage(&item.address, key);
+            }
+        }
     }
 
     pub fn reset(&mut self, tx_ctx: TxContext) {

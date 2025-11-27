@@ -27,6 +27,9 @@ etc/run.sh 23683035 1
 etc/run.sh 23683764 1
 etc/run.sh 23690323 1
 etc/run.sh 23828643 1
+etc/run.sh 23890624 1
+etc/run.sh 23890628 1
+etc/run.sh 23890632 1
 
 etc/run.sh 23728678 10
 etc/run.sh 23820674 10

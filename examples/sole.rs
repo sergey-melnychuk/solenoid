@@ -92,6 +92,8 @@ async fn main() -> eyre::Result<()> {
         };
         let gas_floor = 21000 + 10 * calldata_tokens;
 
+        let access_list_cost = ext.tx_ctx.access_list_cost();
+
         if tx.to.is_some() {
             let call_cost = 21000i64;
             let data_cost = {
@@ -103,7 +105,7 @@ async fn main() -> eyre::Result<()> {
             let total_gas = result
                 .evm
                 .gas
-                .finalized(call_cost + data_cost, result.evm.reverted);
+                .finalized(call_cost + data_cost + access_list_cost, result.evm.reverted);
             let total_gas = total_gas.max(gas_floor);
 
             eprintln!("GAS: {total_gas}");
@@ -134,7 +136,7 @@ async fn main() -> eyre::Result<()> {
             let deployed_code_cost = 200 * result.ret.len() as i64;
 
             let total_gas = result.evm.gas.finalized(
-                call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost,
+                call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost + access_list_cost,
                 result.evm.reverted,
             );
             let total_gas = total_gas.max(gas_floor);

@@ -242,6 +242,9 @@ impl Runner {
             call_cost + data_cost
         };
 
+        let upfront_gas_reduction = upfront_gas_reduction + ext.tx_ctx.access_list_cost();
+        ext.apply_access_list();
+
         evm.gas = Gas::new(self.call.gas.as_i64() - upfront_gas_reduction);
 
         ext.pull(&self.call.from).await?;

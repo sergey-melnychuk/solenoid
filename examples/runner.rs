@@ -62,7 +62,7 @@ pub fn runner(
         let header = header.clone();
         let ext = ext.clone();
 
-        let gas_info = TxContext {
+        let tx_ctx = TxContext {
             gas_price: effective_gas_price,
             gas_max_fee: tx.gas_info.max_fee.unwrap_or_default(),
             gas_max_priority_fee: tx.gas_info.max_priority_fee.unwrap_or_default(),
@@ -71,10 +71,12 @@ pub fn runner(
             access_list: tx.access_list.clone(),
         };
 
+        let access_list_cost = tx_ctx.access_list_cost();
+
         Box::pin(async move {
             let mut result = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
-                guard.reset(gas_info);
+                guard.reset(tx_ctx);
 
                 let result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
@@ -94,10 +96,10 @@ pub fn runner(
             .await??;
 
             let gas_costs = if tx.to.is_some() {
-                call_cost + data_cost
+                call_cost + data_cost + access_list_cost
             } else {
                 let deployed_code_cost = 200 * result.ret.len() as i64;
-                call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost
+                call_cost + data_cost + create_cost + init_code_cost + deployed_code_cost + access_list_cost
             };
 
             let traces = result

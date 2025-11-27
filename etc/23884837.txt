@@ -1,8 +1,4 @@
 📦 Fetched block number: 23884837 [with 215 txs]
 📦 Fetched block number: 23884837 [with 215 txs]
----
-### 23884837 144 hash=0x8ab0e3c416108d1db5203f35732e448bdb69e34cba9a2ee776d91737e8943ed0
-REVM 	OK=false 	RET=<4> 	GAS=316472	TRACES=14358
-sole 	OK=false 	RET=<0>	GAS=+2658	TRACES=14436
 
-(total: 215, matched: 214, invalid: 1)
+(total: 215, matched: 215, invalid: 0)
