@@ -3,7 +3,7 @@ use std::{pin::Pin, sync::Arc};
 use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::alloy_rpc_types::BlockTransactions;
-use solenoid::ext::TxGasInfo;
+use solenoid::ext::TxContext;
 use tokio::sync::Mutex;
 
 use solenoid::{
@@ -62,12 +62,13 @@ pub fn runner(
         let header = header.clone();
         let ext = ext.clone();
 
-        let gas_info = TxGasInfo {
+        let gas_info = TxContext {
             gas_price: effective_gas_price,
             gas_max_fee: tx.gas_info.max_fee.unwrap_or_default(),
             gas_max_priority_fee: tx.gas_info.max_priority_fee.unwrap_or_default(),
             blob_max_fee: tx.gas_info.max_fee_per_blob.unwrap_or_default(),
             blob_gas_used: (tx.blob_count() * 131072) as u64,
+            access_list: tx.access_list.clone(),
         };
 
         Box::pin(async move {
@@ -135,6 +136,8 @@ async fn main() -> eyre::Result<()> {
             .unwrap_or(23027350) // https://xkcd.com/221/
     };
 
+    let progress = std::env::args().skip(2).any(|arg| arg == "--progress");
+
     let Block {
         header,
         transactions,
@@ -176,9 +179,11 @@ async fn main() -> eyre::Result<()> {
 
     let mut matched = 0;
     for idx in 0..len {
-        // use std::io::Write;
-        // eprint!("\rTX: {idx:>3}/{:>3}", len - 1);
-        // std::io::stdout().flush().unwrap();
+        if progress {
+            use std::io::Write;
+            eprint!("\rTX: {idx:>3}/{:>3}", len - 1);
+            std::io::stdout().flush().unwrap();    
+        }
 
         let tx = txs[idx].clone();
         let (revm_result, revm_traces) = g(tx)?;

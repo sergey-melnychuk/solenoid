@@ -16,6 +16,15 @@ pub struct Tx {
     pub gas_info: TxGas,
     #[serde(rename = "blobVersionedHashes", default)]
     pub blob_versioned_hashes: Option<Vec<Word>>,
+    #[serde(rename = "accessList", default)]
+    pub access_list: Vec<AccessListItem>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AccessListItem {
+    pub address: Address,
+    #[serde(rename = "storageKeys", default)]
+    pub storage_keys: Vec<Word>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -290,14 +290,14 @@ impl Runner {
         // Transfer priority fee to coinbase (same logic as in executor.rs)
         // TODO: Avoid duplication of fee calculation code (see executor.rs)
         if !coinbase.is_zero() {
-            let coinbase_gas_price = if ext.gas_info.gas_max_priority_fee.is_zero() {
+            let coinbase_gas_price = if ext.tx_ctx.gas_max_priority_fee.is_zero() {
                 // Legacy transaction
-                ext.gas_info.gas_price.saturating_sub(base_fee)
+                ext.tx_ctx.gas_price.saturating_sub(base_fee)
             } else {
                 // EIP-1559 transaction
                 let effective_gas_price = {
-                    let base_plus_priority = base_fee + ext.gas_info.gas_max_priority_fee;
-                    Word::min(ext.gas_info.gas_max_fee, base_plus_priority)
+                    let base_plus_priority = base_fee + ext.tx_ctx.gas_max_priority_fee;
+                    Word::min(ext.tx_ctx.gas_max_fee, base_plus_priority)
                 };
                 effective_gas_price.saturating_sub(base_fee)
             };

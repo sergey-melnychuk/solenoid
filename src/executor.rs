@@ -364,7 +364,7 @@ impl<T: EventTracer> Executor<T> {
         }
 
         // Deduct upfront gas payment before execution
-        let gas_prepayment = call.gas * ext.gas_info.gas_price;
+        let gas_prepayment = call.gas * ext.tx_ctx.gas_price;
         let sender_balance = ext.balance(&call.from).await?;
         if sender_balance < gas_prepayment {
             return Err(ExecutorError::InsufficientFunds {
@@ -502,7 +502,7 @@ impl<T: EventTracer> Executor<T> {
         };
 
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);
-        let gas_used_fee = Word::from(gas_final) * ext.gas_info.gas_price;
+        let gas_used_fee = Word::from(gas_final) * ext.tx_ctx.gas_price;
         let gas_refund = gas_prepayment - gas_used_fee;
 
         // Refund unused gas to sender
@@ -521,16 +521,16 @@ impl<T: EventTracer> Executor<T> {
         // Note: Gas fees are charged regardless of whether the transaction succeeds or reverts
         if !coinbase.is_zero() {
             // Effective priority to coinbase = min(max_priority, max_fee - base_fee) = min(10.01, 30.03 - 0.665752928) ≈ 10.01 Gwei
-            let coinbase_gas_price = if ext.gas_info.gas_max_priority_fee.is_zero() {
+            let coinbase_gas_price = if ext.tx_ctx.gas_max_priority_fee.is_zero() {
                 // Legacy transaction (type 0): gas_price - base_fee goes to miner (base fee is burned)
                 // COINBASE BALANCE fix 1/1: legacy tx effective gas price
-                ext.gas_info.gas_price.saturating_sub(base_fee)
+                ext.tx_ctx.gas_price.saturating_sub(base_fee)
             } else {
                 // EIP-1559 transaction (type 2): recalculate effective_gas_price like revm does
                 // effective_gas_price = min(max_fee_per_gas, base_fee + max_priority_fee_per_gas)
                 let effective_gas_price = {
-                    let base_plus_priority = base_fee + ext.gas_info.gas_max_priority_fee;
-                    Word::min(ext.gas_info.gas_max_fee, base_plus_priority)
+                    let base_plus_priority = base_fee + ext.tx_ctx.gas_max_priority_fee;
+                    Word::min(ext.tx_ctx.gas_max_fee, base_plus_priority)
                 };
                 // coinbase_gas_price = effective_gas_price - basefee
                 effective_gas_price.saturating_sub(base_fee)
@@ -561,9 +561,9 @@ impl<T: EventTracer> Executor<T> {
         }
 
         // Add blob gas fees (EIP-4844) if this transaction used blob gas
-        if ext.gas_info.blob_gas_used > 0 && !coinbase.is_zero() {
-            let blob_gas_price = header_clone.blob_gas_price().min(ext.gas_info.blob_max_fee);
-            let blob_fee = Word::from(ext.gas_info.blob_gas_used) * blob_gas_price;
+        if ext.tx_ctx.blob_gas_used > 0 && !coinbase.is_zero() {
+            let blob_gas_price = header_clone.blob_gas_price().min(ext.tx_ctx.blob_max_fee);
+            let blob_fee = Word::from(ext.tx_ctx.blob_gas_used) * blob_gas_price;
 
             if !blob_fee.is_zero() {
                 // TODO: charge sender with `blob_fee`
@@ -578,7 +578,7 @@ impl<T: EventTracer> Executor<T> {
         self.tracer.push(Event {
             data: EventData::Fee {
                 gas: Word::from(gas_final),
-                price: ext.gas_info.gas_price,
+                price: ext.tx_ctx.gas_price,
                 total: gas_used_fee,
             },
             depth: 1,
@@ -1301,7 +1301,7 @@ impl<T: EventTracer> Executor<T> {
                 if evm.gas.remaining() < gas {
                     return Ok(StepResult::Halt(gas));
                 }
-                evm.push(ext.gas_info.gas_price)?;
+                evm.push(ext.tx_ctx.gas_price)?;
             }
             0x3b => {
                 // EXTCODESIZE

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use crate::{
-    common::{address::Address, hash::keccak256, word::Word},
+    common::{address::Address, block::AccessListItem, hash::keccak256, word::Word},
     eth::EthClient,
 };
 
@@ -35,16 +35,37 @@ pub struct Ext {
     pub created_accounts: HashSet<Address>,
     pub destroyed_accounts: HashSet<Address>,
 
-    pub gas_info: TxGasInfo,
+    pub tx_ctx: TxContext,
 }
 
 #[derive(Default)]
-pub struct TxGasInfo {
+pub struct TxContext {
     pub gas_price: Word,
     pub gas_max_fee: Word,
     pub blob_max_fee: Word,
     pub gas_max_priority_fee: Word,
     pub blob_gas_used: u64,
+    pub access_list: Vec<AccessListItem>,
+}
+
+impl TxContext {
+    pub fn access_list_cost(&self) -> i64 {
+        let mut cost = 0i64;
+        for item in &self.access_list {
+            cost += 2400;
+            cost += 1900 * item.storage_keys.len() as i64;
+        }
+        cost
+    }
+
+    pub fn apply_access_list(&self,ext: &mut Ext) {
+        for item in &self.access_list {
+            ext.warm_address(&item.address);
+            for key in &item.storage_keys {
+                ext.warm_storage(&item.address, key);
+            }
+        }
+    }
 }
 
 impl Ext {
@@ -69,8 +90,8 @@ impl Ext {
         Ok(Self::at_hash(block_hash, eth))
     }
 
-    pub fn reset(&mut self, gas_info: TxGasInfo) {
-        self.gas_info = gas_info;
+    pub fn reset(&mut self, tx_ctx: TxContext) {
+        self.tx_ctx = tx_ctx;
         self.original.clear();
 
         // Clear transient storage (EIP-1153)
