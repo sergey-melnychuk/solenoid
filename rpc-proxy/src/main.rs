@@ -18,12 +18,15 @@ struct AppState {
     http_client: Client,
     cache_file: PathBuf,
     persistent: RwLock<HashMap<String, Value>>,
+    offline: bool,
 }
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
+
+    let offline = std::env::args().skip(1).any(|arg| arg == "--offline");
 
     let bind_addr: SocketAddr = std::env::var("BIND_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
@@ -48,6 +51,7 @@ async fn main() {
         http_client,
         cache_file,
         persistent: RwLock::new(initial_persistent),
+        offline,
     });
 
     let app = Router::new()
@@ -55,6 +59,10 @@ async fn main() {
         .with_state(state.clone());
 
     info!(%bind_addr, "Starting EVM JSON-RPC caching proxy");
+    if offline {
+        info!("Running in offline mode");
+    }
+
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await
         .expect("failed to bind address");
@@ -81,10 +89,12 @@ async fn shutdown_signal_with_persist(state: Arc<AppState>) {
         _ = ctrl_c => {}
         _ = terminate => {}
     }
-    if let Err(e) = save_persistent(&state).await {
-        error!(error = %e, "Failed to save persistent cache on shutdown");
-    } else {
-        info!("Persistent cache saved on shutdown");
+    if !state.offline {
+        if let Err(e) = save_persistent(&state).await {
+            error!(error = %e, "Failed to save persistent cache on shutdown");
+        } else {
+            info!("Persistent cache saved on shutdown");
+        }
     }
 }
 
@@ -147,6 +157,19 @@ async fn handle_jsonrpc(
         } {
             info!(%key, "Cache hit");
             return (StatusCode::OK, Json(v)).into_response();
+        }
+
+        if state.offline {
+            warn!(%key, "Cache miss (offline mode)");
+            return (
+                StatusCode::OK,
+                Json(json!({
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32001, "message": "Server running in offline mode"},
+                    "id": null
+                })),
+            )
+                .into_response();
         }
 
         warn!(%key, "Cache miss");
