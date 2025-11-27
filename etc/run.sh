@@ -61,7 +61,7 @@ SUCCESS=0
 FAILED=0
 
 for ((BLOCK=$START_BLOCK; BLOCK<=END_BLOCK; BLOCK++)); do    
-    if ./target/release/examples/runner "$BLOCK" 2>&1 > etc/$BLOCK.txt; then
+    if ./target/release/examples/runner "$BLOCK" 2>&1 > etc/sync/$BLOCK.txt; then
         ((SUCCESS++))
         echo "✅ Block $BLOCK completed successfully"
     else
