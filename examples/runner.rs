@@ -150,7 +150,7 @@ async fn main() -> eyre::Result<()> {
         transactions,
     } = eth.get_full_block(Word::from(block_number)).await?;
     println!(
-        "📦 Fetched block number: {} [with {} txs]",
+        "📦 Fetched block number: {} [{} txs]",
         header.number.as_usize(),
         transactions.len()
     );
@@ -174,7 +174,7 @@ async fn main() -> eyre::Result<()> {
         eyre::bail!("Expected full block");
     };
     println!(
-        "📦 Fetched block number: {} [with {} txs]",
+        "📦 Fetched block number: {} [{} txs]",
         block.header.number,
         txs.len()
     );

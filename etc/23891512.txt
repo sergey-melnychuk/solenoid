@@ -1,0 +1,12 @@
+📦 Fetched block number: 23891512 [1267 txs]
+📦 Fetched block number: 23891512 [1267 txs]
+---
+### 23891512 250 hash=0x6b53ae8e3bafb1c515e3f23e6d9149d1787b69eef0159a5d29f91f749c871d15
+REVM 	OK=false 	RET=empty	GAS=97871	TRACES=836
+sole 	OK=true 	RET=<32>	GAS=-29943	TRACES=965
+---
+### 23891512 252 hash=0x04d0784e6e24204fd34092a0584a991c8686fb7d23fe57807e438a48c2365251
+REVM 	OK=false 	RET=empty	GAS=276370	TRACES=3454
+sole 	OK=false 	RET=match	GAS=match	TRACES=3454
+
+(total: 1267, matched: 1265, invalid: 2)

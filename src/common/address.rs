@@ -92,7 +92,7 @@ impl std::fmt::Display for Address {
 
 impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Address(0x{})", hex::encode(self.0))
+        write!(f, "0x{}", hex::encode(self.0))
     }
 }
 

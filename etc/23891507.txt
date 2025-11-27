@@ -1,0 +1,8 @@
+📦 Fetched block number: 23891507 [267 txs]
+📦 Fetched block number: 23891507 [267 txs]
+---
+### 23891507 255 hash=0x82b52dbd83efc272d47040ad2bb29709899c6667aecccd85933dcb588f75c6c6
+REVM 	OK=false 	RET=empty	GAS=97871	TRACES=836
+sole 	OK=true 	RET=<32>	GAS=-29943	TRACES=965
+
+(total: 267, matched: 266, invalid: 1)

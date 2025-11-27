@@ -145,10 +145,8 @@ async fn main() -> eyre::Result<()> {
                 result.evm.reverted,
             );
             let total_gas = total_gas.max(gas_floor);
-            eprintln!(
-                "GAS: {total_gas} [created={}]",
-                result.created.expect("contract should have been created")
-            );
+            eprintln!("GAS: {total_gas}");
+            eprintln!("CREATED: {:?}", ext.created_accounts);
         }
 
         eprintln!("OK: {}", !result.evm.reverted);

@@ -366,19 +366,13 @@ impl<T: EventTracer> Executor<T> {
         // Deduct upfront gas payment before execution
         let gas_prepayment = call.gas * ext.tx_ctx.gas_price;
         let sender_balance = ext.balance(&call.from).await?;
-        if sender_balance < gas_prepayment {
-            return Err(ExecutorError::InsufficientFunds {
-                have: sender_balance,
-                need: gas_prepayment,
-            }
-            .into());
-        }
         if !gas_prepayment.is_zero() {
-            ext.account_mut(&call.from).value -= gas_prepayment;
+            let updated_balance = sender_balance.saturating_sub(gas_prepayment);
+            ext.account_mut(&call.from).value = updated_balance;
             evm.touches.push(AccountTouch::SetValue(
                 call.from,
                 sender_balance,
-                sender_balance - gas_prepayment,
+                updated_balance,
             ));
         }
         // Note: Gas prepayment is deducted from sender but NOT transferred to coinbase yet.
@@ -2202,7 +2196,7 @@ impl<T: EventTracer> Executor<T> {
                 let balance = ext.balance(&this).await?;
                 ext.account_mut(&this).value = Word::zero();
                 ext.account_mut(&address).value += balance;
-                ext.destroyed_accounts.insert(this);
+                ext.destroyed_accounts.push(this);
 
                 // TODO: add traces and account/state events
             }
@@ -2616,7 +2610,7 @@ impl<T: EventTracer> Executor<T> {
             this.create(nonce)
         };
 
-        ext.created_accounts.insert(created);
+        ext.created_accounts.push(created);
         ext.warm_address(&created);
         evm.touches.push(AccountTouch::WarmUp(created));
 

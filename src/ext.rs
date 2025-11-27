@@ -32,8 +32,8 @@ pub struct Ext {
     // EIP-2929: Per-transaction access tracking
     pub accessed_addresses: HashSet<Address>,
     pub accessed_storage: HashSet<(Address, Word)>,
-    pub created_accounts: HashSet<Address>,
-    pub destroyed_accounts: HashSet<Address>,
+    pub created_accounts: Vec<Address>,
+    pub destroyed_accounts: Vec<Address>,
 
     pub tx_ctx: TxContext,
 }
@@ -103,7 +103,7 @@ impl Ext {
         self.created_accounts.clear();
 
         // Apply SELFDESTRUCT
-        let destroyed = self.destroyed_accounts.drain().collect::<Vec<_>>();
+        let destroyed = self.destroyed_accounts.drain(..).collect::<Vec<_>>();
         for addr in destroyed {
             self.state.remove(&addr);
         }

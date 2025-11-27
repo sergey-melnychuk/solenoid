@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     let BlockTransactions::Full(txs) = block.transactions else {
         eyre::bail!("Expected full block");
     };
-    eprintln!("📦 Fetched block number: {} [with {} txs]", block.header.number, txs.len());
+    eprintln!("📦 Fetched block number: {} [{} txs]", block.header.number, txs.len());
 
     let mut f = runner(block.header, provider);
     for tx in txs {

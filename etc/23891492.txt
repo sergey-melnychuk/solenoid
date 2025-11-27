@@ -1,0 +1,8 @@
+📦 Fetched block number: 23891492 [264 txs]
+📦 Fetched block number: 23891492 [264 txs]
+---
+### 23891492 223 hash=0x9da982cf07f1f6f82fba618f7cae64f7aa68fb790fd230ba107d13ae4c79c8dc
+REVM 	OK=true 	RET=<987>	GAS=1772514	TRACES=602
+sole 	OK=true 	RET=<987>	GAS=match	TRACES=602
+
+(total: 264, matched: 263, invalid: 1)
