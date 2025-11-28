@@ -1,4 +1,4 @@
-📦 Fetched block number: 23640313 [with 180 txs]
-📦 Fetched block number: 23640313 [with 180 txs]
+📦 Fetched block number: 23640313 [180 txs]
+📦 Fetched block number: 23640313 [180 txs]
 
 (total: 180, matched: 180, invalid: 0)

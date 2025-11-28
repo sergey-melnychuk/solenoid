@@ -1,0 +1,8 @@
+📦 Fetched block number: 23891577 [311 txs]
+📦 Fetched block number: 23891577 [311 txs]
+---
+### 23891577 55 hash=0xd1c2fae7cca3a3ac9416cf313813c575af7b0258ce61ec83024db9f2cfd1c511
+REVM 	OK=false 	RET=empty	GAS=97871	TRACES=836
+sole 	OK=true 	RET=<32>	GAS=-29943	TRACES=965
+
+(total: 311, matched: 310, invalid: 1)

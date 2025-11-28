@@ -1,0 +1,6 @@
+📦 Fetched block number: 23891565 [203 txs]
+📦 Fetched block number: 23891565 [203 txs]
+---
+### 23891565 57 hash=0xd111228966a056e7bfe35654fc62c2defec2b3402a1707b7d00ade36cc029dcc
+REVM 	OK=true 	RET=empty	GAS=21000	TRACES=0
+sole 	OK=false 	RET=match	GAS=match	TRACES=0

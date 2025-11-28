@@ -1,8 +1,0 @@
-📦 Fetched block number: 23891497 [151 txs]
-📦 Fetched block number: 23891497 [151 txs]
----
-### 23891497 104 hash=0xbf5cee932c029be4932ba4cbaf8657a06ef6810979ec44361da02ae126d19647
-REVM 	OK=false 	RET=empty	GAS=97871	TRACES=836
-sole 	OK=true 	RET=<32>	GAS=-29943	TRACES=965
-
-(total: 151, matched: 150, invalid: 1)

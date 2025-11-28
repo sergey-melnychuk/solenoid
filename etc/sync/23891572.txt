@@ -1,0 +1,8 @@
+📦 Fetched block number: 23891572 [298 txs]
+📦 Fetched block number: 23891572 [298 txs]
+---
+### 23891572 71 hash=0xe150f089dde7cdd4727bd3daa32392d2f45ddaa759a8c1b4e453875f4b5c91a8
+REVM 	OK=false 	RET=empty	GAS=97871	TRACES=836
+sole 	OK=true 	RET=<32>	GAS=-29943	TRACES=965
+
+(total: 298, matched: 297, invalid: 1)

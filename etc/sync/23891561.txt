@@ -1,6 +1,4 @@
 📦 Fetched block number: 23891561 [335 txs]
 📦 Fetched block number: 23891561 [335 txs]
----
-### 23891561 206 hash=0x155a2b46ef4726663096b76c3c9f3fcbbc7531fcb5054a20d5f847cf0290f477
-REVM 	OK=true 	RET=true	GAS=21000	TRACES=0
-sole 	PANIC: 'RPC error: '{"code":-32001,"message":"Server running in offline mode"}''
+
+(total: 335, matched: 335, invalid: 0)

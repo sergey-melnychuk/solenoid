@@ -1,0 +1,8 @@
+📦 Fetched block number: 23891582 [435 txs]
+📦 Fetched block number: 23891582 [435 txs]
+---
+### 23891582 112 hash=0x1f57574a5ff937cf2b05f5e123ae1fb9e5974cc495c4eefd3f1f976422df5051
+REVM 	OK=false 	RET=empty	GAS=97871	TRACES=836
+sole 	OK=true 	RET=<32>	GAS=-29943	TRACES=965
+
+(total: 435, matched: 434, invalid: 1)

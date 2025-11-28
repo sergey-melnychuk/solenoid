@@ -1,8 +1,0 @@
-📦 Fetched block number: 23891505 [336 txs]
-📦 Fetched block number: 23891505 [336 txs]
----
-### 23891505 227 hash=0x0c4eda0c27fac8f9235b383f09178672e2f51a792529fd8714810704574df855
-REVM 	OK=true 	RET=empty	GAS=21010	TRACES=0
-sole 	OK=true 	RET=match	GAS=match	TRACES=1
-
-(total: 336, matched: 335, invalid: 1)

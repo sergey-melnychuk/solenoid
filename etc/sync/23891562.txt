@@ -1,0 +1,6 @@
+📦 Fetched block number: 23891562 [333 txs]
+📦 Fetched block number: 23891562 [333 txs]
+---
+### 23891562 101 hash=0xe227bf6d1058d2ef1ad6233ace48710d7f89e758889d1616b978f6ce653d4fb3
+REVM 	OK=false 	RET=empty	GAS=97871	TRACES=836
+sole 	OK=true 	RET=<32>	GAS=-29943	TRACES=965

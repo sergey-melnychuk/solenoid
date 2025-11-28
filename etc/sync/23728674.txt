@@ -1,4 +1,4 @@
-📦 Fetched block number: 23728674 [with 100 txs]
-📦 Fetched block number: 23728674 [with 100 txs]
+📦 Fetched block number: 23728674 [100 txs]
+📦 Fetched block number: 23728674 [100 txs]
 
 (total: 100, matched: 100, invalid: 0)
