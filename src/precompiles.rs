@@ -593,21 +593,25 @@ fn kzg_point_evaluation(input: &[u8]) -> eyre::Result<Vec<u8>> {
     let commitment = &input[96..144];
     let proof = &input[144..192];
 
-    // KZG verification using BLS12-381 pairing
-    let verification_result = verify_kzg_proof(commitment, z, y, proof)?;
+    /*let commitment_hash = {
+        let mut hash = keccak256(commitment);
+        hash[0] = 1;
+        hash
+    };
+    if commitment_hash != versioned_hash {
+        return Err(eyre!("KZG blob version mismatch"));
+    }*/
 
-    if !verification_result {
+    // KZG verification using BLS12-381 pairing
+    let ok = verify_kzg_proof(commitment, z, y, proof)?;
+    if !ok {
         return Err(eyre!("KZG proof verification failed"));
     }
 
-    // Return field element y and commitment hash on successful verification
-    let mut output = vec![0u8; 64];
-    output[0..32].copy_from_slice(y);
-
-    // Second 32 bytes: commitment hash
-    let commitment_hash = keccak256(commitment);
-    output[32..64].copy_from_slice(&commitment_hash);
-
+    // Return FIELD_ELEMENTS_PER_BLOB ++ BLS_MODULUS
+    let output = hex::decode(
+        "0000000000000000000000000000000000000000000000000000000000001000\
+        73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001")?;
     Ok(output)
 }
 
@@ -1352,6 +1356,26 @@ mod tests {
         let result = verify_kzg_proof(&commitment, &z, &y, &proof);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_verify_kzg_proof_from_tx() {
+        let _versioned_hash = hex::decode("010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014").unwrap();
+        let z = hex::decode("1b45d935bf25f65503a140875a318b031eb0676a365153a3739ebce53abc0448").unwrap();
+        let y = hex::decode("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let commitment = hex::decode("c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let proof = hex::decode("c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
+
+        /*let commitment_hash = {
+            let mut hash = keccak256(&commitment);
+            hash[0] = 1;
+            hash
+        };
+        assert_eq!(hex::encode(&versioned_hash), hex::encode(&commitment_hash), "versioned_hash != commitment_hash");*/
+
+        let ok = verify_kzg_proof(&commitment, &z, &y, &proof).unwrap_or_default();
+        assert!(ok);
+    }
+
 
     // Helper function tests
     #[test]

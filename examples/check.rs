@@ -1,3 +1,5 @@
+use std::{fs::File, io::{BufRead, BufReader}};
+
 use crossterm::{
     event::{KeyCode, KeyModifiers, read},
     terminal::{disable_raw_mode, enable_raw_mode},
@@ -41,44 +43,27 @@ fn main() -> eyre::Result<()> {
 
     let non_interactive = args.iter().skip(2).any(|arg| arg == "--noninteractive");
 
-    let revm = std::fs::read_to_string(&revm_path).expect("traces");
-    let revm = revm
-        .split('\n')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>();
 
-    let sole = std::fs::read_to_string(&sole_path).expect("traces");
-    let sole = sole
-        .split('\n')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>();
-
-    if sole.len() != revm.len() {
-        eprintln!(
-            "WARN: len mismatch: sole={} revm={}",
-            sole.len(),
-            revm.len()
-        );
-    } else {
-        eprintln!("NOTE: len match: {}", sole.len());
-    }
+    let revm = BufReader::new(File::open(&revm_path)?);
+    let sole = BufReader::new(File::open(&sole_path)?);
+    let iter = revm.lines().zip(sole.lines());
 
     let mut p = Predicate::None;
 
     let mut failed = false;
     let mut explore = false;
-    let len = sole.len().min(revm.len()) as i64;
     let mut index: i64 = 0;
     let mut step = 1i64;
-    while index < len {
+    for (revm, sole) in iter {
         let i = index as usize;
-        let (a, b) = (revm[i], sole[i]);
+        if i % 1000 == 0 { use std::io::Write; print!("\rcheck: {i}"); std::io::stdout().flush().unwrap(); }
+        let (a, b) = (revm?, sole?);
         if a.is_empty() ^ b.is_empty() {
             break;
         }
 
-        let mut a: OpcodeTrace = serde_json::from_str(a).unwrap();
-        let mut b: OpcodeTrace = serde_json::from_str(b).unwrap();
+        let mut a: OpcodeTrace = serde_json::from_str(&a).unwrap();
+        let mut b: OpcodeTrace = serde_json::from_str(&b).unwrap();
         if is_compact {
             if a.memory == b.memory {
                 a.memory.clear();
@@ -108,8 +93,7 @@ fn main() -> eyre::Result<()> {
             } else {
                 String::from("")
             };
-            println!("{block_number} {skip} pc={},op={}{suffix}", b.pc, b.name);
-            return Ok(());
+            println!("{block_number} {skip} LINE={i},pc={},op={}{suffix}", b.pc, b.name);
         }
 
         let is_failed = r.is_err();
@@ -126,7 +110,7 @@ fn main() -> eyre::Result<()> {
             eprintln!("\nLINE: {i} [explore]");
         }
 
-        if is_failed || explore || p.check(&b) {
+        if !non_interactive && (is_failed || explore || p.check(&b)) {
             explore = false;
             enable_raw_mode()?;
             let event = read()?;
@@ -157,7 +141,6 @@ fn main() -> eyre::Result<()> {
                     KeyCode::Char('g') | KeyCode::Char('G') => {
                         explore = true;
                         if shift {
-                            index = len - 1;
                         } else {
                             index = 0;
                         };
@@ -169,9 +152,6 @@ fn main() -> eyre::Result<()> {
             }
         }
 
-        if !failed && index == len - 1 && step > 0 {
-            explore = true;
-        }
         if index == 0 && step < 0 {
             break;
         }

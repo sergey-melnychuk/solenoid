@@ -1,0 +1,32 @@
+{
+  "accessList": [],
+  "authorizationList": [
+    {
+      "address": "0x0000000000000000000000000000000000000000",
+      "chainId": "0x1",
+      "nonce": "0xcb86",
+      "r": "0x3b1cc2e74e6dc8018230c5383ef5299b59743f34b9221e8e1e21e694fa9ac9cc",
+      "s": "0x1fb820c03ae39af80e90d2b242be00ac93e14445805b0f30a8ed24a0e91cb38a",
+      "yParity": "0x1"
+    }
+  ],
+  "blockHash": "0xfc00196e50f8989dd7d646abc9ab90f3488f193653cf23c5b32a0429aa947544",
+  "blockNumber": "0x16c8e31",
+  "chainId": "0x1",
+  "from": "0x44a3831b70e4cfba7d73262dc78443664cabe644",
+  "gas": "0x493e3",
+  "gasPrice": "0x32cd9af",
+  "hash": "0x0c4eda0c27fac8f9235b383f09178672e2f51a792529fd8714810704574df855",
+  "input": "0x00",
+  "maxFeePerGas": "0x32cd9af",
+  "maxPriorityFeePerGas": "0x32cd9af",
+  "nonce": "0x1cb8",
+  "r": "0x5a0ad64549c7ddd4a0bd40e6f1f739f9b5a57d325281345bd4cccae829685a5",
+  "s": "0x758aa94d966568e7e951d7bd585c78e25d9bdacbe968eff40f03ec726eef356f",
+  "to": "0x0000000000000000000000000000000000000000",
+  "transactionIndex": "0xe3",
+  "type": "0x4",
+  "v": "0x0",
+  "value": "0x0",
+  "yParity": "0x0"
+}

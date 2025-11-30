@@ -222,9 +222,9 @@ impl TxTrace {
     }
 
     pub fn reset(&mut self) -> (B256, Vec<OpcodeTrace>) {
-        let ret = self.clone();
-        *self = Self::default();
-        (ret.hash, ret.traces)
+        let traces = self.traces.drain(..).collect::<Vec<_>>();
+        let hash = self.hash;
+        (hash, traces)
     }
 }
 

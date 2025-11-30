@@ -66,12 +66,18 @@ async fn main() -> eyre::Result<()> {
             .await
             .map_err(|_| eyre!("panic-caught"))
             .with_context(|| format!("TX:{idx}:{}", tx.hash))?;
-        let traces = result
-            .tracer
-            .take()
-            .into_iter()
-            .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
-            .collect::<Vec<_>>();
+        let events = result.tracer.take();
+        let len = result.tracer.peek().len();
+        let mut traces = Vec::with_capacity(len);
+        let mut i = 0;
+        for event in events {
+            if i % 1000 == 0 { use std::io::Write; print!("\rmapping trace {i} / {len}"); std::io::stdout().flush().unwrap(); }
+            if let Ok(trace) = evm_tracer::OpcodeTrace::try_from(event) {
+                traces.push(trace);
+            }
+            i += 1;
+        }
+        println!();
         eprintln!("---");
         if result.ret.len() <= 512 {
             eprintln!("RET: {}", hex::encode(&result.ret));
@@ -154,6 +160,19 @@ async fn main() -> eyre::Result<()> {
         let path = format!("sole.{block_number}.{skip}.log");
         evm_tracer::aux::dump(&path, &traces)?;
         println!("TRACES: {} in {path}", traces.len());
+        
+        // Explicitly drop large data structures to free memory immediately
+        // Dropping 400k+ traces can take a long time if they're in swap
+        drop(traces);
+        drop(result);
+        
+        // Yield to allow the runtime to process the drops
+        tokio::task::yield_now().await;
     }
+    
+    // Explicitly drop ext to close HTTP client connections
+    // The reqwest::Client connection pool can keep the Tokio runtime alive
+    drop(ext);
+    
     Ok(())
 }

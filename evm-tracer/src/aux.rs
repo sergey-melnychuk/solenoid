@@ -157,12 +157,25 @@ pub fn dump<T: serde::Serialize>(
     entries: &[T],
 ) -> eyre::Result<()> {
     use std::io::Write as _;
-    let mut buffer = std::io::BufWriter::new(Vec::new());
-    for entry in entries {
+    use std::fs::OpenOptions;
+
+    if std::fs::exists(path)? {
+        std::fs::remove_file(path)?;
+    }
+
+    let file = OpenOptions::new().create(true).append(true).open(path)?;
+    let mut buffer = std::io::BufWriter::new(file);
+    let len = entries.len();
+    for (i, entry) in entries.iter().enumerate() {
+        if i % 1000 == 0 { use std::io::Write; print!("\rwrite: entry {i} / {len}"); std::io::stdout().flush().unwrap(); }
+        if i % 10_000 == 0 {
+            buffer.flush()?;
+        }
         let json = serde_json::to_vec(entry)?;
         let _ = buffer.write(&json)?;
         let _ = buffer.write(b"\n")?;
     }
-    std::fs::write(path, buffer.into_inner()?)?;
+    buffer.flush()?;
+    println!("\nwrite: done");
     Ok(())
 }
