@@ -13,8 +13,10 @@ use tokio::signal;
 use tokio::{fs, sync::RwLock};
 use tracing::{debug, error, info, warn};
 
+// curl -H 'Content-Type: application/json' -d '{"url":""}' http://localhost:8080/url
+
 struct AppState {
-    upstream_url: String,
+    upstream_url: RwLock<String>,
     http_client: Client,
     cache_file: PathBuf,
     persistent: RwLock<HashMap<String, Value>>,
@@ -47,7 +49,7 @@ async fn main() {
         .expect("failed building reqwest client");
 
     let state = Arc::new(AppState {
-        upstream_url,
+        upstream_url: RwLock::new(upstream_url),
         http_client,
         cache_file,
         persistent: RwLock::new(initial_persistent),
@@ -55,7 +57,8 @@ async fn main() {
     });
 
     let app = Router::new()
-        .route("/", post(handle_jsonrpc))
+        .route("/rpc", post(handle_jsonrpc))
+        .route("/url", post(handle_update_url))
         .with_state(state.clone());
 
     info!(%bind_addr, "Starting EVM JSON-RPC caching proxy");
@@ -96,6 +99,18 @@ async fn shutdown_signal_with_persist(state: Arc<AppState>) {
             info!("Persistent cache saved on shutdown");
         }
     }
+}
+
+async fn handle_update_url(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    if let Some(url) = body.get("url").and_then(|url| url.as_str()) {
+        *state.upstream_url.write().await = url.to_string();
+    } else {
+        return (StatusCode::BAD_REQUEST, "ignored").into_response();
+    }
+    (StatusCode::OK, "URL updated").into_response()
 }
 
 async fn handle_jsonrpc(
@@ -199,7 +214,7 @@ fn cache_key(method: &str, params: &Value) -> String {
 async fn forward(state: &AppState, body: Value) -> anyhow::Result<Value> {
     let response = state
         .http_client
-        .post(&state.upstream_url)
+        .post(&*state.upstream_url.read().await)
         .json(&body)
         .send()
         .await?;

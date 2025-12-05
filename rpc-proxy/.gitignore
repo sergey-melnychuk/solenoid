@@ -2,3 +2,4 @@ target/
 .env
 *.json
 *.bak
+*.json.tar.gz
