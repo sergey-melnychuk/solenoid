@@ -39,8 +39,7 @@ async fn main() -> eyre::Result<()> {
     for e in res.tracer.take() {
         println!("{}", serde_json::to_string_pretty(&e).unwrap());
     }
-    let address = res
-        .created
+    let address = ext.created_accounts.first().copied()
         .ok_or_else(|| eyre::eyre!("No address returned"))?;
     println!(" Owner: {from}");
     println!("Deploy: {address}");

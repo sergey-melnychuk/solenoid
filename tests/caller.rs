@@ -44,13 +44,13 @@ async fn test_deploy() -> eyre::Result<()> {
     ext.pull(&from).await?;
     ext.account_mut(&from).nonce = Word::zero();
     let created1 = from.create(Word::zero());
-    let created2 = created1.create(Word::zero());
+    let created2 = created1.create(Word::one());
 
     let mut evm = Evm::default();
     let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
 
     assert!(!evm.reverted);
-    assert_eq!(ret, hex::decode(CALL.trim_start_matches("0x"))?);
+    assert_eq!(hex::encode(ret), CALL.trim_start_matches("0x"));
 
     let code = hex::decode(CELL.trim_start_matches("0x"))?;
     let hash = keccak256(&code);

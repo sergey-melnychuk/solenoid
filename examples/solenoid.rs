@@ -29,7 +29,7 @@ async fn main() -> eyre::Result<()> {
     ext.account_mut(&from).value = Word::from(100_000_000_000_000_000u64);
 
     let sole = Solenoid::new();
-    let res = sole
+    let _res = sole
         .create(code)
         .with_sender(from)
         .with_gas(Word::from(1_000_000))
@@ -39,8 +39,7 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("create")?;
 
-    let address = res
-        .created
+    let address = ext.created_accounts.first().copied()
         .ok_or_else(|| eyre::eyre!("No address returned"))?;
     println!("Call address: {address}");
 

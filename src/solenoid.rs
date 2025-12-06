@@ -1,7 +1,7 @@
 use crate::{
     common::{address::Address, block::Header, call::Call, hash::keccak256, word::Word},
     decoder::Decoder,
-    executor::{Context, Evm, Executor, Gas},
+    executor::{AccountTouch, Context, Evm, Executor, Gas},
     ext::Ext,
     tracer::{CallType, EventTracer, LoggingTracer},
 };
@@ -249,7 +249,10 @@ impl Runner {
 
         ext.pull(&self.call.from).await?;
         let nonce = ext.account_mut(&self.call.from).nonce;
-        let address: Address = self.call.from.create(nonce);
+        let created = self.call.from.create(nonce);
+        ext.created_accounts.push(created);
+        ext.warm_address(&created);
+        evm.touches.push(AccountTouch::WarmUp(created));
 
         if !self.call.to.is_zero() {
             let (tracer, ret) = exe.execute(&code, &self.call, &mut evm, ext).await?;
@@ -262,12 +265,11 @@ impl Runner {
                 evm,
                 ret,
                 tracer,
-                created: Some(address),
             });
         };
 
         let ctx = Context {
-            created: address,
+            created,
             call_type: CallType::Create,
             depth: 1,
             ..Default::default()
@@ -321,19 +323,20 @@ impl Runner {
             // Re-increment nonce (nonce is never reverted even for failed tx)
             ext.account_mut(&self.call.from).nonce += Word::one();
         } else {
-            ext.pull(&address).await?;
+            ext.pull(&created).await?;
             ext.pull(&self.call.from).await?;
 
-            let hash = Word::from_bytes(&keccak256(&ret));
-            *ext.code_mut(&address) = (ret.clone(), hash);
             ext.account_mut(&self.call.from).nonce += Word::one();
+
+            let hash = Word::from_bytes(&keccak256(&ret));
+            *ext.code_mut(&created) = (ret.clone(), hash);
+            ext.account_mut(&created).nonce = Word::one();
         }
 
         Ok(CallResult {
             evm,
             ret,
             tracer,
-            created: Some(address),
         })
     }
 }
@@ -343,5 +346,5 @@ pub struct CallResult<T: EventTracer> {
     pub evm: Evm,
     pub ret: Vec<u8>,
     pub tracer: T,
-    pub created: Option<Address>,
+    // pub created: Option<Address>,
 }

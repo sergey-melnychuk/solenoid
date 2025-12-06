@@ -43,7 +43,6 @@ fn main() -> eyre::Result<()> {
 
     let non_interactive = args.iter().skip(2).any(|arg| arg == "--noninteractive");
 
-
     let revm = BufReader::new(File::open(&revm_path)?);
     let sole = BufReader::new(File::open(&sole_path)?);
     let iter = revm.lines().zip(sole.lines());
@@ -56,7 +55,9 @@ fn main() -> eyre::Result<()> {
     let mut step = 1i64;
     for (revm, sole) in iter {
         let i = index as usize;
-        if i % 1000 == 0 { use std::io::Write; print!("\rcheck: {i}"); std::io::stdout().flush().unwrap(); }
+        if !non_interactive {
+            if i % 1000 == 0 { use std::io::Write; print!("\rcheck: {i}"); std::io::stdout().flush().unwrap(); }
+        }
         let (a, b) = (revm?, sole?);
         if a.is_empty() ^ b.is_empty() {
             break;
@@ -94,6 +95,7 @@ fn main() -> eyre::Result<()> {
                 String::from("")
             };
             println!("{block_number} {skip} LINE={i},pc={},op={}{suffix}", b.pc, b.name);
+            return Ok(());
         }
 
         let is_failed = r.is_err();

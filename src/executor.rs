@@ -292,7 +292,7 @@ pub struct Context {
     pub depth: usize,
 
     pub call_type: CallType,
-    // block, gas price, etc
+    pub is_static_call: bool,
 }
 
 pub enum StepResult {
@@ -1614,7 +1614,7 @@ impl<T: EventTracer> Executor<T> {
             }
             0x55 => {
                 // SSTORE
-                if matches!(ctx.call_type, CallType::Static) {
+                if ctx.is_static_call {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
 
@@ -1719,6 +1719,7 @@ impl<T: EventTracer> Executor<T> {
                     "new": new,
                     "gas_cost": gas_cost,
                     "gas_back": gas_refund,
+                    "gas_left": evm.gas.remaining(),
                     "refund": refund_traces
                         .into_iter()
                         .map(ToOwned::to_owned)
@@ -1727,9 +1728,9 @@ impl<T: EventTracer> Executor<T> {
                 });
 
                 if evm.gas.remaining() + gas_refund < 0 {
-                    let actual_gas_cost = evm.gas.remaining();
+                    let gas_left = evm.gas.remaining();
 
-                    self.debug["SSTORE"]["is_oog"] = json!(true);
+                    self.debug["SSTORE"]["is_oog_1"] = json!(true);
                     self.debug["SSTORE"]["note"] = json!("edge case with negative gas refund");
                     self.tracer.push(Event {
                         depth: ctx.depth,
@@ -1742,7 +1743,7 @@ impl<T: EventTracer> Executor<T> {
                             gas_cost: 0,
                             gas_used: evm.gas.used,
                             gas_back: 0,
-                            gas_left: actual_gas_cost,
+                            gas_left,
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
@@ -1752,9 +1753,9 @@ impl<T: EventTracer> Executor<T> {
                 }
 
                 if evm.gas.remaining() < gas_cost {
-                    let actual_gas_cost = evm.gas.remaining();
+                    let gas_left = evm.gas.remaining();
 
-                    self.debug["SSTORE"]["is_oog"] = json!(true);
+                    self.debug["SSTORE"]["is_oog_2"] = json!(true);
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: true,
@@ -1763,10 +1764,21 @@ impl<T: EventTracer> Executor<T> {
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
                             data: instruction.argument.clone().map(Into::into),
-                            gas_cost: actual_gas_cost,
-                            gas_used: evm.gas.used + actual_gas_cost,
+
+                            // TODO: sort out mutually exclusive cases of OOG handling
+
+                            /* block 23891503: ok, but 23891512: fails (tx 252) */
+                            gas_cost: gas_left,
+                            gas_used: evm.gas.used + gas_left,
                             gas_back: 0,
                             gas_left: 0,
+
+                            /* block 23891503: fails (txs 21, 29) but 23891512: ok */
+                            // gas_cost: 0,
+                            // gas_used: evm.gas.used,
+                            // gas_back: 0,
+                            // gas_left,
+
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
@@ -2155,6 +2167,7 @@ impl<T: EventTracer> Executor<T> {
                 // STATICCALL
                 let ctx = Context {
                     call_type: CallType::Static,
+                    is_static_call: true,
                     ..ctx
                 };
                 match self
@@ -2604,6 +2617,10 @@ impl<T: EventTracer> Executor<T> {
         let code = Decoder::decode(bytecode);
 
         let nonce = ext.nonce(&this).await?;
+
+        // TODO: check it: create op pre-increments nonce of creator
+        let nonce = if nonce.is_zero() { Word::one() } else { nonce };
+
         let created = if matches!(ctx.call_type, CallType::Create2) {
             this.create2(&salt, &code.bytecode)
         } else {

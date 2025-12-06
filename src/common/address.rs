@@ -96,6 +96,12 @@ impl std::fmt::Debug for Address {
     }
 }
 
+impl std::fmt::LowerHex for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
 impl From<&Address> for Word {
     fn from(value: &Address) -> Self {
         let mut bytes = [0u8; 32];
