@@ -60,7 +60,24 @@ echo "⚙️ Running $NUM_BLOCKS blocks: $START_BLOCK..$END_BLOCK"
 SUCCESS=0
 FAILED=0
 
-for ((BLOCK=$START_BLOCK; BLOCK<=END_BLOCK; BLOCK++)); do    
+# Blocks to skip (heavy transactions with large traces)
+SKIP_BLOCKS=(23891562 23891565 23891581 23891583)
+
+for ((BLOCK=$START_BLOCK; BLOCK<=END_BLOCK; BLOCK++)); do
+    # Skip blocks in the skip list
+    SKIP=0
+    for skip_block in "${SKIP_BLOCKS[@]}"; do
+        if [ "$BLOCK" -eq "$skip_block" ]; then
+            SKIP=1
+            break
+        fi
+    done
+    
+    if [ "$SKIP" -eq 1 ]; then
+        echo "⏭️  Block $BLOCK skipped"
+        continue
+    fi
+    
     if ./target/release/examples/runner "$BLOCK" 2>&1 > etc/sync/$BLOCK.txt; then
         ((SUCCESS++))
         echo "✅ Block $BLOCK completed successfully"
