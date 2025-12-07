@@ -21,6 +21,7 @@ struct AppState {
     cache_file: PathBuf,
     persistent: RwLock<HashMap<String, Value>>,
     offline: bool,
+    empty: bool,
 }
 
 #[tokio::main]
@@ -29,6 +30,13 @@ async fn main() {
     dotenv::dotenv().ok();
 
     let offline = std::env::args().skip(1).any(|arg| arg == "--offline");
+
+    let empty = std::env::args().skip(1).any(|arg| arg == "--empty");
+
+    if offline && empty {
+        error!("Cannot run in offline and empty mode at the same time");
+        std::process::exit(1);
+    }
 
     let bind_addr: SocketAddr = std::env::var("BIND_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
@@ -41,7 +49,12 @@ async fn main() {
     let cache_file: PathBuf = std::env::var("CACHE_FILE")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(".evm-proxy-cache.json"));
-    let initial_persistent = load_persistent(&cache_file).await.unwrap_or_default();
+    let initial_persistent = if !empty {
+        load_persistent(&cache_file).await.unwrap_or_default()
+    } else {
+        info!("Running in empty mode");
+        HashMap::new()
+    };
 
     let http_client = Client::builder()
         .pool_max_idle_per_host(8)
@@ -51,9 +64,10 @@ async fn main() {
     let state = Arc::new(AppState {
         upstream_url: RwLock::new(upstream_url),
         http_client,
-        cache_file,
+        cache_file: if !empty { cache_file } else { PathBuf::new() },
         persistent: RwLock::new(initial_persistent),
         offline,
+        empty,
     });
 
     let app = Router::new()
@@ -160,7 +174,7 @@ async fn handle_jsonrpc(
             .map(|last| last == "latest")
             .unwrap_or_default());
 
-    let cacheable = cacheable && !is_latest_block;
+    let cacheable = cacheable && !is_latest_block && !state.empty;
 
     if cacheable {
         let key = cache_key(method, &params);
