@@ -59,6 +59,7 @@ pub enum AccountTouch {
     #[default]
     Noop,
     WarmUp(Address),
+    FeePay(Address, Word, Word),
 
     GetNonce(Address, u64),
     GetValue(Address, Word),
@@ -72,6 +73,12 @@ pub enum AccountTouch {
     SetTransientState(Address, Word, Word, Word),
 
     Create(Address, Word, Word, Vec<u8>, Word),
+}
+
+impl AccountTouch {
+    pub fn is_read_only(&self) -> bool {
+        matches!(self, AccountTouch::GetCode(_, _, _) | AccountTouch::GetState(_, _, _, _) | AccountTouch::GetNonce(_, _) | AccountTouch::GetValue(_, _))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -560,6 +567,7 @@ impl<T: EventTracer> Executor<T> {
                     depth: 1,
                     reverted: false,
                 });
+                evm.touches.push(AccountTouch::FeePay(coinbase, current_coinbase_balance, new_coinbase_balance));
             }
         }
 
@@ -2279,6 +2287,7 @@ impl<T: EventTracer> Executor<T> {
 
         // Calculate address access cost (EIP-2929)
         let (code, codehash) = ext.code(&address).await?;
+        evm.touches.push(AccountTouch::GetCode(address, codehash, code.clone()));
         let mut access_cost = evm.address_access_cost(&address, ext);
 
         // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
@@ -2561,6 +2570,7 @@ impl<T: EventTracer> Executor<T> {
             self.ret = ret;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only()));
             return Ok(());
         }
 
@@ -2716,6 +2726,7 @@ impl<T: EventTracer> Executor<T> {
             evm.gas.used += base_cost_without_deploy + gas_to_forward;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only()));
             return Ok(());
         }
 
@@ -2725,6 +2736,7 @@ impl<T: EventTracer> Executor<T> {
         if inner_evm.reverted {
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only()));
             return Ok(());
         }
 

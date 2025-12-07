@@ -1,8 +1,11 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::{pin::Pin, sync::Arc};
 
 use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::alloy_rpc_types::BlockTransactions;
+use serde_json::Value;
+use solenoid::common::address::Address;
 use solenoid::ext::TxContext;
 use tokio::sync::Mutex;
 
@@ -19,17 +22,83 @@ use solenoid::{
 
 use evm_tracer::{OpcodeTrace, run::TxResult};
 
-fn as_tx_result(gas_costs: i64, gas_floor: i64, result: CallResult<LoggingTracer>) -> TxResult {
+async fn as_tx_result(gas_costs: i64, gas_floor: i64, result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Result<TxResult> {
     let gas = result
         .evm
         .gas
         .finalized(gas_costs, result.evm.reverted)
         .max(gas_floor);
-    TxResult {
+    let state = as_state(result, ext).await?;
+    Ok(TxResult {
         gas,
-        ret: result.ret,
+        ret: result.ret.clone(),
         rev: result.evm.reverted,
+        state,
+    })
+}
+
+async fn as_state(result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Result<BTreeMap<String, Value>> {
+    let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
+    let touched = result.evm.touches
+        .iter()
+        .filter_map(|touch| match touch {
+            // solenoid::executor::AccountTouch::WarmUp(address) => {
+            //     Some(*address)
+            // }
+            // solenoid::executor::AccountTouch::GetNonce(address, _) => {
+            //     Some(*address)
+            // }
+            // solenoid::executor::AccountTouch::GetValue(address, _) => {
+            //     Some(*address)
+            // }
+            solenoid::executor::AccountTouch::GetState(address, key, _, _) => {
+                kv.entry(*address).or_default().insert(*key);
+                Some(*address)
+            }
+            solenoid::executor::AccountTouch::GetCode(address, _, _) => {
+                Some(*address)
+            }
+            // touches that modify the state:
+            solenoid::executor::AccountTouch::FeePay(address, _, _) => {
+                Some(*address)
+            }
+            solenoid::executor::AccountTouch::SetState(address, key, _, _, _) => {
+                kv.entry(*address).or_default().insert(*key);
+                Some(*address)
+            }
+            solenoid::executor::AccountTouch::SetNonce(address, _, _) => {
+                Some(*address)
+            }
+            solenoid::executor::AccountTouch::SetValue(address, _, _) => {
+                Some(*address)
+            }
+            solenoid::executor::AccountTouch::Create(address, _, _, _, _) => {
+                Some(*address)
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+
+    let mut ret: BTreeMap<String, serde_json::Value> = BTreeMap::new();
+    for address in touched.into_iter() {
+        let account = ext.pull(&address).await?;
+        let mut json = serde_json::json!({
+            "balance": account.value,
+            "nonce": account.nonce.as_u64(),
+            "code": String::from("0x") + &hex::encode(account.code.1.into_bytes()),
+        });
+
+        let mut state = BTreeMap::new();
+        for key in kv.get(&address).cloned().unwrap_or_default() {
+            let val = ext.get(&address, &key).await?;
+            state.insert(key, val);
+        }
+        if !state.is_empty() {
+            json["state"] = serde_json::to_value(state).unwrap();
+        }
+        ret.insert(address.to_string(), json);
     }
+    Ok(ret)
 }
 
 pub fn runner(
@@ -74,11 +143,11 @@ pub fn runner(
         let access_list_cost = tx_ctx.access_list_cost();
 
         Box::pin(async move {
-            let mut result = tokio::spawn(async move {
+            let (tx_result, traces) = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
                 guard.reset(tx_ctx);
 
-                let result = Solenoid::new()
+                let mut result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
                     .with_header(header.clone())
                     .with_sender(tx.from)
@@ -91,30 +160,32 @@ pub fn runner(
                 // let coinbase_balance = guard.balance(&header.miner).await?;
                 // println!("[SOLE] COINBASE BALANCE: {coinbase_balance:#x}");
 
-                Ok::<_, eyre::Report>(result)
+                let gas_costs = if tx.to.is_some() {
+                    call_cost + data_cost + access_list_cost
+                } else {
+                    let deployed_code_cost = 200 * result.ret.len() as i64;
+                    call_cost
+                        + data_cost
+                        + create_cost
+                        + init_code_cost
+                        + deployed_code_cost
+                        + access_list_cost
+                };
+    
+                let traces = result
+                    .tracer
+                    .take()
+                    .into_iter()
+                    .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
+                    .collect::<Vec<_>>();
+    
+                let tx_result = as_tx_result(gas_costs, gas_floor, &result, &mut *guard).await?;
+
+                Ok::<_, eyre::Report>((tx_result, traces))
             })
             .await??;
 
-            let gas_costs = if tx.to.is_some() {
-                call_cost + data_cost + access_list_cost
-            } else {
-                let deployed_code_cost = 200 * result.ret.len() as i64;
-                call_cost
-                    + data_cost
-                    + create_cost
-                    + init_code_cost
-                    + deployed_code_cost
-                    + access_list_cost
-            };
-
-            let traces = result
-                .tracer
-                .take()
-                .into_iter()
-                .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
-                .collect::<Vec<_>>();
-
-            Ok((as_tx_result(gas_costs, gas_floor, result), traces))
+            Ok((tx_result, traces))
         })
     }
 }
@@ -204,7 +275,11 @@ async fn main() -> eyre::Result<()> {
                 let gas_ok = revm_result.gas == sole_result.gas;
                 let traces_ok = revm_traces == sole_traces;
 
-                let ok = rev_ok && ret_ok && gas_ok && traces_ok;
+                let revm_state = serde_json::to_string_pretty(&revm_result.state).unwrap();
+                let sole_state = serde_json::to_string_pretty(&sole_result.state).unwrap();
+                let state_ok = sole_state == revm_state;
+
+                let ok = rev_ok && ret_ok && gas_ok && traces_ok && state_ok;
                 if ok {
                     matched += 1;
                     continue;
@@ -234,6 +309,18 @@ async fn main() -> eyre::Result<()> {
                 )
                 .ok();
 
+                // Dump state to files for later analysis
+                let revm_state_file = format!("revm.{}.{}.state.json", block_number, idx);
+                let sole_state_file = format!("sole.{}.{}.state.json", block_number, idx);
+                std::fs::write(
+                    &revm_state_file,
+                    &revm_state
+                ).ok();
+                std::fs::write(
+                    &sole_state_file,
+                    &sole_state
+                ).ok();
+
                 let ret = if revm_result.ret.is_empty() {
                     "empty".to_string()
                 } else {
@@ -244,11 +331,12 @@ async fn main() -> eyre::Result<()> {
                     txs[idx].info().hash.unwrap_or_default()
                 );
                 println!(
-                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}",
+                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}\tSTATE={}",
                     !revm_result.rev,
                     ret,
                     revm_result.gas,
-                    revm_traces.len()
+                    revm_traces.len(),
+                    revm_result.state.len()
                 );
 
                 let ret_diff = if revm_result.ret == sole_result.ret {
@@ -262,11 +350,12 @@ async fn main() -> eyre::Result<()> {
                     format!("{:+5}", sole_result.gas - revm_result.gas)
                 };
                 println!(
-                    "sole \tOK={} \tRET={}\tGAS={}\tTRACES={}",
+                    "sole \tOK={} \tRET={}\tGAS={}\tTRACES={}\tSTATE={}",
                     !sole_result.rev,
                     ret_diff,
                     gas_diff,
-                    sole_traces.len()
+                    sole_traces.len(),
+                    state_ok,
                 );
             }
             Err(e) => {

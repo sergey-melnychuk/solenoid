@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::common::{decode, hash::keccak256, word::Word};
 
-#[derive(Clone, Copy, Default, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Default, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Address(pub [u8; 20]);
 
 impl Address {

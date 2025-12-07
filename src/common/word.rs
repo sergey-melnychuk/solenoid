@@ -309,10 +309,13 @@ impl Serialize for Word {
     where
         S: Serializer,
     {
-        let hex: String = hex::encode(self.0.to_big_endian())
+        let mut hex: String = hex::encode(self.0.to_big_endian())
             .chars()
             .skip_while(|c| c == &'0')
             .collect();
+        if hex.is_empty() {
+            hex = "0".to_string();
+        }
         let hex = format!("0x{hex}");
         serializer.serialize_str(&hex)
     }

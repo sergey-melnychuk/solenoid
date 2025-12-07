@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use alloy_consensus::Transaction as _;
 use alloy_eips::BlockId;
 use alloy_primitives::{TxKind, U256};
@@ -5,12 +7,14 @@ use alloy_provider::Provider;
 use alloy_rpc_types::{Header, Transaction as Tx};
 use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
+use revm::primitives::{StorageKey, StorageValue};
 use revm::{
     context::{Context, TxEnv},
     database::{AlloyDB, CacheDB, StateBuilder, WrapDatabaseAsync},
     MainBuilder,
 };
 use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
+use serde_json::{Value, json};
 
 use crate::{OpcodeTrace, TxTrace};
 
@@ -18,17 +22,44 @@ pub struct TxResult {
     pub gas: i64,
     pub ret: Vec<u8>,
     pub rev: bool,
+    pub state: BTreeMap<String, Value>,
 }
 
 impl From<ExecResultAndState<ExecutionResult>> for TxResult {
     fn from(value: ExecResultAndState<ExecutionResult>) -> Self {
+        let state = value
+            .state
+            .iter()
+            .map(|(address, account)| {
+                let state = account
+                    .storage
+                    .iter()
+                    .map(|(key, value)| -> (StorageKey, StorageValue) {
+                        (key.clone(), value.present_value.clone())
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                let mut json = json!({
+                    "balance": account.info.balance,
+                    "nonce": account.info.nonce,
+                    "code": account.info.code_hash,
+                });
+                if !state.is_empty() {
+                    json["state"] = serde_json::to_value(state).unwrap();
+                }
+                (address.to_string().to_lowercase(), json)
+            })
+            .collect::<BTreeMap<_, _>>();
+
         Self {
             gas: value.result.gas_used() as i64,
             ret: value.result.output().map(|bytes| bytes.to_vec()).unwrap_or_default(),
             rev: !value.result.is_success(),
+            state,
         }
     }
 }
+
+
 
 pub fn runner(
     header: Header,

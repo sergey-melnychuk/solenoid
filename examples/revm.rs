@@ -58,10 +58,9 @@ async fn main() -> Result<()> {
         evm_tracer::aux::dump(&path, &traces)?;
         println!("TRACES: {} in {path}", traces.len());
 
-        // let json = serde_json::to_string_pretty(&result.state)?;
-        // eprintln!("{json}");
+        // Dump STATE:
 
-        /*use std::collections::HashMap;
+        use std::collections::BTreeMap;
         use evm_tracer::revm::primitives::{StorageKey, StorageValue};
         use serde_json::json;
         let state = result
@@ -71,11 +70,10 @@ async fn main() -> Result<()> {
                 let state = account
                     .storage
                     .iter()
-                    .filter(|(_, value)| value.present_value != value.original_value)
                     .map(|(key, value)| -> (StorageKey, StorageValue) {
                         (key.clone(), value.present_value.clone())
                     })
-                    .collect::<HashMap<_, _>>();
+                    .collect::<BTreeMap<_, _>>();
                 let mut json = json!({
                     "balance": account.info.balance,
                     "nonce": account.info.nonce,
@@ -86,9 +84,11 @@ async fn main() -> Result<()> {
                 }
                 (*address, json)
             })
-            .collect::<HashMap<_, _>>();
-        let json = serde_json::to_string_pretty(&state)?;
-        eprintln!("{json}");*/
+            .collect::<BTreeMap<_, _>>();
+
+        let path = format!("revm.{block_number}.{skip}.state.json");
+        evm_tracer::aux::dump(&path, &[state])?;
+        println!("STATE: {path}");
     }
     Ok(())
 }

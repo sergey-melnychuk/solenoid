@@ -167,7 +167,7 @@ pub fn dump<T: serde::Serialize>(
     let mut buffer = std::io::BufWriter::new(file);
     let len = entries.len();
     for (i, entry) in entries.iter().enumerate() {
-        if i % 1000 == 0 { use std::io::Write; print!("\rwrite: entry {i} / {len}"); std::io::stdout().flush().unwrap(); }
+        if i % 1000 == 0 { use std::io::Write; print!("\r(write: entry {i} / {len})"); std::io::stdout().flush().unwrap(); }
         if i % 10_000 == 0 {
             buffer.flush()?;
         }
@@ -176,6 +176,6 @@ pub fn dump<T: serde::Serialize>(
         let _ = buffer.write(b"\n")?;
     }
     buffer.flush()?;
-    println!("\nwrite: done");
+    println!("\n(write: done)");
     Ok(())
 }

@@ -71,7 +71,7 @@ async fn main() -> eyre::Result<()> {
         let mut traces = Vec::with_capacity(len);
         let mut i = 0;
         for event in events {
-            if i % 1000 == 0 { use std::io::Write; print!("\rmapping trace {i} / {len}"); std::io::stdout().flush().unwrap(); }
+            if i % 1000 == 0 { use std::io::Write; print!("\r(mapping: {i} / {len})"); std::io::stdout().flush().unwrap(); }
             if let Ok(trace) = evm_tracer::OpcodeTrace::try_from(event) {
                 traces.push(trace);
             }
@@ -160,7 +160,74 @@ async fn main() -> eyre::Result<()> {
         let path = format!("sole.{block_number}.{skip}.log");
         evm_tracer::aux::dump(&path, &traces)?;
         println!("TRACES: {} in {path}", traces.len());
-        
+
+        // Dump STATE:
+
+        use std::collections::{BTreeMap, BTreeSet};
+        let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
+        let touched = result.evm.touches
+            .iter()
+            .filter_map(|touch| match touch {
+                // solenoid::executor::AccountTouch::WarmUp(address) => {
+                //     Some(*address)
+                // }
+                // solenoid::executor::AccountTouch::GetNonce(address, _) => {
+                //     Some(*address)
+                // }
+                // solenoid::executor::AccountTouch::GetValue(address, _) => {
+                //     Some(*address)
+                // }
+                solenoid::executor::AccountTouch::GetState(address, key, _, _) => {
+                    kv.entry(*address).or_default().insert(*key);
+                    Some(*address)
+                }
+                solenoid::executor::AccountTouch::GetCode(address, _, _) => {
+                    Some(*address)
+                }
+                // touches that modify the state:
+                solenoid::executor::AccountTouch::FeePay(address, _, _) => {
+                    Some(*address)
+                }
+                solenoid::executor::AccountTouch::SetState(address, key, _, _, _) => {
+                    kv.entry(*address).or_default().insert(*key);
+                    Some(*address)
+                }
+                solenoid::executor::AccountTouch::SetNonce(address, _, _) => {
+                    Some(*address)
+                }
+                solenoid::executor::AccountTouch::SetValue(address, _, _) => {
+                    Some(*address)
+                }
+                solenoid::executor::AccountTouch::Create(address, _, _, _, _) => {
+                    Some(*address)
+                }
+                _ => None,
+            })
+            .collect::<BTreeSet<_>>();
+
+        let mut ret: BTreeMap<Address, serde_json::Value> = BTreeMap::new();
+        for address in touched.into_iter() {
+            let account = ext.pull(&address).await?;
+            let mut json = serde_json::json!({
+                "balance": account.value,
+                "nonce": account.nonce.as_u64(),
+                "code": String::from("0x") + &hex::encode(account.code.1.into_bytes()),
+            });
+
+            let mut state = BTreeMap::new();
+            for key in kv.get(&address).cloned().unwrap_or_default() {
+                let val = ext.get(&address, &key).await?;
+                state.insert(key, val);
+            }
+            if !state.is_empty() {
+                json["state"] = serde_json::to_value(state).unwrap();
+            }
+            ret.insert(address, json);
+        }
+        let path = format!("sole.{block_number}.{skip}.state.json");
+        evm_tracer::aux::dump(&path, &[ret])?;
+        println!("STATE: {path}");
+
         // Explicitly drop large data structures to free memory immediately
         // Dropping 400k+ traces can take a long time if they're in swap
         drop(traces);

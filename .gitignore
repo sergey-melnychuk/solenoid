@@ -4,6 +4,7 @@
 *.tmp
 *.log
 *.jsonl
+*.state.json
 
 .env
 

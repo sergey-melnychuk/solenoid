@@ -36,6 +36,22 @@ fn main() -> eyre::Result<()> {
         .and_then(|number| number.parse::<usize>().ok())
         .unwrap_or(0);
 
+    let revm_state = std::fs::read_to_string(&format!("revm.{block_number}.{skip}.state.json"))?;
+    let sole_state = std::fs::read_to_string(&format!("sole.{block_number}.{skip}.state.json"))?;
+
+    let revm_state = serde_json::from_str::<serde_json::Value>(&revm_state)?;
+    let sole_state = serde_json::from_str::<serde_json::Value>(&sole_state)?;
+
+    let r = std::panic::catch_unwind(|| {
+        pretty_assertions::assert_eq!(sole_state, revm_state);
+    });
+    let state_ok = r.is_ok();
+    if state_ok {
+        eprintln!("STATE: OK");
+    } else {
+        eprintln!("STATE: MISMATCH");
+    }
+
     let revm_path = format!("revm.{block_number}.{skip}.log");
     let sole_path = format!("sole.{block_number}.{skip}.log");
 
@@ -56,7 +72,7 @@ fn main() -> eyre::Result<()> {
     for (revm, sole) in iter {
         let i = index as usize;
         if !non_interactive {
-            if i % 1000 == 0 { use std::io::Write; print!("\rcheck: {i}"); std::io::stdout().flush().unwrap(); }
+            if i % 1000 == 0 { use std::io::Write; print!("\r(check: {i})"); std::io::stdout().flush().unwrap(); }
         }
         let (a, b) = (revm?, sole?);
         if a.is_empty() ^ b.is_empty() {
