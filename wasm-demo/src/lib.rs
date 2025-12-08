@@ -360,7 +360,7 @@ pub async fn trace_transaction(
     block_number: String,
     tx_index: String,
     callback: &js_sys::Function,
-) -> Result<String, JsValue> {
+) -> Result<Vec<String>, JsValue> {
     // Parse block number and transaction index from strings
     let block_number: u64 = block_number
         .parse()
@@ -420,12 +420,16 @@ pub async fn trace_transaction(
 
     web_sys::console::log_1(&format!("Debug - Execution completed, got {} traces", result.tracer.peek().len()).into());
 
-    // Get all traces and filter for CALL, RETURN, and State events
+    // Get all traces and filter for CALL, RETURN, State, Account, and Fee events
     let traces = result.tracer.take();
     for event in traces {
         let should_include = matches!(
             event.data,
-            EventData::Call { .. } | EventData::Return { .. } | EventData::State(_)
+            EventData::Call { .. } 
+                | EventData::Return { .. } 
+                | EventData::State(_)
+                | EventData::Account(_)
+                | EventData::Fee { .. }
         );
 
         if should_include {
@@ -441,5 +445,8 @@ pub async fn trace_transaction(
     }
 
     // Return transaction hash
-    Ok(format!("0x{}", tx_hash))
+    let tx_hash = format!("0x{}", tx_hash);
+    let gas_ret = serde_json_wasm::to_string(&result.gas)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize event: {}", e)))?;
+    Ok(vec![tx_hash, gas_ret])
 }

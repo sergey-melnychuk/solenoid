@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{
     common::{address::Address, block::Header, call::Call, hash::keccak256, word::Word},
     decoder::Decoder,
@@ -264,10 +266,19 @@ impl Runner {
                 // Re-increment nonce (nonce is never reverted for valid transactions)
                 ext.account_mut(&self.call.from).nonce += Word::one();
             }
+
+            let gas_final = evm.gas
+                .finalized(upfront_gas_reduction, evm.reverted);
+
             return Ok(CallResult {
                 evm,
                 ret,
                 tracer,
+                gas: GasResult {
+                    gas_max: self.call.gas.as_i64(),
+                    gas_use: gas_final,
+                    gas_fee: Word::from(gas_final) * ext.tx_ctx.gas_price,
+                },    
             });
         };
 
@@ -340,14 +351,25 @@ impl Runner {
             evm,
             ret,
             tracer,
+            gas: GasResult {
+                gas_max: self.call.gas.as_i64(),
+                gas_use: gas_final,
+                gas_fee: Word::from(gas_final) * ext.tx_ctx.gas_price,
+            },
         })
     }
 }
 
-#[derive(Debug, Default)]
 pub struct CallResult<T: EventTracer> {
     pub evm: Evm,
     pub ret: Vec<u8>,
     pub tracer: T,
-    // pub created: Option<Address>,
+    pub gas: GasResult,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct GasResult {
+    pub gas_max: i64,
+    pub gas_use: i64,
+    pub gas_fee: Word,
 }

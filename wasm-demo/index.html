@@ -289,7 +289,14 @@
         let wasmInitialized = false;
         let callStack = [];
         let stateChanges = []; // Track all state changes with their depth and index
+        let stateVisibility = {}; // Track visibility state for each call block (index -> boolean)
+        let dataVisibility = {}; // Track visibility state for DATA fields (index -> boolean)
         let txHash = null; // Store transaction hash
+        let txStatus = null; // Store transaction status (succeeded/reverted)
+        let txGasUsed = null; // Store final gas used
+        let txGasFee = null; // Store gas fee charged
+        let txSender = null; // Store transaction sender address
+        let txGasRet = null; // Store gas result object from WASM
 
         async function initWasm() {
             if (!wasmInitialized) {
@@ -370,6 +377,11 @@
                 const call = eventData.Call;
                 item.type = 'call';
                 
+                // Track top-level call (depth 0 or 1) to get sender
+                if (depth <= 1 && !txSender) {
+                    txSender = call.from;
+                }
+                
                 // Push the call item first
                 callStack.push(item);
                 
@@ -402,6 +414,35 @@
                 } else {
                     item.type = 'return';
                 }
+                
+                // Note: Transaction status and gas used now come from the transaction result,
+                // not from Return events
+            }
+            // Check for Account event (to track gas fee from SetValue)
+            else if (eventData.Account) {
+                const accountEvent = eventData.Account;
+                // Track SetValue for the sender to calculate gas fee
+                if (accountEvent.SetValue && txSender && accountEvent.SetValue.address === txSender) {
+                    const oldBalance = BigInt(accountEvent.SetValue.val);
+                    const newBalance = BigInt(accountEvent.SetValue.new);
+                    const balanceDiff = oldBalance - newBalance;
+                    // Only update if this is a decrease (fee payment)
+                    if (balanceDiff > 0n) {
+                        txGasFee = balanceDiff.toString();
+                    }
+                }
+                // Don't add account events as separate items
+                return;
+            }
+            // Check for Fee event
+            else if (eventData.Fee) {
+                const feeEvent = eventData.Fee;
+                // Track fee if available
+                if (feeEvent.total) {
+                    txGasFee = feeEvent.total.toString();
+                }
+                // Don't add fee events as separate items
+                return;
             }
             // Check for State event
             else if (eventData.State) {
@@ -420,6 +461,32 @@
         }
 
 
+        window.toggleStateVisibility = function(index) {
+            stateVisibility[index] = !stateVisibility[index];
+            const stateDiv = document.getElementById(`state-changes-${index}`);
+            const button = stateDiv?.previousElementSibling;
+            if (stateDiv && button) {
+                stateDiv.style.display = stateVisibility[index] ? '' : 'none';
+                // Extract count from button text (format: "Show/Hide State (N)")
+                const match = button.textContent.match(/\((\d+)\)/);
+                const count = match ? match[1] : '0';
+                button.textContent = `${stateVisibility[index] ? 'Hide' : 'Show'} State (${count})`;
+            }
+        };
+
+        window.toggleDataVisibility = function(index) {
+            dataVisibility[index] = !dataVisibility[index];
+            const dataDiv = document.getElementById(`data-${index}`);
+            const button = dataDiv?.previousElementSibling;
+            if (dataDiv && button) {
+                dataDiv.style.display = dataVisibility[index] ? '' : 'none';
+                // Extract length from button text (format: "Show/Hide DATA (N)")
+                const match = button.textContent.match(/\((\d+)\)/);
+                const length = match ? match[1] : '0';
+                button.textContent = dataVisibility[index] ? `Hide DATA (${length})` : `Show DATA (${length})`;
+            }
+        };
+
         function renderCallStack() {
             const container = document.getElementById('callStack');
             const txHashContainer = document.getElementById('txHashDisplay');
@@ -432,7 +499,27 @@
                     txHashContainer.style.display = 'block';
                     const hashHtml = formatTxHash(txHash);
                     console.log('Hash HTML:', hashHtml);
-                    txHashContainer.innerHTML = `<strong>Transaction:</strong> ${hashHtml}`;
+                    
+                    let statusHtml = `<strong>TX:</strong> ${hashHtml}`;
+                    
+                    // Add status and gas used if available
+                    if (txStatus || txGasUsed !== null) {
+                        statusHtml += '<br>';
+                        if (txStatus) {
+                            const statusColor = txStatus === 'succeeded' ? '#4CAF50' : '#f44336';
+                            statusHtml += `<span style="margin-top: 4px; display: inline-block;"><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: 600;">${txStatus === 'succeeded' ? 'Succeeded' : 'Reverted'}</span></span>`;
+                        }
+                        if (txGasUsed !== null) {
+                            statusHtml += `<span style="margin-left: 12px; margin-top: 4px; display: inline-block;"><strong>Gas Used:</strong> <span style="font-family: monospace;">${txGasUsed.toLocaleString()}</span></span>`;
+                        }
+                    }
+                    
+                    // Add gas results if available
+                    if (txGasRet) {
+                        statusHtml += `<br><strong>Gas:</strong> ${txGasRet.gas_use} | ${txGasRet.gas_max}<br><strong>Fee:</strong> ${formatValue(txGasRet.gas_fee)}`;
+                    }
+                    
+                    txHashContainer.innerHTML = statusHtml;
                 } else {
                     console.log('No tx hash, hiding container');
                     txHashContainer.style.display = 'none';
@@ -477,7 +564,13 @@
                         if (!dataStr.startsWith('0x')) {
                             dataStr = '0x' + dataStr;
                         }
-                        content += `<div style="margin-bottom: 2px; word-break: break-all; overflow-wrap: break-word;"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
+                        const dataLength = dataStr.length - 2; // Subtract 2 for '0x' prefix
+                        const isDataVisible = dataVisibility[index] || false;
+                        const dataDisplayStyle = isDataVisible ? '' : 'display: none;';
+                        content += `<div style="margin-bottom: 2px;">`;
+                        content += `<button class="toggle-data-btn" data-index="${index}" style="background-color: #757575; color: white; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; margin-bottom: 4px;">${isDataVisible ? 'Hide' : 'Show'} DATA (${dataLength})</button>`;
+                        content += `<div id="data-${index}" style="word-break: break-all; overflow-wrap: break-word; ${dataDisplayStyle}"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
+                        content += `</div>`;
                     }
                     content += `</div>`;
                     
@@ -505,7 +598,12 @@
                     });
                     
                     if (callStateChanges.length > 0) {
-                        content += `<div style="margin-top: 3px; margin-left: 20px; font-size: 11px; color: #666; line-height: 1.3; word-break: break-all; overflow-wrap: break-word;">`;
+                        const isVisible = stateVisibility[index] || false;
+                        const toggleText = isVisible ? 'Hide' : 'Show';
+                        const stateDisplayStyle = isVisible ? '' : 'display: none;';
+                        content += `<div style="margin-top: 6px; margin-left: 20px;">`;
+                        content += `<button class="toggle-state-btn" data-index="${index}" style="background-color: #757575; color: white; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; margin-bottom: 4px;">${toggleText} State (${callStateChanges.length})</button>`;
+                        content += `<div id="state-changes-${index}" style="margin-top: 3px; font-size: 11px; color: #666; line-height: 1.3; word-break: break-all; overflow-wrap: break-word; ${stateDisplayStyle}">`;
                         callStateChanges.forEach(stateChange => {
                             if (stateChange.data.Put) {
                                 const put = stateChange.data.Put;
@@ -520,36 +618,48 @@
                                 content += `<span style="color: #999; font-family: monospace;">${formatWord(get.val)}</span><br>`;
                             }
                         });
-                        content += `</div>`;
+                        content += `</div></div>`;
                     }
                 } else if (item.type === 'return' && item.data.Return) {
                     const ret = item.data.Return;
                     content += ` <span style="color: ${ret.ok ? '#4CAF50' : '#f44336'}">${ret.ok ? 'OK' : 'FAILED'}</span>`;
                     content += `</div><div class="details" style="margin-top: 4px; margin-left: 20px; font-size: 11px; color: #666; line-height: 1.6;">`;
+                    if (ret.gas_used !== undefined) {
+                        content += `<div style="margin-bottom: 2px;"><strong>GAS:</strong> <span class="gas">${ret.gas_used}</span></div>`;
+                    }
                     if (ret.data) {
                         let dataStr = ret.data.toString();
                         if (!dataStr.startsWith('0x')) {
                             dataStr = '0x' + dataStr;
                         }
-                        content += `<div style="margin-bottom: 2px; word-break: break-all; overflow-wrap: break-word;"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
-                    }
-                    if (ret.gas_used !== undefined) {
-                        content += `<div style="margin-bottom: 2px;"><strong>GAS:</strong> <span class="gas">${ret.gas_used}</span></div>`;
+                        const dataLength = dataStr.length - 2; // Subtract 2 for '0x' prefix
+                        const isDataVisible = dataVisibility[index] || false;
+                        const dataDisplayStyle = isDataVisible ? '' : 'display: none;';
+                        content += `<div style="margin-bottom: 2px;">`;
+                        content += `<button class="toggle-data-btn" data-index="${index}" style="background-color: #757575; color: white; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; margin-bottom: 4px;">${isDataVisible ? 'Hide' : 'Show'} DATA (${dataLength})</button>`;
+                        content += `<div id="data-${index}" style="word-break: break-all; overflow-wrap: break-word; ${dataDisplayStyle}"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
+                        content += `</div>`;
                     }
                     content += `</div>`;
                 } else if (item.type === 'revert' && item.data.Return) {
                     const ret = item.data.Return;
                     content += ` <span style="color: #f44336">REVERT</span>`;
                     content += `</div><div class="details" style="margin-top: 4px; margin-left: 20px; font-size: 11px; color: #666; line-height: 1.6;">`;
+                    if (ret.gas_used !== undefined) {
+                        content += `<div style="margin-bottom: 2px;"><strong>GAS:</strong> <span class="gas">${ret.gas_used}</span></div>`;
+                    }
                     if (ret.data) {
                         let dataStr = ret.data.toString();
                         if (!dataStr.startsWith('0x')) {
                             dataStr = '0x' + dataStr;
                         }
-                        content += `<div style="margin-bottom: 2px; word-break: break-all; overflow-wrap: break-word;"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
-                    }
-                    if (ret.gas_used !== undefined) {
-                        content += `<div style="margin-bottom: 2px;"><strong>GAS:</strong> <span class="gas">${ret.gas_used}</span></div>`;
+                        const dataLength = dataStr.length - 2; // Subtract 2 for '0x' prefix
+                        const isDataVisible = dataVisibility[index] || false;
+                        const dataDisplayStyle = isDataVisible ? '' : 'display: none;';
+                        content += `<div style="margin-bottom: 2px;">`;
+                        content += `<button class="toggle-data-btn" data-index="${index}" style="background-color: #757575; color: white; padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; margin-bottom: 4px;">${isDataVisible ? 'Hide' : 'Show'} DATA (${dataLength})</button>`;
+                        content += `<div id="data-${index}" style="word-break: break-all; overflow-wrap: break-word; ${dataDisplayStyle}"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
+                        content += `</div>`;
                     }
                     if (ret.error) {
                         content += `<div style="margin-bottom: 2px;"><strong>ERROR:</strong> <span style="color: #f44336;">${ret.error}</span></div>`;
@@ -580,6 +690,21 @@
 
                 div.innerHTML = content;
                 container.appendChild(div);
+            });
+
+            // Attach event listeners for toggle buttons
+            container.querySelectorAll('.toggle-data-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    toggleDataVisibility(index);
+                });
+            });
+
+            container.querySelectorAll('.toggle-state-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const index = parseInt(this.getAttribute('data-index'));
+                    toggleStateVisibility(index);
+                });
             });
         }
 
@@ -625,7 +750,14 @@
                 // Reset state
                 callStack = [];
                 stateChanges = [];
+                stateVisibility = {};
+                dataVisibility = {};
                 txHash = null;
+                txStatus = null;
+                txGasUsed = null;
+                txGasFee = null;
+                txSender = null;
+                txGasRet = null;
                 const callStackEl = document.getElementById('callStack');
                 const txHashEl = document.getElementById('txHashDisplay');
                 if (callStackEl) callStackEl.innerHTML = '';
@@ -664,7 +796,7 @@
                         const txHashContainer = document.getElementById('txHashDisplay');
                         if (txHashContainer && txHash) {
                             txHashContainer.style.display = 'block';
-                            txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
+                            txHashContainer.innerHTML = `<strong>TX:</strong> ${formatTxHash(txHash)}`;
                         }
                     } catch (e) {
                         console.warn('Could not fetch transaction hash early:', e);
@@ -674,7 +806,7 @@
                     const txHashContainer = document.getElementById('txHashDisplay');
                     if (txHashContainer && txHash) {
                         txHashContainer.style.display = 'block';
-                        txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
+                        txHashContainer.innerHTML = `<strong>TX:</strong> ${formatTxHash(txHash)}`;
                     }
                 }
 
@@ -697,21 +829,17 @@
                 };
 
                 // Call WASM function - pass as strings to avoid BigInt conversion issues
-                const resultHash = await trace_transaction(
+                const [resultTxHash, resultGasRet] = await trace_transaction(
                     rpcUrl,
                     blockNumStr,
                     txIdxStr,
                     callback
                 );
+                txGasRet = JSON.parse(resultGasRet);
 
                 // Update transaction hash if not already set (should already be set above)
-                if (!txHash && resultHash) {
-                    txHash = resultHash;
-                    const txHashContainer = document.getElementById('txHashDisplay');
-                    if (txHashContainer && txHash) {
-                        txHashContainer.style.display = 'block';
-                        txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
-                    }
+                if (!txHash && resultTxHash) {
+                    txHash = resultTxHash;
                 }
                 
                 renderCallStack(); // Re-render to show the transaction hash
@@ -754,10 +882,21 @@
                 // Clear call stack and reset transaction hash
                 callStack = [];
                 stateChanges = [];
+                stateVisibility = {};
+                dataVisibility = {};
                 txHash = null;
+                txStatus = null;
+                txGasUsed = null;
+                txGasFee = null;
+                txSender = null;
+                txGasRet = null;
                 const callStackContainer = document.getElementById('callStack');
                 if (callStackContainer) {
                     callStackContainer.innerHTML = '';
+                }
+                const txHashEl = document.getElementById('txHashDisplay');
+                if (txHashEl) {
+                    txHashEl.style.display = 'none';
                 }
                 const txHashContainer = document.getElementById('txHashDisplay');
                 if (txHashContainer) {
@@ -824,7 +963,7 @@
                     txHash = resultHash;
                     if (txHashContainer && txHash) {
                         txHashContainer.style.display = 'block';
-                        txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
+                        txHashContainer.innerHTML = `<strong>TX:</strong> ${formatTxHash(txHash)}`;
                     }
                 } catch (e) {
                     console.error('Failed to get transaction hash:', e);
