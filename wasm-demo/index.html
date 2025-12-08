@@ -124,6 +124,12 @@
             background-color: #1976D2;
             box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
         }
+        button.secondary:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
         .status {
             margin-top: 16px;
             padding: 16px;
@@ -178,6 +184,10 @@
             border-left-color: #f44336;
             background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
         }
+        .call-stack-item.transfer {
+            border-left-color: #fdd835;
+            background: #fffde7;
+        }
         .call-stack-item .depth {
             display: inline-block;
             width: 30px;
@@ -206,6 +216,11 @@
         .call-stack-item .type.revert {
             background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
             color: white;
+        }
+        .call-stack-item .type.transfer {
+            background: #fdd835;
+            color: #f57f17;
+            font-weight: 700;
         }
         .call-stack-item .address {
             color: #2196F3;
@@ -269,7 +284,7 @@
     </div>
 
     <script type="module">
-        import init, { trace_transaction, get_latest_block_info, get_transaction_hash } from './pkg/wasm_demo.js';
+        import init, { trace_transaction, get_latest_block_info, get_block_info, get_transaction_hash } from './pkg/wasm_demo.js';
 
         let wasmInitialized = false;
         let callStack = [];
@@ -352,7 +367,31 @@
 
             // Check for Call event
             if (eventData.Call) {
+                const call = eventData.Call;
                 item.type = 'call';
+                
+                // Push the call item first
+                callStack.push(item);
+                
+                // If there's a value transfer, add a separate transfer event right after
+                if (call.value && call.value !== '0' && call.value !== '0x0') {
+                    const transferItem = {
+                        type: 'transfer',
+                        depth: depth,
+                        reverted: reverted,
+                        data: {
+                            from: call.from,
+                            to: call.to,
+                            value: call.value
+                        },
+                        index: callStack.length
+                    };
+                    callStack.push(transferItem);
+                }
+                
+                // Render and return early since we've already pushed the item(s)
+                renderCallStack();
+                return;
             } 
             // Check for Return event (which can be a return or revert)
             else if (eventData.Return) {
@@ -411,7 +450,7 @@
                 div.setAttribute('data-depth', item.depth);
                 div.style.marginLeft = `${item.depth * 20}px`;
 
-                let content = `<span class="type ${item.type}">${item.type.toUpperCase()}</span>`;
+                let content = `<span class="type ${item.type}">${item.type === 'transfer' ? 'BALANCE' : item.type.toUpperCase()}</span>`;
 
                 if (item.type === 'call' && item.data.Call) {
                     const call = item.data.Call;
@@ -516,6 +555,11 @@
                         content += `<div style="margin-bottom: 2px;"><strong>ERROR:</strong> <span style="color: #f44336;">${ret.error}</span></div>`;
                     }
                     content += `</div>`;
+                } else if (item.type === 'transfer' && item.data.from && item.data.to && item.data.value) {
+                    const transfer = item.data;
+                    const valueFormatted = formatValue(transfer.value);
+                    content += ` <span class="address">${formatAddress(transfer.from)}</span> → <span class="address">${formatAddress(transfer.to)}</span> <span class="value" style="color: #f57f17; font-weight: 600;">${valueFormatted}</span>`;
+                    content += `</div>`;
                 } else if (item.type === 'state' && item.data.State) {
                     const state = item.data.State;
                     if (state.Put) {
@@ -569,6 +613,11 @@
 
             try {
                 button.disabled = true;
+                const randomButton = document.getElementById('randomButton');
+                const rpcToggleButton = document.getElementById('rpcToggleButton');
+                if (randomButton) randomButton.disabled = true;
+                if (rpcToggleButton) rpcToggleButton.disabled = true;
+                
                 statusDiv.className = 'status loading';
                 statusDiv.textContent = `Tracing transaction at block ${blockNumber}, index ${txIndex}...`;
                 statusDiv.style.display = 'block';
@@ -581,8 +630,7 @@
                 const txHashEl = document.getElementById('txHashDisplay');
                 if (callStackEl) callStackEl.innerHTML = '';
                 if (txHashEl) {
-                    txHashEl.style.display = 'block';
-                    txHashEl.innerHTML = '<strong>Transaction:</strong> <span style="color: #999;">Loading...</span>';
+                    txHashEl.style.display = 'none';
                 }
 
                 await initWasm();
@@ -595,16 +643,39 @@
                     throw new Error('Invalid block number or transaction index');
                 }
 
-                try {
-                    const hash = await get_transaction_hash(rpcUrl, blockNumStr, txIdxStr);
-                    txHash = hash;
+                // Check if tx hash is already set correctly for this block/tx index
+                let hashNeedsUpdate = true;
+                if (txHash) {
+                    try {
+                        const expectedHash = await get_transaction_hash(rpcUrl, blockNumStr, txIdxStr);
+                        if (txHash === expectedHash) {
+                            hashNeedsUpdate = false;
+                        }
+                    } catch (e) {
+                        // If we can't verify, proceed to update
+                        console.warn('Could not verify existing hash, will update:', e);
+                    }
+                }
+
+                if (hashNeedsUpdate) {
+                    try {
+                        const hash = await get_transaction_hash(rpcUrl, blockNumStr, txIdxStr);
+                        txHash = hash;
+                        const txHashContainer = document.getElementById('txHashDisplay');
+                        if (txHashContainer && txHash) {
+                            txHashContainer.style.display = 'block';
+                            txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch transaction hash early:', e);
+                    }
+                } else {
+                    // Hash is already correct, just ensure it's displayed
                     const txHashContainer = document.getElementById('txHashDisplay');
                     if (txHashContainer && txHash) {
                         txHashContainer.style.display = 'block';
                         txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
                     }
-                } catch (e) {
-                    console.warn('Could not fetch transaction hash early:', e);
                 }
 
                 // Create callback function that will be called from Rust
@@ -653,6 +724,10 @@
                 console.error('Trace error:', error);
             } finally {
                 button.disabled = false;
+                const randomButton = document.getElementById('randomButton');
+                const rpcToggleButton = document.getElementById('rpcToggleButton');
+                if (randomButton) randomButton.disabled = false;
+                if (rpcToggleButton) rpcToggleButton.disabled = false;
             }
         };
 
@@ -673,21 +748,66 @@
             try {
                 randomButton.disabled = true;
                 statusDiv.className = 'status loading';
-                statusDiv.textContent = 'Fetching latest block information...';
+                statusDiv.textContent = 'Fetching latest blocks...';
                 statusDiv.style.display = 'block';
+
+                // Clear call stack and reset transaction hash
+                callStack = [];
+                stateChanges = [];
+                txHash = null;
+                const callStackContainer = document.getElementById('callStack');
+                if (callStackContainer) {
+                    callStackContainer.innerHTML = '';
+                }
+                const txHashContainer = document.getElementById('txHashDisplay');
+                if (txHashContainer) {
+                    txHashContainer.style.display = 'none';
+                    txHashContainer.innerHTML = '';
+                }
 
                 await initWasm();
 
                 // Get latest block info
-                const blockInfoJson = await get_latest_block_info(rpcUrl);
-                const blockInfo = JSON.parse(blockInfoJson);
-                // Ensure we convert to regular JavaScript numbers (integers)
-                const blockNumber = Math.floor(Number(blockInfo.blockNumber));
-                const txCount = Math.floor(Number(blockInfo.txCount));
+                const latestBlockInfoJson = await get_latest_block_info(rpcUrl);
+                const latestBlockInfo = JSON.parse(latestBlockInfoJson);
+                const latestBlockNumber = Math.floor(Number(latestBlockInfo.blockNumber));
 
-                if (txCount === 0) {
+                // Select a random block from the latest 20 blocks
+                const blocksToCheck = 20;
+                const startBlock = Math.max(0, latestBlockNumber - blocksToCheck + 1);
+                const randomBlockOffset = Math.floor(Math.random() * Math.min(blocksToCheck, latestBlockNumber + 1));
+                const selectedBlockNumber = startBlock + randomBlockOffset;
+
+                // Fetch the selected block's info
+                statusDiv.textContent = `Checking block ${selectedBlockNumber}...`;
+                let selectedBlock = selectedBlockNumber;
+                let txCount = 0;
+                let blockFound = false;
+
+                // Try blocks starting from the randomly selected one, going backwards
+                for (let i = 0; i < blocksToCheck; i++) {
+                    const blockToCheck = selectedBlockNumber - i;
+                    if (blockToCheck < 0) break;
+                    
+                    try {
+                        const blockInfoJson = await get_block_info(rpcUrl, blockToCheck.toString());
+                        const blockInfo = JSON.parse(blockInfoJson);
+                        txCount = Math.floor(Number(blockInfo.txCount));
+                        
+                        if (txCount > 0) {
+                            selectedBlock = blockToCheck;
+                            blockFound = true;
+                            break;
+                        }
+                    } catch (e) {
+                        // Continue to next block if this one fails
+                        continue;
+                    }
+                }
+
+                if (!blockFound || txCount === 0) {
                     statusDiv.className = 'status error';
-                    statusDiv.textContent = 'Latest block has no transactions';
+                    statusDiv.textContent = 'No transactions found in recent blocks';
                     return;
                 }
 
@@ -695,11 +815,23 @@
                 const randomTxIndex = Math.floor(Math.random() * txCount);
 
                 // Fill in the form fields
-                blockNumberInput.value = blockNumber.toString();
+                blockNumberInput.value = selectedBlock.toString();
                 txIndexInput.value = randomTxIndex.toString();
 
+                // Get and display the transaction hash
+                try {
+                    const resultHash = await get_transaction_hash(rpcUrl, selectedBlock.toString(), randomTxIndex.toString());
+                    txHash = resultHash;
+                    if (txHashContainer && txHash) {
+                        txHashContainer.style.display = 'block';
+                        txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
+                    }
+                } catch (e) {
+                    console.error('Failed to get transaction hash:', e);
+                }
+
                 statusDiv.className = 'status';
-                statusDiv.textContent = `Selected block ${blockNumber}, transaction ${randomTxIndex} of ${txCount}`;
+                statusDiv.textContent = `Selected block ${selectedBlock}, transaction ${randomTxIndex} of ${txCount}`;
             } catch (error) {
                 statusDiv.className = 'status error';
                 statusDiv.textContent = `Error: ${error}`;

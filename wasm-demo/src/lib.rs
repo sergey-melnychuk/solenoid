@@ -92,6 +92,30 @@ pub async fn get_latest_block_info(rpc_url: String) -> Result<String, JsValue> {
 }
 
 #[wasm_bindgen]
+pub async fn get_block_info(rpc_url: String, block_number: String) -> Result<String, JsValue> {
+    let client = EthClient::new(&rpc_url);
+
+    // Parse block number from string
+    let block_number: u64 = block_number
+        .parse()
+        .map_err(|e| JsValue::from_str(&format!("Invalid block number: {}", e)))?;
+
+    // Get full block to get transaction count
+    let block = client
+        .get_full_block(Word::from(block_number))
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Failed to get block: {}", e)))?;
+
+    let tx_count = block.transactions.len();
+
+    // Return JSON with block number and transaction count
+    Ok(format!(
+        r#"{{"blockNumber":{},"txCount":{}}}"#,
+        block_number, tx_count
+    ))
+}
+
+#[wasm_bindgen]
 pub async fn quote_weth_to_usdc(rpc_url: String, amount_weth: String) -> Result<String, JsValue> {
     // Parse the amount (in WETH with 18 decimals)
     let amount_in: u128 = amount_weth
