@@ -79,6 +79,9 @@ impl AccountTouch {
     pub fn is_read_only(&self) -> bool {
         matches!(self, AccountTouch::GetCode(_, _, _) | AccountTouch::GetState(_, _, _, _) | AccountTouch::GetNonce(_, _) | AccountTouch::GetValue(_, _))
     }
+    pub fn is_fee_pay(&self) -> bool {
+        matches!(self, AccountTouch::FeePay(_, _, _))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -355,7 +358,8 @@ impl<T: EventTracer> Executor<T> {
             evm.touches.push(AccountTouch::WarmUp(call.to));
 
             // EIP-7702: If call.to is delegated, also pre-warm the target address
-            let (code, _) = ext.code(&call.to).await?;
+            let (code, codehash) = ext.code(&call.to).await?;
+            evm.touches.push(AccountTouch::GetCode(call.to, codehash, code.clone()));
             if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
                 let target = Address::try_from(&code[3..]).expect("must succeed");
                 ext.warm_address(&target);
@@ -376,11 +380,6 @@ impl<T: EventTracer> Executor<T> {
         if !gas_prepayment.is_zero() {
             let updated_balance = sender_balance.saturating_sub(gas_prepayment);
             ext.account_mut(&call.from).value = updated_balance;
-            evm.touches.push(AccountTouch::SetValue(
-                call.from,
-                sender_balance,
-                updated_balance,
-            ));
         }
         // Note: Gas prepayment is deducted from sender but NOT transferred to coinbase yet.
         // The base fee will be burned (removed from circulation), and only the priority fee
@@ -512,7 +511,20 @@ impl<T: EventTracer> Executor<T> {
         };
 
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);
-        let gas_used_fee = Word::from(gas_final) * ext.tx_ctx.gas_price;
+        
+        // Calculate effective gas price for fee calculation
+        // For EIP-1559: min(max_fee_per_gas, base_fee + max_priority_fee_per_gas)
+        // For legacy: gas_price
+        let effective_gas_price = if ext.tx_ctx.gas_max_priority_fee.is_zero() {
+            // Legacy transaction
+            ext.tx_ctx.gas_price
+        } else {
+            // EIP-1559 transaction
+            let base_plus_priority = base_fee + ext.tx_ctx.gas_max_priority_fee;
+            Word::min(ext.tx_ctx.gas_max_fee, base_plus_priority)
+        };
+        
+        let gas_used_fee = Word::from(gas_final) * effective_gas_price;
         let gas_refund = gas_prepayment - gas_used_fee;
 
         // Refund unused gas to sender
@@ -520,9 +532,11 @@ impl<T: EventTracer> Executor<T> {
             let src = ext.balance(&call.from).await?;
             let new_balance = src + gas_refund;
             ext.account_mut(&call.from).value = new_balance;
-            evm.touches
-                .push(AccountTouch::SetValue(call.from, src, new_balance));
         }
+
+        let balance_after = ext.balance(&call.from).await?;
+        evm.touches
+            .push(AccountTouch::FeePay(call.from, sender_balance, balance_after));
 
         // Transfer priority fee to coinbase (base fee is burned per EIP-1559)
         // Match revm's calculation: recalculate effective_gas_price from max_fee and max_priority
@@ -548,11 +562,12 @@ impl<T: EventTracer> Executor<T> {
 
             let priority_fee_total = Word::from(gas_final) * coinbase_gas_price;
 
+            // Ensure coinbase is in state (it may not be if no code accessed it during execution)
+            let current_coinbase_balance = ext.balance(&coinbase).await?;
+
             if !priority_fee_total.is_zero() {
                 // TODO: charge sender with `priority_fee_total`
 
-                // Ensure coinbase is in state (it may not be if no code accessed it during execution)
-                let current_coinbase_balance = ext.balance(&coinbase).await?;
                 let new_coinbase_balance = current_coinbase_balance + priority_fee_total;
                 ext.account_mut(&coinbase).value = new_coinbase_balance;
                 // println!("[SOLE] COINBASE (GAS)  : {new_coinbase_balance:#x} *{priority_fee_total:#x}");
@@ -568,6 +583,10 @@ impl<T: EventTracer> Executor<T> {
                     reverted: false,
                 });
                 evm.touches.push(AccountTouch::FeePay(coinbase, current_coinbase_balance, new_coinbase_balance));
+            } else {
+                // Even if no priority fees are paid, COINBASE should be marked as touched
+                // because we accessed it (read its balance) during fee calculation
+                evm.touches.push(AccountTouch::FeePay(coinbase, current_coinbase_balance, current_coinbase_balance));
             }
         }
 
@@ -1186,6 +1205,7 @@ impl<T: EventTracer> Executor<T> {
                     return Ok(StepResult::Halt(gas));
                 }
                 let value = ext.balance(&addr).await?;
+                evm.touches.push(AccountTouch::GetValue(addr, value));
                 self.debug["BALANCE"] = json!({
                     "address": addr,
                     "balance": value,
@@ -1321,8 +1341,9 @@ impl<T: EventTracer> Executor<T> {
                 if evm.gas.remaining() < gas {
                     return Ok(StepResult::Halt(gas));
                 }
-                let code_size = ext.code(&address).await?.0.len();
-                evm.push(Word::from(code_size))?;
+                let (code, codehash) = ext.code(&address).await?;
+                evm.touches.push(AccountTouch::GetCode(address, codehash, code.clone()));
+                evm.push(Word::from(code.len()))?;
             }
             0x3c => {
                 // EXTCODECOPY
@@ -1331,7 +1352,8 @@ impl<T: EventTracer> Executor<T> {
                 let offset = evm.pop()?.as_usize();
                 let size = evm.pop()?.as_usize();
 
-                let (mut code, _) = ext.code(&address).await?;
+                let (mut code, codehash) = ext.code(&address).await?;
+                evm.touches.push(AccountTouch::GetCode(address, codehash, code.clone()));
                 if evm.memory.len() < dest_offset + size {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
@@ -1398,7 +1420,8 @@ impl<T: EventTracer> Executor<T> {
                 if is_empty {
                     evm.push(Word::zero())?;
                 } else {
-                    let (_, hash) = ext.code(&address).await?;
+                    let (code, hash) = ext.code(&address).await?;
+                    evm.touches.push(AccountTouch::GetCode(address, hash, code));
                     evm.push(hash)?;
                 }
             }
@@ -2295,7 +2318,8 @@ impl<T: EventTracer> Executor<T> {
         let code = if is_delegated {
             access_cost += 100;
             let target = Address::try_from(&code[3..]).expect("must succeed");
-            let (code, _) = ext.code(&target).await?;
+            let (code, codehash) = ext.code(&target).await?;
+            evm.touches.push(AccountTouch::GetCode(target, codehash, code.clone()));
             let target_cost = evm.address_access_cost(&target, ext);
             access_cost += target_cost - 100;
             code
@@ -2570,7 +2594,7 @@ impl<T: EventTracer> Executor<T> {
             self.ret = ret;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only()));
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only() || t.is_fee_pay()));
             return Ok(());
         }
 
@@ -2726,7 +2750,7 @@ impl<T: EventTracer> Executor<T> {
             evm.gas.used += base_cost_without_deploy + gas_to_forward;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only()));
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only() || t.is_fee_pay()));
             return Ok(());
         }
 
@@ -2736,7 +2760,7 @@ impl<T: EventTracer> Executor<T> {
         if inner_evm.reverted {
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only()));
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only() || t.is_fee_pay()));
             return Ok(());
         }
 

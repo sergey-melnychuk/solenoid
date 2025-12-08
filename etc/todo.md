@@ -14,6 +14,28 @@ sole 	OK=false 	RET=match	GAS=match	TRACES=24994
 
 ---
 
+$ etc/runp.sh 23891571
+...
+TX:   9/421
+### 23891571 9 hash=0xdb797f4424bcf8f82d4d99428eea09b0032436b6830ef2c996d490df410eb256
+REVM 	OK=false 	RET=<4> 	GAS=99868	TRACES=6091	STATE=6+21
+sole 	OK=false 	RET=match	GAS=match	TRACES=6091	STATE=false
+
+TX:  38/421
+### 23891571 38 hash=0x8792f21d230131a3f5c57add8950e966041f2c746b9ba9669ebca0a90c206d1f
+REVM 	OK=false 	RET=<4> 	GAS=534715	TRACES=24966	STATE=18+66
+sole 	OK=false 	RET=match	GAS=match	TRACES=24994	STATE=false
+
+TX: 138/421
+### 23891571 138 hash=0xc7ea6c67a01d3b6d83c3220a9e64f09c44aab9ee54ddea8ad0909b8ace45ec10
+REVM 	OK=false 	RET=<68>	GAS=129265	TRACES=6938	STATE=6+21
+sole 	OK=false 	RET=match	GAS=match	TRACES=6938	STATE=false
+TX: 421/421
+(total: 422, matched: 419, invalid: 3)
+✅ Block 23891571 completed successfully
+
+---
+
 Heavy transactions: 400k (57GB) traces
 All to "Aztec: Ignition Chain L2 Rollup"
 

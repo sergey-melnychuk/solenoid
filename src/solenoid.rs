@@ -208,10 +208,13 @@ impl Runner {
             ext.warm_address(&coinbase);
         }
 
+        let mut evm = Evm::new();
+
         let code = if self.call.to.is_zero() {
             self.call.data.clone()
         } else {
-            let (code, _) = ext.code(&self.call.to).await?;
+            let (code, codehash) = ext.code(&self.call.to).await?;
+            evm.touches.push(AccountTouch::GetCode(self.call.to, codehash, code.clone()));
             code
         };
 
@@ -219,14 +222,14 @@ impl Runner {
         let code = if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
             let target = Address::try_from(&code[3..]).expect("address");
             // eprintln!("DEBUG: delegation {} -> {}", self.call.to, target);
-            let (code, _) = ext.code(&target).await?;
+            let (code, codehash) = ext.code(&target).await?;
+            evm.touches.push(AccountTouch::GetCode(target, codehash, code.clone()));
             code
         } else {
             code
         };
 
         let code = Decoder::decode(code);
-        let mut evm = Evm::new();
 
         let call_cost = 21000i64;
         let data_cost = {

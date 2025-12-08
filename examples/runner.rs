@@ -330,13 +330,20 @@ async fn main() -> eyre::Result<()> {
                     "---\n### {block_number} {idx} hash={}",
                     txs[idx].info().hash.unwrap_or_default()
                 );
+                let state_accounts = revm_result.state.len();
+                let state_keys = revm_result.state.iter()
+                    .map(|(_, value)| value.as_object()
+                        .map(|object| object.len())
+                        .unwrap_or_default())
+                    .sum::<usize>();
                 println!(
-                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}\tSTATE={}",
+                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}\tSTATE={}+{}",
                     !revm_result.rev,
                     ret,
                     revm_result.gas,
                     revm_traces.len(),
-                    revm_result.state.len()
+                    state_accounts,
+                    state_keys,
                 );
 
                 let ret_diff = if revm_result.ret == sole_result.ret {
