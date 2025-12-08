@@ -343,16 +343,16 @@ pub fn decode_error_string(ret: &[u8]) -> Option<String> {
     }
     let _selector = &ret[0..4];
     let offset = Word::from_bytes(&ret[4..4 + 32]);
-    if offset > Word::from(u64::MAX) {
+    if offset > Word::from(ret.len()) {
         return None;
     }
     let offset = 4 + 32 + offset.as_usize();
     let size = Word::from_bytes(&ret[4 + 32..4 + 32 + 32]);
-    if size > Word::from(u64::MAX) {
+    if size > Word::from(ret.len()) {
         return None;
     }
     let size = size.as_usize();
-    if ret.len() < offset + size {
+    if offset + size > ret.len() {
         return None;
     }
     let data = &ret[offset..offset + size];

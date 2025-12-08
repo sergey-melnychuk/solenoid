@@ -3,155 +3,278 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solenoid WASM Demo</title>
+    <title>Ethereum Transaction Debugger</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            max-width: 1400px;
+            min-width: 640px;
+            margin: 0 auto;
+            padding: 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
         .container {
             background-color: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
         }
         h1 {
-            color: #333;
+            color: #1a1a1a;
+            margin: 0;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        h2 {
+            color: #1a1a1a;
+            margin: 0 0 16px 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .subtitle {
+            color: #666;
             margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .header-compact {
+            display: flex;
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 6px;
+            margin-bottom: 8px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+        }
+        .rpc-toggle {
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        .rpc-toggle:hover {
+            background-color: #616161 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(117, 117, 117, 0.3);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
         }
         input {
             width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
             font-size: 14px;
+            transition: all 0.2s ease;
+            background-color: #fafafa;
+        }
+        input:focus {
+            outline: none;
+            border-color: #2196F3;
+            background-color: white;
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
         }
         button {
             background-color: #4CAF50;
             color: white;
-            padding: 12px 30px;
+            padding: 10px 20px;
             border: none;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 16px;
-            margin-top: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
         }
         button:hover {
             background-color: #45a049;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+        }
+        button:active {
+            transform: translateY(0);
         }
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
-        #result, #quoteResult, #solenoidResult {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f9f9f9;
-            border-radius: 4px;
+        button.secondary {
+            background-color: #2196F3;
+            box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
+        }
+        button.secondary:hover {
+            background-color: #1976D2;
+            box-shadow: 0 4px 8px rgba(33, 150, 243, 0.3);
+        }
+        .status {
+            margin-top: 16px;
+            padding: 16px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 8px;
             border-left: 4px solid #4CAF50;
             white-space: pre-wrap;
             word-wrap: break-word;
-            font-family: 'Courier New', monospace;
-            font-size: 15px;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
-        .error {
-            border-left-color: #f44336 !important;
-            color: #f44336;
+        .status.error {
+            border-left-color: #f44336;
+            color: #c62828;
+            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
         }
-        .loading {
+        .status.loading {
+            border-left-color: #2196F3;
+            color: #1565c0;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        }
+        .call-stack {
+            margin-top: 20px;
+        }
+        .call-stack-item {
+            margin-bottom: 3px;
+            padding: 10px 12px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 6px;
+            border-left: 4px solid #2196F3;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .call-stack-item:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+            transform: translateX(2px);
+        }
+        .call-stack-item.call {
+            border-left-color: #4CAF50;
+            background: linear-gradient(135deg, #f1f8f4 0%, #e8f5e9 100%);
+        }
+        .call-stack-item.return {
+            border-left-color: #2196F3;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        }
+        .call-stack-item.revert {
+            border-left-color: #f44336;
+            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+        }
+        .call-stack-item .depth {
+            display: inline-block;
+            width: 30px;
+            color: #666;
+            font-weight: bold;
+        }
+        .call-stack-item .type {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            margin-right: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .call-stack-item .type.call {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+        }
+        .call-stack-item .type.return {
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+            color: white;
+        }
+        .call-stack-item .type.revert {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            color: white;
+        }
+        .call-stack-item .address {
             color: #2196F3;
+            font-weight: bold;
+        }
+        .call-stack-item .details {
+            margin-top: 8px;
+            color: #666;
+            font-size: 12px;
+        }
+        .call-stack-item .value {
+            color: #4CAF50;
+        }
+        .call-stack-item .gas {
+            color: #666;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Solenoid WASM Demo</h1>
-        <p>Fetch the latest Ethereum block number using Solenoid compiled to WebAssembly</p>
+        <div class="header-compact">
+            <h1 style="margin: 0; white-space: nowrap;">Solenoid EVM</h1>
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; flex: 1; justify-content: flex-end;">
+                <label for="blockNumber" style="margin: 0; font-size: 14px; white-space: nowrap;">Block:</label>
+                <input
+                    type="number"
+                    id="blockNumber"
+                    placeholder="20000000"
+                    style="width: 120px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                />
+                <label for="txIndex" style="margin: 0; font-size: 14px; white-space: nowrap;">Tx Index:</label>
+                <input
+                    type="number"
+                    id="txIndex"
+                    placeholder="0"
+                    value="0"
+                    style="width: 120px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;"
+                />
+                <button id="traceButton" type="button" style="margin: 0; padding: 8px 16px; white-space: nowrap;">Trace Transaction</button>
+                <button id="randomButton" type="button" class="secondary" style="margin: 0; padding: 8px 16px; white-space: nowrap;">Select Random</button>
+                <button id="rpcToggleButton" type="button" class="rpc-toggle" style="background-color: #757575; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; white-space: nowrap;">RPC URL</button>
+            </div>
+        </div>
+        <div id="rpcUrlContainer" style="display: none; margin-top: 6px;">
+            <input
+                type="text"
+                id="rpcUrl"
+                placeholder="https://ethereum-rpc.publicnode.com"
+                value="https://ethereum-rpc.publicnode.com"
+                style="width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; box-sizing: border-box; background-color: #fafafa; transition: all 0.2s ease; font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;"
+            />
+        </div>
 
-        <label for="rpcUrl">RPC URL:</label>
-        <input
-            type="text"
-            id="rpcUrl"
-            placeholder="https://eth.llamarpc.com"
-            value="https://eth.llamarpc.com"
-        />
+        <div id="status" class="status" style="display: none;"></div>
+    </div>
 
-        <button id="fetchButton" onclick="fetchBlockNumber()">Fetch Latest Block</button>
-
-        <div id="result"></div>
-
-        <hr style="margin: 40px 0; border: none; border-top: 2px solid #eee;">
-
-        <h2 style="color: #333; margin-bottom: 10px;">Uniswap V3 Quoter - WETH to USDC (Direct RPC Call)</h2>
-        <p>Get a quote for exchanging WETH to USDC using the Uniswap V3 Quoter contract</p>
-
-        <label for="rpcUrl2">RPC URL:</label>
-        <input
-            type="text"
-            id="rpcUrl2"
-            placeholder="https://eth.llamarpc.com"
-            value="https://eth.llamarpc.com"
-        />
-
-        <label for="amount">Amount (in Wei, 1 ETH = 1000000000000000000):</label>
-        <input
-            type="text"
-            id="amount"
-            placeholder="1000000000000000000"
-            value="1000000000000000000"
-        />
-        <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
-            Presets:
-            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount('1000000000000000000')">1 WETH</code>
-            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount('500000000000000000')">0.5 WETH</code>
-            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount('100000000000000000')">0.1 WETH</code>
-        </p>
-
-        <button id="quoteButton" onclick="getQuote()">Get Quote (via eth_call)</button>
-
-        <div id="quoteResult"></div>
-
-        <hr style="margin: 40px 0; border: none; border-top: 2px solid #eee;">
-
-        <h2 style="color: #333; margin-bottom: 10px;">Uniswap V3 Quoter - WETH to USDC (Solenoid Executor)</h2>
-        <p>Get a quote using the full Solenoid EVM executor running in WebAssembly - simulates the entire transaction locally!</p>
-
-        <label for="rpcUrl3">RPC URL:</label>
-        <input
-            type="text"
-            id="rpcUrl3"
-            placeholder="https://eth.llamarpc.com"
-            value="https://eth.llamarpc.com"
-        />
-
-        <label for="amount2">Amount (in Wei, 1 ETH = 1000000000000000000):</label>
-        <input
-            type="text"
-            id="amount2"
-            placeholder="1000000000000000000"
-            value="1000000000000000000"
-        />
-        <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
-            Presets:
-            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount2('1000000000000000000')">1 WETH</code>
-            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount2('500000000000000000')">0.5 WETH</code>
-            <code style="cursor: pointer; padding: 2px 6px; background: #f0f0f0; border-radius: 3px;" onclick="setAmount2('100000000000000000')">0.1 WETH</code>
-        </p>
-
-        <button id="solenoidButton" onclick="getQuoteSolenoid()">Get Quote (via Solenoid)</button>
-
-        <div id="solenoidResult"></div>
+    <div class="container">
+        <h2>Call Stack</h2>
+        <div id="txHashDisplay" style="margin-bottom: 12px; padding: 12px 16px; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border-radius: 8px; font-family: 'SF Mono', 'Monaco', 'Courier New', monospace; font-size: 13px; display: none; box-shadow: 0 2px 8px rgba(33, 150, 243, 0.15); border: 1px solid rgba(33, 150, 243, 0.2);"></div>
+        <div id="callStack" class="call-stack"></div>
     </div>
 
     <script type="module">
-        import init, { get_latest_block_number, quote_weth_to_usdc, quote_weth_to_usdc_solenoid } from './pkg/wasm_demo.js';
+        import init, { trace_transaction, get_latest_block_info, get_transaction_hash } from './pkg/wasm_demo.js';
 
         let wasmInitialized = false;
+        let callStack = [];
+        let stateChanges = []; // Track all state changes with their depth and index
+        let txHash = null; // Store transaction hash
 
         async function initWasm() {
             if (!wasmInitialized) {
@@ -161,127 +284,522 @@
             }
         }
 
-        window.fetchBlockNumber = async function() {
+        function formatAddress(addr) {
+            if (!addr) return 'N/A';
+            let addrStr = addr.toString();
+            if (!addrStr.startsWith('0x')) {
+                addrStr = '0x' + addrStr;
+            }
+            // Ensure it's a valid address (42 chars: 0x + 40 hex)
+            if (addrStr.length < 42) {
+                addrStr = '0x' + addrStr.slice(2).padStart(40, '0');
+            }
+            const etherscanUrl = `https://etherscan.io/address/${addrStr}`;
+            return `<a href="${etherscanUrl}" target="_blank" style="color: #2196F3; text-decoration: none; font-family: monospace;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${addrStr}</a>`;
+        }
+
+        function formatWord(word) {
+            if (!word) return '0x0';
+            let wordStr = word.toString();
+            if (!wordStr.startsWith('0x')) {
+                wordStr = '0x' + wordStr;
+            }
+            // Ensure it's a valid word (66 chars: 0x + 64 hex)
+            if (wordStr.length < 66) {
+                wordStr = '0x' + wordStr.slice(2).padStart(64, '0');
+            }
+            return wordStr;
+        }
+
+        function formatValue(value) {
+            if (!value) return '0';
+            const valStr = value.toString();
+            if (valStr.startsWith('0x')) {
+                const num = BigInt(valStr);
+                if (num === 0n) return '0 ETH';
+                return (Number(num) / 1e18).toFixed(6) + ' ETH';
+            }
+            return value;
+        }
+
+        function formatTxHash(hash) {
+            if (!hash) return '';
+            let hashStr = hash.toString();
+            if (!hashStr.startsWith('0x')) {
+                hashStr = '0x' + hashStr;
+            }
+            // Ensure it's a valid hash (66 chars: 0x + 64 hex)
+            if (hashStr.length < 66) {
+                hashStr = '0x' + hashStr.slice(2).padStart(64, '0');
+            }
+            const etherscanUrl = `https://etherscan.io/tx/${hashStr}`;
+            return `<a href="${etherscanUrl}" target="_blank" style="color: #2196F3; text-decoration: none; font-weight: bold; font-family: monospace;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${hashStr}</a>`;
+        }
+
+
+        function addCallStackItem(event) {
+            const eventData = event.data || event;
+            const depth = event.depth || 0;
+            const reverted = event.reverted || false;
+
+            let item = {
+                type: 'unknown',
+                depth: depth,
+                reverted: reverted,
+                data: eventData,
+                index: callStack.length
+            };
+
+            // Check for Call event
+            if (eventData.Call) {
+                item.type = 'call';
+            } 
+            // Check for Return event (which can be a return or revert)
+            else if (eventData.Return) {
+                const returnData = eventData.Return;
+                // A Return with ok=false or reverted=true is a revert
+                if (returnData.ok === false || reverted) {
+                    item.type = 'revert';
+                } else {
+                    item.type = 'return';
+                }
+            }
+            // Check for State event
+            else if (eventData.State) {
+                // Store state change with its depth and index for later association
+                stateChanges.push({
+                    depth: depth,
+                    index: callStack.length,
+                    data: eventData.State
+                });
+                // Don't add state events as separate items, they're shown within calls
+                return;
+            }
+
+            callStack.push(item);
+            renderCallStack();
+        }
+
+
+        function renderCallStack() {
+            const container = document.getElementById('callStack');
+            const txHashContainer = document.getElementById('txHashDisplay');
+            
+            // Show transaction hash in separate container
+            console.log('renderCallStack - txHash:', txHash, 'txHashContainer:', txHashContainer);
+            if (txHashContainer) {
+                if (txHash) {
+                    console.log('Displaying tx hash:', txHash);
+                    txHashContainer.style.display = 'block';
+                    const hashHtml = formatTxHash(txHash);
+                    console.log('Hash HTML:', hashHtml);
+                    txHashContainer.innerHTML = `<strong>Transaction:</strong> ${hashHtml}`;
+                } else {
+                    console.log('No tx hash, hiding container');
+                    txHashContainer.style.display = 'none';
+                }
+            } else {
+                console.error('txHashContainer element not found!');
+            }
+            
+            if (!container) return;
+            container.innerHTML = '';
+
+            callStack.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = `call-stack-item ${item.type}`;
+                div.setAttribute('data-depth', item.depth);
+                div.style.marginLeft = `${item.depth * 20}px`;
+
+                let content = `<span class="type ${item.type}">${item.type.toUpperCase()}</span>`;
+
+                if (item.type === 'call' && item.data.Call) {
+                    const call = item.data.Call;
+                    content += ` <span class="address">${formatAddress(call.to)}</span>`;
+                    content += `</div><div class="details" style="margin-top: 4px; margin-left: 20px; font-size: 11px; color: #666; line-height: 1.6;">`;
+                    content += `<div style="margin-bottom: 2px;"><strong>FROM:</strong> ${formatAddress(call.from)}</div>`;
+                    if (call.value && call.value !== '0' && call.value !== '0x0') {
+                        content += `<div style="margin-bottom: 2px;"><strong>VALUE:</strong> <span class="value">${formatValue(call.value)}</span></div>`;
+                    } else {
+                        content += `<div style="margin-bottom: 2px;"><strong>VALUE:</strong> 0 ETH</div>`;
+                    }
+                    if (call.gas) {
+                        const gasStr = call.gas.toString();
+                        const gasNum = gasStr.startsWith('0x') ? BigInt(gasStr).toString() : gasStr;
+                        content += `<div style="margin-bottom: 2px;"><strong>GAS:</strong> <span class="gas">${gasNum}</span></div>`;
+                    }
+                    if (call.type) {
+                        const typeStr = call.type.toString();
+                        const capitalizedType = typeStr.charAt(0).toUpperCase() + typeStr.slice(1).toLowerCase();
+                        content += `<div style="margin-bottom: 2px;"><strong>TYPE:</strong> ${capitalizedType}</div>`;
+                    }
+                    if (call.data) {
+                        let dataStr = call.data.toString();
+                        if (!dataStr.startsWith('0x')) {
+                            dataStr = '0x' + dataStr;
+                        }
+                        content += `<div style="margin-bottom: 2px; word-break: break-all; overflow-wrap: break-word;"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
+                    }
+                    content += `</div>`;
+                    
+                    // Find state changes that occurred between this call and its matching return
+                    // Look for the matching return at the same depth
+                    let matchingReturnIdx = -1;
+                    for (let i = index + 1; i < callStack.length; i++) {
+                        const nextItem = callStack[i];
+                        if ((nextItem.type === 'return' || nextItem.type === 'revert') && 
+                            nextItem.depth === item.depth) {
+                            matchingReturnIdx = i;
+                            break;
+                        }
+                        // If we hit a call at same or lower depth, we've gone too far
+                        if (nextItem.type === 'call' && nextItem.depth <= item.depth) {
+                            break;
+                        }
+                    }
+                    
+                    // Collect state changes between this call and its return
+                    const callStateChanges = stateChanges.filter(sc => {
+                        return sc.index > index && 
+                               (matchingReturnIdx === -1 || sc.index < matchingReturnIdx) &&
+                               sc.depth >= item.depth;
+                    });
+                    
+                    if (callStateChanges.length > 0) {
+                        content += `<div style="margin-top: 3px; margin-left: 20px; font-size: 11px; color: #666; line-height: 1.3; word-break: break-all; overflow-wrap: break-word;">`;
+                        callStateChanges.forEach(stateChange => {
+                            if (stateChange.data.Put) {
+                                const put = stateChange.data.Put;
+                                content += `  <span style="color: #4CAF50;">PUT</span> `;
+                                content += `${formatAddress(put.address)}<span style="word-break: break-all;">[</span><span style="font-family: monospace;">${formatWord(put.key)}</span>] `;
+                                content += `<span style="color: #999; font-family: monospace;">${formatWord(put.val)}</span> → `;
+                                content += `<span style="color: #2196F3; font-family: monospace;">${formatWord(put.new)}</span><br>`;
+                            } else if (stateChange.data.Get) {
+                                const get = stateChange.data.Get;
+                                content += `  <span style="color: #888;">GET</span> `;
+                                content += `${formatAddress(get.address)}<span style="word-break: break-all;">[</span><span style="font-family: monospace;">${formatWord(get.key)}</span>] = `;
+                                content += `<span style="color: #999; font-family: monospace;">${formatWord(get.val)}</span><br>`;
+                            }
+                        });
+                        content += `</div>`;
+                    }
+                } else if (item.type === 'return' && item.data.Return) {
+                    const ret = item.data.Return;
+                    content += ` <span style="color: ${ret.ok ? '#4CAF50' : '#f44336'}">${ret.ok ? 'OK' : 'FAILED'}</span>`;
+                    content += `</div><div class="details" style="margin-top: 4px; margin-left: 20px; font-size: 11px; color: #666; line-height: 1.6;">`;
+                    if (ret.data) {
+                        let dataStr = ret.data.toString();
+                        if (!dataStr.startsWith('0x')) {
+                            dataStr = '0x' + dataStr;
+                        }
+                        content += `<div style="margin-bottom: 2px; word-break: break-all; overflow-wrap: break-word;"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
+                    }
+                    if (ret.gas_used !== undefined) {
+                        content += `<div style="margin-bottom: 2px;"><strong>GAS:</strong> <span class="gas">${ret.gas_used}</span></div>`;
+                    }
+                    content += `</div>`;
+                } else if (item.type === 'revert' && item.data.Return) {
+                    const ret = item.data.Return;
+                    content += ` <span style="color: #f44336">REVERT</span>`;
+                    content += `</div><div class="details" style="margin-top: 4px; margin-left: 20px; font-size: 11px; color: #666; line-height: 1.6;">`;
+                    if (ret.data) {
+                        let dataStr = ret.data.toString();
+                        if (!dataStr.startsWith('0x')) {
+                            dataStr = '0x' + dataStr;
+                        }
+                        content += `<div style="margin-bottom: 2px; word-break: break-all; overflow-wrap: break-word;"><strong>DATA:</strong> <span style="font-family: monospace; color: #666;">${dataStr}</span></div>`;
+                    }
+                    if (ret.gas_used !== undefined) {
+                        content += `<div style="margin-bottom: 2px;"><strong>GAS:</strong> <span class="gas">${ret.gas_used}</span></div>`;
+                    }
+                    if (ret.error) {
+                        content += `<div style="margin-bottom: 2px;"><strong>ERROR:</strong> <span style="color: #f44336;">${ret.error}</span></div>`;
+                    }
+                    content += `</div>`;
+                } else if (item.type === 'state' && item.data.State) {
+                    const state = item.data.State;
+                    if (state.Put) {
+                        const put = state.Put;
+                        content = `<span style="word-break: break-all; overflow-wrap: break-word;"><span style="color: #666; font-size: 11px;">  </span>`;
+                        content += `<span style="color: #4CAF50;">PUT</span> `;
+                        content += `<span style="word-break: break-all; overflow-wrap: break-word;">${formatAddress(put.address)}<span style="word-break: break-all;">[</span>${formatWord(put.key)}]</span> `;
+                        content += `<span style="color: #999;">${formatWord(put.val)}</span> → `;
+                        content += `<span style="color: #2196F3;">${formatWord(put.new)}</span></span>`;
+                    } else if (state.Get) {
+                        const get = state.Get;
+                        content = `<span style="word-break: break-all; overflow-wrap: break-word;"><span style="color: #666; font-size: 11px;">  </span>`;
+                        content += `<span style="color: #666;">GET</span> `;
+                        content += `<span style="word-break: break-all; overflow-wrap: break-word;">${formatAddress(get.address)}<span style="word-break: break-all;">[</span>${formatWord(get.key)}]</span> = `;
+                        content += `<span style="color: #999;">${formatWord(get.val)}</span></span>`;
+                    }
+                }
+
+                div.innerHTML = content;
+                container.appendChild(div);
+            });
+        }
+
+        window.traceTransaction = async function() {
             const rpcUrl = document.getElementById('rpcUrl').value;
-            const resultDiv = document.getElementById('result');
-            const button = document.getElementById('fetchButton');
+            const blockNumber = document.getElementById('blockNumber').value;
+            const txIndex = document.getElementById('txIndex').value;
+            const statusDiv = document.getElementById('status');
+            const button = document.getElementById('traceButton');
 
             if (!rpcUrl) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = 'Please enter an RPC URL';
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Please enter an RPC URL';
+                statusDiv.style.display = 'block';
+                return;
+            }
+
+            if (!blockNumber) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Please enter a block number';
+                statusDiv.style.display = 'block';
+                return;
+            }
+
+            if (txIndex === '') {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Please enter a transaction index';
+                statusDiv.style.display = 'block';
                 return;
             }
 
             try {
                 button.disabled = true;
-                resultDiv.className = 'loading';
-                resultDiv.textContent = 'Fetching latest block...';
+                statusDiv.className = 'status loading';
+                statusDiv.textContent = `Tracing transaction at block ${blockNumber}, index ${txIndex}...`;
+                statusDiv.style.display = 'block';
+
+                // Reset state
+                callStack = [];
+                stateChanges = [];
+                txHash = null;
+                const callStackEl = document.getElementById('callStack');
+                const txHashEl = document.getElementById('txHashDisplay');
+                if (callStackEl) callStackEl.innerHTML = '';
+                if (txHashEl) {
+                    txHashEl.style.display = 'block';
+                    txHashEl.innerHTML = '<strong>Transaction:</strong> <span style="color: #999;">Loading...</span>';
+                }
 
                 await initWasm();
 
-                const result = await get_latest_block_number(rpcUrl);
+                // Get transaction hash first and display it immediately
+                const blockNumStr = String(Math.floor(Number(blockNumber)));
+                const txIdxStr = String(Math.floor(Number(txIndex)));
+                
+                if (isNaN(Number(blockNumber)) || isNaN(Number(txIndex))) {
+                    throw new Error('Invalid block number or transaction index');
+                }
 
-                resultDiv.className = '';
-                resultDiv.textContent = result;
+                try {
+                    const hash = await get_transaction_hash(rpcUrl, blockNumStr, txIdxStr);
+                    txHash = hash;
+                    const txHashContainer = document.getElementById('txHashDisplay');
+                    if (txHashContainer && txHash) {
+                        txHashContainer.style.display = 'block';
+                        txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
+                    }
+                } catch (e) {
+                    console.warn('Could not fetch transaction hash early:', e);
+                }
+
+                // Create callback function that will be called from Rust
+                const callback = (eventJson) => {
+                    try {
+                        // eventJson is a string containing JSON, parse it
+                        let event;
+                        if (typeof eventJson === 'string') {
+                            event = JSON.parse(eventJson);
+                        } else {
+                            event = eventJson;
+                        }
+                        console.log('Received event:', event);
+                        addCallStackItem(event);
+                    } catch (e) {
+                        console.error('Error parsing event:', e, eventJson);
+                    }
+                    return undefined; // Return undefined for void callback
+                };
+
+                // Call WASM function - pass as strings to avoid BigInt conversion issues
+                const resultHash = await trace_transaction(
+                    rpcUrl,
+                    blockNumStr,
+                    txIdxStr,
+                    callback
+                );
+
+                // Update transaction hash if not already set (should already be set above)
+                if (!txHash && resultHash) {
+                    txHash = resultHash;
+                    const txHashContainer = document.getElementById('txHashDisplay');
+                    if (txHashContainer && txHash) {
+                        txHashContainer.style.display = 'block';
+                        txHashContainer.innerHTML = `<strong>Transaction:</strong> ${formatTxHash(txHash)}`;
+                    }
+                }
+                
+                renderCallStack(); // Re-render to show the transaction hash
+
+                statusDiv.className = 'status';
+                statusDiv.textContent = `Successfully traced transaction! Found ${callStack.length} events.`;
             } catch (error) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = `Error: ${error}`;
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `Error: ${error}`;
+                console.error('Trace error:', error);
             } finally {
                 button.disabled = false;
             }
         };
 
-        window.getQuote = async function() {
-            const rpcUrl = document.getElementById('rpcUrl2').value;
-            const amount = document.getElementById('amount').value;
-            const resultDiv = document.getElementById('quoteResult');
-            const button = document.getElementById('quoteButton');
+        window.selectRandom = async function() {
+            const rpcUrl = document.getElementById('rpcUrl').value;
+            const statusDiv = document.getElementById('status');
+            const randomButton = document.getElementById('randomButton');
+            const blockNumberInput = document.getElementById('blockNumber');
+            const txIndexInput = document.getElementById('txIndex');
 
             if (!rpcUrl) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = 'Please enter an RPC URL';
-                resultDiv.style.display = 'block';
-                return;
-            }
-
-            if (!amount) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = 'Please enter an amount';
-                resultDiv.style.display = 'block';
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Please enter an RPC URL';
+                statusDiv.style.display = 'block';
                 return;
             }
 
             try {
-                button.disabled = true;
-                resultDiv.className = 'loading';
-                resultDiv.textContent = 'Fetching quote from Uniswap V3 Quoter... This may take a moment as it simulates the swap on-chain.';
-                resultDiv.style.display = 'block';
+                randomButton.disabled = true;
+                statusDiv.className = 'status loading';
+                statusDiv.textContent = 'Fetching latest block information...';
+                statusDiv.style.display = 'block';
 
                 await initWasm();
 
-                const result = await quote_weth_to_usdc(rpcUrl, amount);
+                // Get latest block info
+                const blockInfoJson = await get_latest_block_info(rpcUrl);
+                const blockInfo = JSON.parse(blockInfoJson);
+                // Ensure we convert to regular JavaScript numbers (integers)
+                const blockNumber = Math.floor(Number(blockInfo.blockNumber));
+                const txCount = Math.floor(Number(blockInfo.txCount));
 
-                resultDiv.className = '';
-                resultDiv.textContent = result;
+                if (txCount === 0) {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'Latest block has no transactions';
+                    return;
+                }
+
+                // Select random transaction index
+                const randomTxIndex = Math.floor(Math.random() * txCount);
+
+                // Fill in the form fields
+                blockNumberInput.value = blockNumber.toString();
+                txIndexInput.value = randomTxIndex.toString();
+
+                statusDiv.className = 'status';
+                statusDiv.textContent = `Selected block ${blockNumber}, transaction ${randomTxIndex} of ${txCount}`;
             } catch (error) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = `Error: ${error}`;
+                statusDiv.className = 'status error';
+                statusDiv.textContent = `Error: ${error}`;
+                console.error('Select random error:', error);
             } finally {
-                button.disabled = false;
+                randomButton.disabled = false;
             }
         };
 
-        window.setAmount = function(value) {
-            document.getElementById('amount').value = value;
-        };
 
-        window.getQuoteSolenoid = async function() {
-            const rpcUrl = document.getElementById('rpcUrl3').value;
-            const amount = document.getElementById('amount2').value;
-            const resultDiv = document.getElementById('solenoidResult');
-            const button = document.getElementById('solenoidButton');
-
-            if (!rpcUrl) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = 'Please enter an RPC URL';
-                resultDiv.style.display = 'block';
-                return;
+        // Handle RPC input and button
+        document.addEventListener('DOMContentLoaded', function() {
+            const rpcInput = document.getElementById('rpcUrl');
+            const rpcToggleButton = document.getElementById('rpcToggleButton');
+            const rpcContainer = document.getElementById('rpcUrlContainer');
+            const traceButton = document.getElementById('traceButton');
+            const randomButton = document.getElementById('randomButton');
+            
+            // Attach click handler to RPC toggle button
+            if (rpcToggleButton) {
+                rpcToggleButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('RPC toggle button clicked');
+                    if (rpcContainer) {
+                        const isHidden = rpcContainer.style.display === 'none' || rpcContainer.style.display === '';
+                        if (isHidden) {
+                            rpcContainer.style.display = 'block';
+                            setTimeout(() => {
+                                if (rpcInput) {
+                                    rpcInput.focus();
+                                    rpcInput.select();
+                                }
+                            }, 50);
+                        } else {
+                            rpcContainer.style.display = 'none';
+                        }
+                    }
+                });
+            } else {
+                console.error('rpcToggleButton not found');
             }
-
-            if (!amount) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = 'Please enter an amount';
-                resultDiv.style.display = 'block';
-                return;
+            
+            // Attach click handler to Trace Transaction button
+            if (traceButton) {
+                traceButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Trace button clicked');
+                    if (typeof window.traceTransaction === 'function') {
+                        window.traceTransaction().catch(err => {
+                            console.error('Error in traceTransaction:', err);
+                        });
+                    } else {
+                        console.error('window.traceTransaction is not a function:', typeof window.traceTransaction);
+                    }
+                });
+            } else {
+                console.error('traceButton not found');
             }
-
-            try {
-                button.disabled = true;
-                resultDiv.className = 'loading';
-                resultDiv.textContent = 'Running Solenoid EVM executor in WASM... This will take longer as it simulates the entire transaction locally, fetching state as needed.';
-                resultDiv.style.display = 'block';
-
-                await initWasm();
-
-                const result = await quote_weth_to_usdc_solenoid(rpcUrl, amount);
-
-                resultDiv.className = '';
-                resultDiv.textContent = result;
-            } catch (error) {
-                resultDiv.className = 'error';
-                resultDiv.textContent = `Error: ${error}`;
-                console.error('Solenoid execution error:', error);
-            } finally {
-                button.disabled = false;
+            
+            // Attach click handler to Select Random button
+            if (randomButton) {
+                randomButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Random button clicked');
+                    if (typeof window.selectRandom === 'function') {
+                        window.selectRandom().catch(err => {
+                            console.error('Error in selectRandom:', err);
+                        });
+                    } else {
+                        console.error('window.selectRandom is not a function:', typeof window.selectRandom);
+                    }
+                });
+            } else {
+                console.error('randomButton not found');
             }
-        };
-
-        window.setAmount2 = function(value) {
-            document.getElementById('amount2').value = value;
-        };
+            
+            console.log('Button handlers attached. Functions available:', {
+                traceTransaction: typeof window.traceTransaction,
+                selectRandom: typeof window.selectRandom
+            });
+            
+            // Handle Enter key in RPC input
+            if (rpcInput) {
+                rpcInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        this.blur();
+                        if (rpcContainer) {
+                            rpcContainer.style.display = 'none';
+                        }
+                    }
+                });
+            }
+        });
 
         // Initialize WASM on page load
         initWasm().catch(console.error);
     </script>
 </body>
 </html>
+

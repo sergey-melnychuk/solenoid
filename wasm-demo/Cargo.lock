@@ -4454,6 +4454,7 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "hex",
+ "js-sys",
  "serde-json-wasm",
  "serde-wasm-bindgen",
  "solenoid",

@@ -5,7 +5,7 @@ use solenoid::{
         word::Word,
     },
     eth::EthClient,
-    ext::Ext,
+    ext::{Ext, TxContext},
     solenoid::{Builder, Solenoid},
     tracer::{EventData, EventTracer},
 };
@@ -33,6 +33,62 @@ pub async fn get_latest_block_number(rpc_url: String) -> Result<String, JsValue>
         )),
         Err(e) => Err(JsValue::from_str(&format!("Error: {}", e))),
     }
+}
+
+#[wasm_bindgen]
+pub async fn get_transaction_hash(
+    rpc_url: String,
+    block_number: String,
+    tx_index: String,
+) -> Result<String, JsValue> {
+    // Parse block number and transaction index from strings
+    let block_number: u64 = block_number
+        .parse()
+        .map_err(|e| JsValue::from_str(&format!("Invalid block number: {}", e)))?;
+    let tx_index: usize = tx_index
+        .parse()
+        .map_err(|e| JsValue::from_str(&format!("Invalid transaction index: {}", e)))?;
+
+    // Initialize Ethereum client
+    let eth = EthClient::new(&rpc_url);
+
+    // Get full block
+    let block = eth
+        .get_full_block(Word::from(block_number))
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Failed to get block: {}", e)))?;
+
+    // Get transaction by index
+    let tx = block.transactions.get(tx_index)
+        .ok_or_else(|| JsValue::from_str(&format!("Transaction index {} out of range (block has {} transactions)", tx_index, block.transactions.len())))?;
+
+    let tx_hash = format!("{:064x}", tx.hash);
+    Ok(format!("0x{}", tx_hash))
+}
+
+#[wasm_bindgen]
+pub async fn get_latest_block_info(rpc_url: String) -> Result<String, JsValue> {
+    let client = EthClient::new(&rpc_url);
+
+    // Get latest block number
+    let (block_number, _) = client
+        .get_latest_block()
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Failed to get latest block: {}", e)))?;
+
+    // Get full block to get transaction count
+    let block = client
+        .get_full_block(Word::from(block_number))
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Failed to get block: {}", e)))?;
+
+    let tx_count = block.transactions.len();
+
+    // Return JSON with block number and transaction count
+    Ok(format!(
+        r#"{{"blockNumber":{},"txCount":{}}}"#,
+        block_number, tx_count
+    ))
 }
 
 #[wasm_bindgen]
@@ -272,4 +328,94 @@ fn calculate_price_from_sqrt(
     let raw_price = sqrt_price * sqrt_price;
     let decimal_adjustment = 10_f64.powi(decimals_token0 as i32 - decimals_token1 as i32);
     raw_price * decimal_adjustment
+}
+
+#[wasm_bindgen]
+pub async fn trace_transaction(
+    rpc_url: String,
+    block_number: String,
+    tx_index: String,
+    callback: &js_sys::Function,
+) -> Result<String, JsValue> {
+    // Parse block number and transaction index from strings
+    let block_number: u64 = block_number
+        .parse()
+        .map_err(|e| JsValue::from_str(&format!("Invalid block number: {}", e)))?;
+    let tx_index: usize = tx_index
+        .parse()
+        .map_err(|e| JsValue::from_str(&format!("Invalid transaction index: {}", e)))?;
+
+    web_sys::console::log_1(&format!("Debug - Tracing transaction at block {}, index {}", block_number, tx_index).into());
+
+    // Initialize Ethereum client
+    let eth = EthClient::new(&rpc_url);
+
+    // Get full block
+    let block = eth
+        .get_full_block(Word::from(block_number))
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Failed to get block: {}", e)))?;
+
+    web_sys::console::log_1(&format!("Debug - Got block with {} transactions", block.transactions.len()).into());
+
+    // Get transaction by index
+    let tx = block.transactions.get(tx_index)
+        .ok_or_else(|| JsValue::from_str(&format!("Transaction index {} out of range (block has {} transactions)", tx_index, block.transactions.len())))?;
+
+    let tx_hash = format!("{:064x}", tx.hash);
+    web_sys::console::log_1(&format!("Debug - Transaction hash: 0x{}, from={:?}, to={:?}, gas={:?}", tx_hash, tx.from, tx.to, tx.gas).into());
+
+    // Create Ext at block_number - 1
+    let mut ext = Ext::at_number(Word::from(block_number - 1), eth)
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Failed to create Ext: {}", e)))?;
+
+    // Set up transaction context
+    let tx_ctx = TxContext {
+        gas_price: tx.effective_gas_price(block.header.base_fee),
+        gas_max_fee: tx.gas_info.max_fee.unwrap_or_default(),
+        gas_max_priority_fee: tx.gas_info.max_priority_fee.unwrap_or_default(),
+        blob_max_fee: tx.gas_info.max_fee_per_blob.unwrap_or_default(),
+        blob_gas_used: (tx.blob_count() * 131072) as u64,
+        access_list: tx.access_list.clone(),
+    };
+    ext.reset(tx_ctx);
+
+    // Execute transaction with Solenoid
+    let sole = Solenoid::new();
+    let mut result = sole
+        .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
+        .with_header(block.header.clone())
+        .with_sender(tx.from)
+        .with_gas(tx.gas)
+        .with_value(tx.value)
+        .ready()
+        .apply(&mut ext)
+        .await
+        .map_err(|e| JsValue::from_str(&format!("Execution failed: {:?}", e)))?;
+
+    web_sys::console::log_1(&format!("Debug - Execution completed, got {} traces", result.tracer.peek().len()).into());
+
+    // Get all traces and filter for CALL, RETURN, and State events
+    let traces = result.tracer.take();
+    for event in traces {
+        let should_include = matches!(
+            event.data,
+            EventData::Call { .. } | EventData::Return { .. } | EventData::State(_)
+        );
+
+        if should_include {
+            // Serialize event to JSON
+            let json_str = serde_json_wasm::to_string(&event)
+                .map_err(|e| JsValue::from_str(&format!("Failed to serialize event: {}", e)))?;
+            
+            // Call JavaScript callback with the event JSON
+            let js_value = JsValue::from_str(&json_str);
+            let _ = callback.call1(&JsValue::NULL, &js_value);
+            // Note: We ignore callback errors to continue processing events
+        }
+    }
+
+    // Return transaction hash
+    Ok(format!("0x{}", tx_hash))
 }

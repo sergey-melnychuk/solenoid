@@ -1,4 +1,5 @@
 use eyre::OptionExt;
+#[cfg(feature = "tracing")]
 use tracing::Level;
 
 use crate::common::{
@@ -208,6 +209,7 @@ impl EthClient {
 
     async fn rpc(&self, value: serde_json::Value) -> eyre::Result<serde_json::Value> {
         let res = self.http.post(&self.url).json(&value).send().await?;
+        #[cfg(feature = "tracing")]
         if tracing::enabled!(Level::TRACE) {
             tracing::trace!(json=serde_json::to_string_pretty(&value).unwrap(), "HTTP request");
         }
@@ -222,6 +224,7 @@ impl EthClient {
         }
 
         let response: serde_json::Value = res.json().await?;
+        #[cfg(feature = "tracing")]
         if tracing::enabled!(Level::TRACE) {
             tracing::trace!(json=serde_json::to_string_pretty(&response).unwrap(), "HTTP response");
         }
