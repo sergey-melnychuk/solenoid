@@ -262,7 +262,7 @@ impl Runner {
         if !self.call.to.is_zero() {
             let (tracer, ret) = exe.execute(&code, &self.call, &mut evm, ext).await?;
             if evm.reverted {
-                evm.revert(ext).await?;
+                // evm.revert(ext).await?; // do not re-revert
                 // Re-increment nonce (nonce is never reverted for valid transactions)
                 ext.account_mut(&self.call.from).nonce += Word::one();
             }
@@ -328,6 +328,7 @@ impl Runner {
                 let current_coinbase_balance = ext.account_mut(&coinbase).value;
                 let new_coinbase_balance = current_coinbase_balance + priority_fee_total;
                 ext.account_mut(&coinbase).value = new_coinbase_balance;
+                evm.touches.push(AccountTouch::FeePay(coinbase, current_coinbase_balance, new_coinbase_balance));
                 // println!("[SOLE] COINBASE (GAS-C): {new_coinbase_balance:#x} *{priority_fee_total:#x}");
             }
         }
@@ -335,17 +336,30 @@ impl Runner {
         if evm.reverted {
             evm.revert(ext).await?;
             // Re-increment nonce (nonce is never reverted even for failed tx)
-            ext.account_mut(&self.call.from).nonce += Word::one();
+            let nonce = ext.account_mut(&self.call.from).nonce;
+            ext.account_mut(&self.call.from).nonce = nonce + Word::one();
+            evm.touches.push(AccountTouch::SetNonce(self.call.from, nonce.as_u64(), nonce.as_u64() + 1));
         } else {
             ext.pull(&created).await?;
             ext.pull(&self.call.from).await?;
 
-            ext.account_mut(&self.call.from).nonce += Word::one();
+            let nonce = ext.account_mut(&self.call.from).nonce;
+            ext.account_mut(&self.call.from).nonce = nonce + Word::one();
+            evm.touches.push(AccountTouch::SetNonce(self.call.from, nonce.as_u64(), nonce.as_u64() + 1));
 
             let hash = Word::from_bytes(&keccak256(&ret));
             *ext.code_mut(&created) = (ret.clone(), hash);
             ext.account_mut(&created).nonce = Word::one();
+            // TODO: check for transferred balance into newly created contract
+            evm.touches.push(AccountTouch::Create(created, Word::zero(), Word::one(), ret.clone(), hash));
         }
+
+        // Deduct gas fee from sender
+        let gas_fee = Word::from(gas_final) * ext.tx_ctx.gas_price;
+        let sender_balance = ext.balance(&self.call.from).await?;
+        let new_sender_balance = sender_balance.saturating_sub(gas_fee);
+        ext.account_mut(&self.call.from).value = new_sender_balance;
+        evm.touches.push(AccountTouch::FeePay(self.call.from, sender_balance, new_sender_balance));
 
         Ok(CallResult {
             evm,
