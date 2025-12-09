@@ -59,26 +59,27 @@ async fn test_deploy() -> eyre::Result<()> {
         vec![
             AccountTouch::WarmUp(from),
             AccountTouch::SetNonce(from, 0, 1),
-            AccountTouch::GetState(created1, Word::zero(), Word::zero(), false),
-            AccountTouch::SetState(created1, Word::zero(), Word::zero(), (&from).into(), true,),
+            AccountTouch::GetState(created1, word("0x0"), word("0x0"), false),
+            AccountTouch::SetState(created1, word("0x0"), word("0x0"), (&from).into(), true,),
             AccountTouch::WarmUp(created2),
             AccountTouch::SetNonce(created1, 0, 1),
             AccountTouch::Create(
                 created2,
-                Word::zero(),
-                Word::one(),
+                word("0x0"),
+                word("0x1"),
                 code,
                 Word::from_bytes(&hash),
             ),
-            AccountTouch::SetState(created2, Word::zero(), Word::zero(), word("0x42"), false),
-            AccountTouch::GetState(created1, Word::one(), Word::zero(), false),
+            AccountTouch::SetState(created2, word("0x0"), word("0x0"), word("0x42"), false),
+            AccountTouch::GetState(created1, word("0x1"), word("0x0"), false),
             AccountTouch::SetState(
                 created1,
-                Word::one(),
-                Word::zero(),
+                word("0x1"),
+                word("0x0"),
                 (&created2).into(),
                 true,
             ),
+            AccountTouch::FeePay(from, word("0x2e95cd937f107a2"), word("0x2e95cd937f107a2")),
         ]
     );
     Ok(())
