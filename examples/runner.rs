@@ -361,7 +361,7 @@ async fn main() -> eyre::Result<()> {
                     !sole_result.rev,
                     ret_diff,
                     gas_diff,
-                    sole_traces.len(),
+                    if traces_ok { "match" } else { "false" },
                     state_ok,
                 );
             }

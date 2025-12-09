@@ -1,5 +1,6 @@
 #!/bin/sh
 rm *.log
+rm *.state.json
 
 # watch -n 10 'grep "###" etc/*.txt'
 
