@@ -6,7 +6,9 @@ use alloy_rpc_types::{Header, Transaction as Tx};
 use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
 use revm::context::ContextTr;
-use revm::inspector::Inspector;
+use revm::inspector::{Inspector, JournalExt};
+use revm::primitives::{StorageKey, StorageValue};
+use revm::interpreter::interpreter_types::InputsTr;
 use revm::interpreter::{
     interpreter_types::{Jumps, MemoryTr, StackTr},
     CallInputs, CallOutcome, CreateInputs, CreateOutcome, Interpreter,
@@ -194,6 +196,8 @@ pub struct TxTrace {
 
     #[serde(skip)]
     aux: Aux,
+    #[serde(skip)]
+    sstore: Sstore,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -203,6 +207,12 @@ pub struct Aux {
     gas: i64,
     refund: i64,
     depth: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Sstore {
+    key: StorageKey,
+    val: StorageValue,
 }
 
 impl TxTrace {
@@ -218,6 +228,7 @@ impl TxTrace {
             hash,
             traces: Vec::new(),
             aux: Aux::default(),
+            sstore: Sstore::default(),
         }
     }
 
@@ -230,7 +241,7 @@ impl TxTrace {
 
 impl<CTX, INTR> Inspector<CTX, INTR> for TxTrace
 where
-    CTX: ContextTr,
+    CTX: ContextTr<Journal: JournalExt>,
     INTR: InterpreterTypes,
 {
     fn step(&mut self, interp: &mut Interpreter<INTR>, _context: &mut CTX) {
@@ -238,9 +249,19 @@ where
         self.aux.opcode = interp.bytecode.opcode();
         self.aux.gas = interp.gas.remaining() as i64;
         self.aux.refund = interp.gas.refunded();
+
+        let stack = interp.stack.data();
+        if self.aux.opcode == 0x55 && stack.len() >= 2 {
+            // SSTORE: stack has [value, key] (top of stack is value, second is key)
+            let key = stack[stack.len() - 1];
+            let val = stack[stack.len() - 2];
+            self.sstore.key = key.into();
+            self.sstore.val = val.into();
+
+        }
     }
 
-    fn step_end(&mut self, interp: &mut Interpreter<INTR>, _context: &mut CTX) {
+    fn step_end(&mut self, interp: &mut Interpreter<INTR>, context: &mut CTX) {
         let stack = interp.stack.data().to_vec();
         let memory = interp.memory.slice(0..interp.memory.size()).to_vec();
 
@@ -249,6 +270,34 @@ where
 
         let gas_cost = self.aux.gas - interp.gas.remaining() as i64;
         self.aux.gas = interp.gas.remaining() as i64;
+
+        // Check storage warm/cold status for SSTORE (0x55)
+        let mut debug_value = json!({
+            "gas_left": interp.gas.remaining(),
+            "evm.gas.back": interp.gas.refunded()
+        });
+
+        // Check storage warm/cold status for SSTORE (0x55) if JournalExt is available
+        if self.aux.opcode == 0x55 {            
+            // Get the target address from the interpreter
+            let target_address = <INTR::Input as InputsTr>::target_address(&interp.input);
+            let journal = context.journal();
+            use revm::inspector::JournalExt as _;
+            let evm_state = journal.evm_state();
+            if let Some(account) = evm_state.get(&target_address) {
+                if let Some(slot) = account.storage.get(&self.sstore.key) {
+                    let is_cold = slot.is_cold_transaction_id(account.transaction_id);
+                    debug_value["SSTORE"] = json!({
+                        "is_warm": !is_cold,
+                        "original": format!("0x{:x}", slot.original_value),
+                        "address": format!("{:?}", target_address),
+                        "key": format!("0x{:x}", self.sstore.key),
+                        "val": format!("0x{:x}", slot.present_value),
+                        "new": format!("0x{:x}", self.sstore.val),
+                    });
+                }
+            }
+        }
 
         self.traces.push(OpcodeTrace {
             pc: self.aux.pc,
@@ -267,10 +316,7 @@ where
                 .map(|chunk| hex::encode(chunk))
                 .collect(),
             depth: self.aux.depth,
-            debug: DebugInfo::new(json!({
-                "gas_left": interp.gas.remaining(),
-                "evm.gas.back": interp.gas.refunded()
-            })),
+            debug: DebugInfo::new(debug_value),
         });
     }
 
