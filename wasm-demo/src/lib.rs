@@ -295,6 +295,7 @@ pub async fn quote_weth_to_usdc_solenoid(
                 | EventData::Return { .. }
                 | EventData::State(_)
                 | EventData::Account(_)
+                | EventData::Halt(_)
         );
         if keep {
             let json = serde_json_wasm::to_string(&event).unwrap();
@@ -420,7 +421,7 @@ pub async fn trace_transaction(
 
     web_sys::console::log_1(&format!("Debug - Execution completed, got {} traces", result.tracer.peek().len()).into());
 
-    // Get all traces and filter for CALL, RETURN, State, Account, and Fee events
+    // Get all traces and filter for CALL, RETURN, State, Account, Fee, and Halt events
     let traces = result.tracer.take();
     for event in traces {
         let should_include = matches!(
@@ -430,6 +431,7 @@ pub async fn trace_transaction(
                 | EventData::State(_)
                 | EventData::Account(_)
                 | EventData::Fee { .. }
+                | EventData::Halt(_)
         );
 
         if should_include {
