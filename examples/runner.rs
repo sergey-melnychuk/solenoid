@@ -333,11 +333,13 @@ async fn main() -> eyre::Result<()> {
                 let state_accounts = revm_result.state.len();
                 let state_keys = revm_result.state.iter()
                     .map(|(_, value)| value.as_object()
+                        .and_then(|object| object.get("state"))
+                        .and_then(|v| v.as_object())
                         .map(|object| object.len())
                         .unwrap_or_default())
                     .sum::<usize>();
                 println!(
-                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}\tSTATE={}+{}",
+                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={:5<}\tSTATE={}+{}",
                     !revm_result.rev,
                     ret,
                     revm_result.gas,
@@ -356,13 +358,25 @@ async fn main() -> eyre::Result<()> {
                 } else {
                     format!("{:+5}", sole_result.gas - revm_result.gas)
                 };
+                let state_diff = if state_ok {
+                    "match".to_string()
+                } else {
+                    let state_accounts = sole_result.state.len();
+                    let state_keys = sole_result.state.iter()
+                        .map(|(_, value)| value.get("state")
+                            .and_then(|v| v.as_object())
+                            .map(|object| object.len())
+                            .unwrap_or_default())
+                        .sum::<usize>();
+                    format!("{}+{}", state_accounts, state_keys)
+                };
                 println!(
                     "sole \tOK={} \tRET={}\tGAS={}\tTRACES={}\tSTATE={}",
                     !sole_result.rev,
                     ret_diff,
                     gas_diff,
                     if traces_ok { "match" } else { "false" },
-                    state_ok,
+                    state_diff,
                 );
             }
             Err(e) => {
