@@ -91,8 +91,16 @@ fn is_zero_i64(x: &i64) -> bool {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum HaltReason {
+    InvalidOpcode,
+    OutOfGas,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum EventData {
     Tag(EventTag),
+
+    Halt(HaltReason),
 
     OpCode {
         pc: usize,

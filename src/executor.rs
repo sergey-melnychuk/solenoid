@@ -14,7 +14,7 @@ use crate::{
     decoder::{Bytecode, Decoder, Instruction},
     ext::Ext,
     precompiles,
-    tracer::{AccountEvent, CallType, Event, EventData, EventTracer, HashAlg, StateEvent},
+    tracer::{AccountEvent, CallType, Event, EventData, EventTracer, HaltReason, HashAlg, StateEvent},
 };
 
 #[derive(Error, Debug)]
@@ -695,6 +695,15 @@ impl<T: EventTracer> Executor<T> {
                         evm.gas.sub(evm.gas.remaining()).expect("must succeed");
                         evm.stopped = true;
                         evm.reverted = true;
+                        self.tracer.push(Event {
+                            depth: ctx.depth,
+                            reverted: true,
+                            data: if instruction.opcode.code == 0xfe {
+                                EventData::Halt(HaltReason::InvalidOpcode)
+                            } else {
+                                EventData::Halt(HaltReason::OutOfGas)
+                            },
+                        });
                         return (self.tracer, vec![]);
                     }
                     if evm.gas(cost).is_err() {
@@ -702,6 +711,11 @@ impl<T: EventTracer> Executor<T> {
                         // eprintln!("OUT OF GAS: depth={} evm.pc={} op={}", ctx.depth, evm.pc, instruction.opcode.name());
                         evm.stopped = true;
                         evm.reverted = true;
+                        self.tracer.push(Event {
+                            depth: ctx.depth,
+                            reverted: true,
+                            data: EventData::Halt(HaltReason::OutOfGas),
+                        });
                         return (self.tracer, vec![]);
                     }
                     if instruction.opcode.code == 0xff {
