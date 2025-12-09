@@ -2,7 +2,7 @@ use solenoid::{
     common::{
         address::{Address, addr},
         call::Call,
-        word::Word,
+        word::{Word, word},
     },
     decoder::{Bytecode, Decoder},
     eth::EthClient,
@@ -95,8 +95,10 @@ async fn test_get() -> eyre::Result<()> {
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
             AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::GetCode(to, word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
-            AccountTouch::GetState(to, Word::zero(), Word::zero(), false),
+            AccountTouch::GetState(to, word("0x0"), word("0x0"), false),
+            AccountTouch::FeePay(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), word("0xb811cc2d00"), word("0xb811cc2d00")),
         ]
     );
     Ok(())
@@ -126,8 +128,10 @@ async fn test_get_with_override() -> eyre::Result<()> {
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
             AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::GetCode(to, word("0x0"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
-            AccountTouch::GetState(to, Word::zero(), Word::one(), false),
+            AccountTouch::GetState(to, word("0x0"), word("0x1"), false),
+            AccountTouch::FeePay(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), word("0xb811cc2d00"), word("0xb811cc2d00")),
         ]
     );
     Ok(())
@@ -148,8 +152,10 @@ async fn test_dec() -> eyre::Result<()> {
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
             AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::GetCode(to, word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
-            AccountTouch::GetState(to, Word::zero(), Word::zero(), false),
+            AccountTouch::GetState(to, word("0x0"), word("0x0"), false),
+            AccountTouch::FeePay(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), word("0xb811cc2d00"), word("0xb811cc2d00")),
         ]
     );
     Ok(())
@@ -176,9 +182,11 @@ async fn test_dec_with_override() -> eyre::Result<()> {
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
             AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::GetCode(to, word("0x0"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
-            AccountTouch::GetState(to, Word::zero(), Word::one(), false),
-            AccountTouch::SetState(to, Word::zero(), Word::one(), Word::zero(), true),
+            AccountTouch::GetState(to, word("0x0"), word("0x1"), false),
+            AccountTouch::SetState(to, word("0x0"), word("0x1"), word("0x0"), true),
+            AccountTouch::FeePay(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), word("0xb811cc2d00"), word("0xb811cc2d00")),
         ]
     );
     Ok(())
@@ -196,9 +204,11 @@ async fn test_inc() -> eyre::Result<()> {
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
             AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::GetCode(to, word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
-            AccountTouch::GetState(to, Word::zero(), Word::zero(), false),
-            AccountTouch::SetState(to, Word::zero(), Word::zero(), Word::one(), true),
+            AccountTouch::GetState(to, word("0x0"), word("0x0"), false),
+            AccountTouch::SetState(to, word("0x0"), word("0x0"), word("0x1"), true),
+            AccountTouch::FeePay(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), word("0xb811cc2d00"), word("0xb811cc2d00")),
         ]
     );
     Ok(())
@@ -219,8 +229,10 @@ async fn test_set() -> eyre::Result<()> {
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
             AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::GetCode(to, word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
-            AccountTouch::SetState(to, Word::zero(), Word::zero(), val, false),
+            AccountTouch::SetState(to, word("0x0"), word("0x0"), val, false),
+            AccountTouch::FeePay(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), word("0xb811cc2d00"), word("0xb811cc2d00")),
         ]
     );
     assert_eq!(evm.gas.used, 22309);
