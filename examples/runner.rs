@@ -39,7 +39,7 @@ async fn as_tx_result(gas_costs: i64, gas_floor: i64, result: &CallResult<Loggin
 
 async fn as_state(result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Result<BTreeMap<String, Value>> {
     let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
-    let touched = result.evm.touches
+    let mut touched = result.evm.touches
         .iter()
         .filter_map(|touch| match touch {
             // solenoid::executor::AccountTouch::WarmUp(address) => {
@@ -78,6 +78,21 @@ async fn as_state(result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Re
             _ => None,
         })
         .collect::<BTreeSet<_>>();
+
+    // Include addresses from access list (REVM includes these in state diff)
+    for item in &ext.tx_ctx.access_list {
+        touched.insert(item.address);
+        for key in &item.storage_keys {
+            kv.entry(item.address).or_default().insert(*key);
+        }
+    }
+
+    // Include storage keys from accessed_storage for touched addresses
+    for (addr, key) in &ext.accessed_storage {
+        if touched.contains(addr) {
+            kv.entry(*addr).or_default().insert(*key);
+        }
+    }
 
     let mut ret: BTreeMap<String, serde_json::Value> = BTreeMap::new();
     for address in touched.into_iter() {
@@ -371,7 +386,7 @@ async fn main() -> eyre::Result<()> {
                     format!("{}+{}", state_accounts, state_keys)
                 };
                 println!(
-                    "sole \tOK={} \tRET={}\tGAS={}\tTRACES={}\tSTATE={}",
+                    "sole \tOK={} \tRET={}\tGAS={}\tTRACES={:5<}\tSTATE={}",
                     !sole_result.rev,
                     ret_diff,
                     gas_diff,
@@ -385,7 +400,7 @@ async fn main() -> eyre::Result<()> {
                     txs[idx].info().hash.unwrap_or_default()
                 );
                 println!(
-                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={}",
+                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={:5<}",
                     !revm_result.rev,
                     true,
                     revm_result.gas,

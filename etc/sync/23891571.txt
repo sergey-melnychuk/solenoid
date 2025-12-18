@@ -2,7 +2,7 @@
 📦 Fetched block number: 23891571 [422 txs]
 ---
 ### 23891571 38 hash=0x8792f21d230131a3f5c57add8950e966041f2c746b9ba9669ebca0a90c206d1f
-REVM 	OK=false 	RET=<4> 	GAS=534715	TRACES=24966
-sole 	OK=false 	RET=match	GAS=match	TRACES=24994
+REVM 	OK=false 	RET=<4> 	GAS=534715	TRACES=24966	STATE=18+62
+sole 	OK=false 	RET=match	GAS=match	TRACES=false	STATE=18+61
 
 (total: 422, matched: 421, invalid: 1)

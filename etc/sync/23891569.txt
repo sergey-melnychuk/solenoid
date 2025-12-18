@@ -1,4 +1,8 @@
 📦 Fetched block number: 23891569 [379 txs]
 📦 Fetched block number: 23891569 [379 txs]
+---
+### 23891569 82 hash=0x677a900a2a7d6e616fc3148c569314b82e9c0fea24f9f5fcd7eb55958c57cdd0
+REVM 	OK=false 	RET=empty	GAS=332913	TRACES=27740	STATE=12+43
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=12+42
 
-(total: 379, matched: 379, invalid: 0)
+(total: 379, matched: 378, invalid: 1)

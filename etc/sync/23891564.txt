@@ -1,4 +1,72 @@
 📦 Fetched block number: 23891564 [1750 txs]
 📦 Fetched block number: 23891564 [1750 txs]
+---
+### 23891564 605 hash=0x9caaede3a547b0437ff7526496ea897c7c7c515e90fbb55a9c2a980b65897e9e
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=38	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 606 hash=0x636608a798e40d4f194a52c31656936589bc50ed8ca65c94ccecb23ec69f715d
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=10	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891564 607 hash=0x5ec2e682a6328ad89bb809e1a827f8d7bf17591c6307bafe8b46652a27dc1e6b
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=38	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 608 hash=0x5e700fae7ae3d7f80505795569896298cc97a711d295764041042cedcd901165
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=10	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891564 609 hash=0x5dfcb50f8da15534344cd7b3800d7b4c3088eebef26547287c9b20ca35e0c46f
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 610 hash=0x59fe14b5f0cd0147ecbbfbafd1dc757a951ee713fa7b496876ca21d54d7343b7
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 611 hash=0x4a3664060e6aef7f6f40dd955db9ec597ea7f5af5abdb0cb4415ca35902bf6f2
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 612 hash=0x46ee7e79aa054ceedb4ae4bda47fea874c422c19613f39114cbac481f01edc41
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 613 hash=0x3f672482ffd257c30056db33cd774de7bc410857ecd0a354625297cbf1193e5c
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 614 hash=0x3dc0ec33a95aa82f9abca51b6e37372d38d7e9dccb8839cec81808de7811fadb
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 615 hash=0x3b45cc80ebf6fa6d90249a4dc0257263b4fe770d615f60e219004c3a405ca34e
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 616 hash=0x356345d9ba1863976ef1ce8b213b2c78c13550f5e455750e9baa327fff1854cc
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 617 hash=0x26a0a9ccec50befe5a1b39612b04f7c10587777543bbbac428ab7dca38d77ee7
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 618 hash=0x1e456a4d35c71b5f6e8d0ffc7acf8e15f4d4a6975e023ac181804ba2fef045a6
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 619 hash=0x1967d1beff2eda3ce2b66325378d85fc8b0faa189836a915d87c6569fae75921
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 620 hash=0x14125bec2089e88baeafd224d97cf5d61407ad9150390bb4357c0c8456f4a725
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
+---
+### 23891564 621 hash=0x0a97912e4076a28d5b0d1c691020418825889a0819ec57c08fb976dc57a171a0
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=19	STATE=4+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+1
 
-(total: 1750, matched: 1750, invalid: 0)
+(total: 1750, matched: 1733, invalid: 17)

@@ -165,7 +165,7 @@ async fn main() -> eyre::Result<()> {
 
         use std::collections::{BTreeMap, BTreeSet};
         let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
-        let touched = result.evm.touches
+        let mut touched = result.evm.touches
             .iter()
             .filter_map(|touch| match touch {
                 // solenoid::executor::AccountTouch::WarmUp(address) => {
@@ -204,6 +204,21 @@ async fn main() -> eyre::Result<()> {
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
+
+        // Include addresses from access list (REVM includes these in state diff)
+        for item in &ext.tx_ctx.access_list {
+            touched.insert(item.address);
+            for key in &item.storage_keys {
+                kv.entry(item.address).or_default().insert(*key);
+            }
+        }
+
+        // Include storage keys from accessed_storage for touched addresses
+        for (addr, key) in &ext.accessed_storage {
+            if touched.contains(addr) {
+                kv.entry(*addr).or_default().insert(*key);
+            }
+        }
 
         let mut ret: BTreeMap<Address, serde_json::Value> = BTreeMap::new();
         for address in touched.into_iter() {

@@ -1,4 +1,8 @@
 📦 Fetched block number: 23640313 [180 txs]
 📦 Fetched block number: 23640313 [180 txs]
+---
+### 23640313 83 hash=0x382aaf01c5e08a17046ec314238894b9fb2238384b1b0b224a96d2099361f687
+REVM 	OK=true 	RET=empty	GAS=5926746	TRACES=72638	STATE=15+100
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=14+100
 
-(total: 180, matched: 180, invalid: 0)
+(total: 180, matched: 179, invalid: 1)

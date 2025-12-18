@@ -1,4 +1,8 @@
 📦 Fetched block number: 23884138 [772 txs]
 📦 Fetched block number: 23884138 [772 txs]
+---
+### 23884138 134 hash=0x06c9a32d0471a64da29b07221340491884d79d4f37956dcc5c6b5bbbc17ace3c
+REVM 	OK=true 	RET=empty	GAS=601660	TRACES=45238	STATE=25+71
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=25+69
 
-(total: 772, matched: 772, invalid: 0)
+(total: 772, matched: 771, invalid: 1)
