@@ -1,4 +1,8 @@
 📦 Fetched block number: 23728670 [117 txs]
 📦 Fetched block number: 23728670 [117 txs]
+---
+### 23728670 70 hash=0x757685017fa3f5802e7dd4856fbd6c584ca4c53bd689a44cfb138ed9a8045eed
+REVM 	OK=false 	RET=<100>	GAS=474679	TRACES=32915	STATE=15+41
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=15+40
 
-(total: 117, matched: 117, invalid: 0)
+(total: 117, matched: 116, invalid: 1)

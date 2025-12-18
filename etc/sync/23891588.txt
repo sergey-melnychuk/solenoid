@@ -1,4 +1,40 @@
 📦 Fetched block number: 23891588 [596 txs]
 📦 Fetched block number: 23891588 [596 txs]
+---
+### 23891588 400 hash=0xa367bc2cf171ca11db3866ce141867d5c4d57405e8270457242b949842af7e4c
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=161	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 401 hash=0x068acca6ad7daef0064d5c37703d6ea2d1bf744bdf63384eefad26c6baf90876
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=62	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 402 hash=0xde0aa4e4c29b2f7fa4b99675a098d3e91cb0a8b8e0ff559fe0e63cc2538489be
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=62	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 403 hash=0x1a9007a6f808c8e6da2fe614a20667624b22fb1b868861fde1c6362f05d50e93
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=161	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 404 hash=0x1a0cf9a5ffe06c41566c662620cd9ddd8362b7f725709b04d0a79329c0aadb3f
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=62	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 405 hash=0x623635e9599f694df28e049055d3c7afbc7b21bc9bffc414521f30c11226cf8d
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=62	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 406 hash=0x8c359e4df35142469a7a6251891c528036f79233af942ebfe678666e0d128fb3
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=161	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 407 hash=0xdb334b8bd7841fef312d2967bf41fda8e55c5a5c83b947e013b2f385558dda4e
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=161	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
+---
+### 23891588 408 hash=0x664eaaec4afc621f44625ef9a5528ed4cb1705e92645398b89429099b2af4d96
+REVM 	OK=false 	RET=empty	GAS=23000	TRACES=62	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
 
-(total: 596, matched: 596, invalid: 0)
+(total: 596, matched: 587, invalid: 9)

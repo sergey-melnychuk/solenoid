@@ -1,4 +1,8 @@
 📦 Fetched block number: 23891566 [402 txs]
 📦 Fetched block number: 23891566 [402 txs]
+---
+### 23891566 334 hash=0xcbf92262c4540a00a969367031ba2b5727f9359e7310e2d88a95e7bf250aa71d
+REVM 	OK=false 	RET=empty	GAS=332913	TRACES=27740	STATE=12+43
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=12+42
 
-(total: 402, matched: 402, invalid: 0)
+(total: 402, matched: 401, invalid: 1)

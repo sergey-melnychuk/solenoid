@@ -1,4 +1,8 @@
 📦 Fetched block number: 23820668 [243 txs]
 📦 Fetched block number: 23820668 [243 txs]
+---
+### 23820668 212 hash=0xf33c1e4741cb82a0b73436eb72d8c797cfadb9d25df1e115b76f2c43013be5e7
+REVM 	OK=false 	RET=<100>	GAS=344104	TRACES=9171	STATE=14+50
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=14+45
 
-(total: 243, matched: 243, invalid: 0)
+(total: 243, matched: 242, invalid: 1)

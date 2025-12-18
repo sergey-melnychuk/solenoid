@@ -1,4 +1,8 @@
 📦 Fetched block number: 23635581 [264 txs]
 📦 Fetched block number: 23635581 [264 txs]
+---
+### 23635581 134 hash=0x1bca9ddbb9ebeb06b6d25aadd6fddaa30a17a0358adefb09bbdae277835383f8
+REVM 	OK=false 	RET=<4> 	GAS=1999111	TRACES=121581	STATE=64+209
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=64+199
 
-(total: 264, matched: 264, invalid: 0)
+(total: 264, matched: 263, invalid: 1)

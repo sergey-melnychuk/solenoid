@@ -1,4 +1,8 @@
 📦 Fetched block number: 23891568 [1520 txs]
 📦 Fetched block number: 23891568 [1520 txs]
+---
+### 23891568 559 hash=0x6c4aa5e609f098206285e5fd0dbc598be258f6245bb565b09827c70f8c243d7c
+REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
 
-(total: 1520, matched: 1520, invalid: 0)
+(total: 1520, matched: 1519, invalid: 1)

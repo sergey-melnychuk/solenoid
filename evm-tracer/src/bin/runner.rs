@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
         let now = Instant::now();
         let (result, traces) = f(tx)?;
         let ms = now.elapsed().as_millis();
-        eprintln!("TX \tindex={idx} \tOK={} \tGAS={} \tTRACES={} \tms={ms}", 
+        eprintln!("TX \tindex={idx} \tOK={} \tGAS={} \tTRACES={:5<} \tms={ms}", 
             !result.rev, 
             result.gas,
             traces.len());

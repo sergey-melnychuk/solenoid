@@ -1,4 +1,8 @@
 📦 Fetched block number: 23728678 [111 txs]
 📦 Fetched block number: 23728678 [111 txs]
+---
+### 23728678 103 hash=0x9de3cc0b79c3ef9277b96553acf8946475cd1a795e9151dea0249a013fd9a357
+REVM 	OK=false 	RET=<4> 	GAS=291390	TRACES=12099	STATE=12+32
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=12+31
 
-(total: 111, matched: 111, invalid: 0)
+(total: 111, matched: 110, invalid: 1)

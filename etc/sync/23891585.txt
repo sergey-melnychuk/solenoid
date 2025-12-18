@@ -1,4 +1,40 @@
 📦 Fetched block number: 23891585 [321 txs]
 📦 Fetched block number: 23891585 [321 txs]
+---
+### 23891585 312 hash=0x3b2f0ecc35a429b89bd2c752a4b4ba1aa9274cd3773b5899a36995def33f8c64
+REVM 	OK=true 	RET=empty	GAS=256491	TRACES=1686	STATE=8+9
+sole 	OK=false 	RET=<4>	GAS=-74280	TRACES=false	STATE=9+5
+---
+### 23891585 313 hash=0x0458a24cc6e3c9fff900c7c8c55276518107d0bd71001310783f2f55f432453e
+REVM 	OK=true 	RET=empty	GAS=21000	TRACES=0	STATE=3+0
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=3+0
+---
+### 23891585 314 hash=0x0196538c8759669b6863f5a8d6502d8d7afca38b81a2c466e601a80f33c318a5
+REVM 	OK=true 	RET=<224>	GAS=134518	TRACES=10401	STATE=6+13
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=6+13
+---
+### 23891585 315 hash=0xc08685d95431666dbddb94d903764be2b0c1ec469a7c93d05be45748cfc345dc
+REVM 	OK=true 	RET=empty	GAS=59740	TRACES=1339	STATE=3+15
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=3+15
+---
+### 23891585 316 hash=0x23440209cd996c86142e4829bcb4b6bacad3be8353ed5ab2396f1ccc56939f99
+REVM 	OK=true 	RET=empty	GAS=63197	TRACES=571	STATE=3+7
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=3+7
+---
+### 23891585 317 hash=0xb4d79dd3917cb4d87487160ee0f0d210caac17cdd9651dbea66a9d3850087a38
+REVM 	OK=true 	RET=empty	GAS=69343	TRACES=2314	STATE=5+8
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=5+8
+---
+### 23891585 318 hash=0x43040ffbef0f7766df350974e3e394a057193eaeabf3f35de9cc696b7b12d518
+REVM 	OK=true 	RET=empty	GAS=194588	TRACES=3754	STATE=8+13
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=8+13
+---
+### 23891585 319 hash=0x8480b30677d7c99b25d80a8c79b05bf0033176f20d5a0545a962118d4e0da48a
+REVM 	OK=true 	RET=<32>	GAS=40360	TRACES=601	STATE=4+5
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=4+5
+---
+### 23891585 320 hash=0x576daf5c4a6f7295990d2c14759e2cca6786eab2443e083a72a2fb2ac006bb3d
+REVM 	OK=true 	RET=empty	GAS=21000	TRACES=0	STATE=2+0
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=2+0
 
-(total: 321, matched: 321, invalid: 0)
+(total: 321, matched: 312, invalid: 9)

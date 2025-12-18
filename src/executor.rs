@@ -82,6 +82,12 @@ impl AccountTouch {
     pub fn is_fee_pay(&self) -> bool {
         matches!(self, AccountTouch::FeePay(_, _, _))
     }
+    /// Returns true if this touch should be preserved even when the call reverts.
+    /// This includes read-only touches, fee-pay touches, and Create touches
+    /// (because REVM includes created-then-reverted accounts in its state diff).
+    pub fn survives_revert(&self) -> bool {
+        self.is_read_only() || self.is_fee_pay() || matches!(self, AccountTouch::Create(_, _, _, _, _))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1430,12 +1436,12 @@ impl<T: EventTracer> Executor<T> {
                 if evm.gas.remaining() < gas {
                     return Ok(StepResult::Halt(gas));
                 }
+                let (code, hash) = ext.code(&address).await?;
+                evm.touches.push(AccountTouch::GetCode(address, hash, code));
                 let is_empty = ext.is_empty(&address).await?;
                 if is_empty {
                     evm.push(Word::zero())?;
                 } else {
-                    let (code, hash) = ext.code(&address).await?;
-                    evm.touches.push(AccountTouch::GetCode(address, hash, code));
                     evm.push(hash)?;
                 }
             }
@@ -1506,6 +1512,7 @@ impl<T: EventTracer> Executor<T> {
                     return Ok(StepResult::Halt(gas));
                 }
                 let balance = ext.balance(&this).await?;
+                evm.touches.push(AccountTouch::GetValue(this, balance));
 
                 self.debug["SELFBALANCE"] = json!({
                     "address": this,
@@ -2608,7 +2615,7 @@ impl<T: EventTracer> Executor<T> {
             self.ret = ret;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only() || t.is_fee_pay()));
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.survives_revert()));
             return Ok(());
         }
 
@@ -2764,7 +2771,7 @@ impl<T: EventTracer> Executor<T> {
             evm.gas.used += base_cost_without_deploy + gas_to_forward;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only() || t.is_fee_pay()));
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.survives_revert()));
             return Ok(());
         }
 
@@ -2774,13 +2781,16 @@ impl<T: EventTracer> Executor<T> {
         if inner_evm.reverted {
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.is_read_only() || t.is_fee_pay()));
+            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.survives_revert()));
             return Ok(());
         }
 
         let hash = keccak256(&code);
         let _empty = ext.code(&created).await?;
         *ext.code_mut(&created) = (code.clone(), Word::from_bytes(&hash));
+
+        // EIP-161: Contract accounts start with nonce=1
+        ext.account_mut(&created).nonce = Word::one();
 
         let sender_balance = ext.balance(&this).await?;
         let receiver_balance = ext.balance(&created).await?;
