@@ -42,15 +42,6 @@ async fn as_state(result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Re
     let mut touched = result.evm.touches
         .iter()
         .filter_map(|touch| match touch {
-            // solenoid::executor::AccountTouch::WarmUp(address) => {
-            //     Some(*address)
-            // }
-            // solenoid::executor::AccountTouch::GetNonce(address, _) => {
-            //     Some(*address)
-            // }
-            // solenoid::executor::AccountTouch::GetValue(address, _) => {
-            //     Some(*address)
-            // }
             solenoid::executor::AccountTouch::GetState(address, key, _, _) => {
                 kv.entry(*address).or_default().insert(*key);
                 Some(*address)
@@ -84,13 +75,6 @@ async fn as_state(result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Re
         touched.insert(item.address);
         for key in &item.storage_keys {
             kv.entry(item.address).or_default().insert(*key);
-        }
-    }
-
-    // Include storage keys from accessed_storage for touched addresses
-    for (addr, key) in &ext.accessed_storage {
-        if touched.contains(addr) {
-            kv.entry(*addr).or_default().insert(*key);
         }
     }
 
