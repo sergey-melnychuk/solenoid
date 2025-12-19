@@ -4,7 +4,7 @@ TODO: Check post-tx state & logs in runner.
 ---
 
 State alignment focus (see todo.txt):
-23891564: 605-620: failed txs, pattern is one extra touched account (or one extra key)
+23891564: 605-620: failed txs, all have one extra touched account (target of a failed STATICCALL)
 
 ---
 
