@@ -2671,10 +2671,23 @@ impl<T: EventTracer> Executor<T> {
             };
         let code = Decoder::decode(bytecode);
 
+        // EVM pre-increments creator's nonce before computing CREATE address
         let nonce = ext.nonce(&this).await?;
-
-        // TODO: check it: create op pre-increments nonce of creator
-        let nonce = if nonce.is_zero() { Word::one() } else { nonce };
+        ext.account_mut(&this).nonce = nonce + Word::one();
+        evm.touches.push(AccountTouch::SetNonce(
+            this,
+            nonce.as_u64(),
+            nonce.as_u64() + 1,
+        ));
+        self.tracer.push(Event {
+            data: EventData::Account(AccountEvent::SetNonce {
+                address: this,
+                val: nonce.as_u64(),
+                new: nonce.as_u64() + 1,
+            }),
+            depth: ctx.depth,
+            reverted: false,
+        });
 
         let created = if matches!(ctx.call_type, CallType::Create2) {
             this.create2(&salt, &code.bytecode)
@@ -2832,23 +2845,6 @@ impl<T: EventTracer> Executor<T> {
                 // TODO: insufficient funds to transfer
             }
         }
-
-        let nonce = ext.account_mut(&this).nonce;
-        ext.account_mut(&this).nonce += Word::one();
-        evm.touches.push(AccountTouch::SetNonce(
-            this,
-            nonce.as_u64(),
-            nonce.as_u64() + 1,
-        ));
-        self.tracer.push(Event {
-            data: EventData::Account(AccountEvent::SetNonce {
-                address: this,
-                val: nonce.as_u64(),
-                new: nonce.as_u64() + 1,
-            }),
-            depth: ctx.depth,
-            reverted: false,
-        });
 
         evm.touches.push(AccountTouch::Create(
             created,

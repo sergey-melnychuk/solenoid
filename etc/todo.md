@@ -1,9 +1,11 @@
 DONE! 10 selected blocks etc/sync.sh are 100% gas match!
 TODO: Check post-tx state & logs in runner.
 
-Blocks that fail with "stack overflow":
-## Set min stack size to 16 Mb
-RUST_MIN_STACK=16777216
+---
+
+State alignment focus (see todo.txt):
+23891564: 605-621: failed txs, pattern is one extra touched account (or one extra key)
+23891588: 400-408: failed txs, pattern is one extra key touched
 
 ---
 
@@ -11,28 +13,6 @@ RUST_MIN_STACK=16777216
 ### 23891571 38 hash=0x8792f21d230131a3f5c57add8950e966041f2c746b9ba9669ebca0a90c206d1f
 REVM 	OK=false 	RET=<4> 	GAS=534715	TRACES=24966
 sole 	OK=false 	RET=match	GAS=match	TRACES=24994
-
----
-
-$ etc/runp.sh 23891571
-...
-TX:   9/421
-### 23891571 9 hash=0xdb797f4424bcf8f82d4d99428eea09b0032436b6830ef2c996d490df410eb256
-REVM 	OK=false 	RET=<4> 	GAS=99868	TRACES=6091	STATE=6+21
-sole 	OK=false 	RET=match	GAS=match	TRACES=6091	STATE=false
-
-TX:  38/421
-### 23891571 38 hash=0x8792f21d230131a3f5c57add8950e966041f2c746b9ba9669ebca0a90c206d1f
-REVM 	OK=false 	RET=<4> 	GAS=534715	TRACES=24966	STATE=18+66
-sole 	OK=false 	RET=match	GAS=match	TRACES=24994	STATE=false
-
-TX: 138/421
-### 23891571 138 hash=0xc7ea6c67a01d3b6d83c3220a9e64f09c44aab9ee54ddea8ad0909b8ace45ec10
-REVM 	OK=false 	RET=<68>	GAS=129265	TRACES=6938	STATE=6+21
-sole 	OK=false 	RET=match	GAS=match	TRACES=6938	STATE=false
-TX: 421/421
-(total: 422, matched: 419, invalid: 3)
-✅ Block 23891571 completed successfully
 
 ---
 
@@ -84,3 +64,7 @@ Etherscan:
  Delegated Address: 0xAC629747e42c9789D47B82C9d03cAF0a69932e3b
 
 ---
+
+Blocks that fail with "stack overflow":
+## Set min stack size to 16 Mb
+RUST_MIN_STACK=16777216

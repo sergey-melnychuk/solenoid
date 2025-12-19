@@ -201,13 +201,8 @@ impl Ext {
 
     pub async fn nonce(&mut self, addr: &Address) -> eyre::Result<Word> {
         if let Some(nonce) = self.state.get(addr).map(|s| s.nonce) {
-            // created account starts with nonce=1
-            let inc = if self.created_accounts.contains(addr) {
-                Word::one()
-            } else {
-                Word::zero()
-            };
-            Ok(nonce + inc)
+            // EIP-161 nonce=1 is now set explicitly in executor.rs when CREATE succeeds
+            Ok(nonce)
         } else {
             Ok(self.pull(addr).await?.nonce)
         }
