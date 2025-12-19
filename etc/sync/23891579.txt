@@ -1,12 +1,8 @@
 📦 Fetched block number: 23891579 [2148 txs]
 📦 Fetched block number: 23891579 [2148 txs]
 ---
-### 23891579 340 hash=0x2bec3c4a1400fdbcd13c4840c752d453655459a1b97eeefa5eaea910c778e88a
-REVM 	OK=false 	RET=empty	GAS=21500	TRACES=10	STATE=3+0
-sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
----
 ### 23891579 341 hash=0x19661217ba157e2ad85db1c4610dfa9de21beb4f4abcf48b9fca8fe3813a9758
 REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
 sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
 
-(total: 2148, matched: 2146, invalid: 2)
+(total: 2148, matched: 2147, invalid: 1)

@@ -4,8 +4,7 @@ TODO: Check post-tx state & logs in runner.
 ---
 
 State alignment focus (see todo.txt):
-23891564: 605-621: failed txs, pattern is one extra touched account (or one extra key)
-23891588: 400-408: failed txs, pattern is one extra key touched
+23891564: 605-620: failed txs, pattern is one extra touched account (or one extra key)
 
 ---
 

@@ -5,17 +5,9 @@
 REVM 	OK=false 	RET=empty	GAS=21500	TRACES=38	STATE=3+0
 sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
 ---
-### 23891564 606 hash=0x636608a798e40d4f194a52c31656936589bc50ed8ca65c94ccecb23ec69f715d
-REVM 	OK=false 	RET=empty	GAS=21500	TRACES=10	STATE=3+0
-sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
----
 ### 23891564 607 hash=0x5ec2e682a6328ad89bb809e1a827f8d7bf17591c6307bafe8b46652a27dc1e6b
 REVM 	OK=false 	RET=empty	GAS=21500	TRACES=38	STATE=3+0
 sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
----
-### 23891564 608 hash=0x5e700fae7ae3d7f80505795569896298cc97a711d295764041042cedcd901165
-REVM 	OK=false 	RET=empty	GAS=21500	TRACES=10	STATE=3+0
-sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+1
 ---
 ### 23891564 609 hash=0x5dfcb50f8da15534344cd7b3800d7b4c3088eebef26547287c9b20ca35e0c46f
 REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
@@ -64,9 +56,5 @@ sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
 ### 23891564 620 hash=0x14125bec2089e88baeafd224d97cf5d61407ad9150390bb4357c0c8456f4a725
 REVM 	OK=false 	RET=empty	GAS=21500	TRACES=12	STATE=3+0
 sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+0
----
-### 23891564 621 hash=0x0a97912e4076a28d5b0d1c691020418825889a0819ec57c08fb976dc57a171a0
-REVM 	OK=false 	RET=empty	GAS=21500	TRACES=19	STATE=4+0
-sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=4+1
 
-(total: 1750, matched: 1733, invalid: 17)
+(total: 1750, matched: 1736, invalid: 14)

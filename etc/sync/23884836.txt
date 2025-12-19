@@ -4,9 +4,5 @@
 ### 23884836 180 hash=0x73721b65fa353514a90758bb9a942143a89ea95b1015ffcc09bb489ab422ba0c
 REVM 	OK=true 	RET=<32>	GAS=139429	TRACES=2185	STATE=7+32
 sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=6+32
----
-### 23884836 214 hash=0xb74516aebdad00e8895cb918bc892a547e075be5707322feb75c6e084d807758
-REVM 	OK=false 	RET=empty	GAS=25000	TRACES=195	STATE=3+1
-sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=3+2
 
-(total: 360, matched: 358, invalid: 2)
+(total: 360, matched: 359, invalid: 1)
