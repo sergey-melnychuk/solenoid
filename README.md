@@ -1,7 +1,14 @@
 solenoid
 ========
 
-WIP opinionated, lightweight, async-ready, WASM-friendly EVM in Rust.
+Lightweight, async-first, WASM-friendly Ethereum VM implementation in Rust.
+
+### Why Solenoid?
+
+Existing EVMs (geth, reth) are synchronous and not WASM-friendly. Solenoid provides:
+- **Async-first design**: Non-blocking I/O for better throughput
+- **WASM-native**: Runs in browser, edge computing, embedded systems
+- **Lightweight**: Embeddable as library, minimal dependencies
 
 ### RPC proxy setup
 
