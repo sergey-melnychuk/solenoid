@@ -611,7 +611,8 @@ fn kzg_point_evaluation(input: &[u8]) -> eyre::Result<Vec<u8>> {
     // Return FIELD_ELEMENTS_PER_BLOB ++ BLS_MODULUS
     let output = hex::decode(
         "0000000000000000000000000000000000000000000000000000000000001000\
-        73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001")?;
+        73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
+    )?;
     Ok(output)
 }
 
@@ -1359,9 +1360,13 @@ mod tests {
 
     #[test]
     fn test_verify_kzg_proof_from_tx() {
-        let _versioned_hash = hex::decode("010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014").unwrap();
-        let z = hex::decode("1b45d935bf25f65503a140875a318b031eb0676a365153a3739ebce53abc0448").unwrap();
-        let y = hex::decode("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+        let _versioned_hash =
+            hex::decode("010657f37554c781402a22917dee2f75def7ab966d7b770905398eba3c444014")
+                .unwrap();
+        let z = hex::decode("1b45d935bf25f65503a140875a318b031eb0676a365153a3739ebce53abc0448")
+            .unwrap();
+        let y = hex::decode("0000000000000000000000000000000000000000000000000000000000000000")
+            .unwrap();
         let commitment = hex::decode("c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
         let proof = hex::decode("c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000").unwrap();
 
@@ -1375,7 +1380,6 @@ mod tests {
         let ok = verify_kzg_proof(&commitment, &z, &y, &proof).unwrap_or_default();
         assert!(ok);
     }
-
 
     // Helper function tests
     #[test]

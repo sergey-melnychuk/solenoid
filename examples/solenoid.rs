@@ -39,7 +39,10 @@ async fn main() -> eyre::Result<()> {
         .await
         .context("create")?;
 
-    let address = ext.created_accounts.first().copied()
+    let address = ext
+        .created_accounts
+        .first()
+        .copied()
         .ok_or_else(|| eyre::eyre!("No address returned"))?;
     println!("Call address: {address}");
 

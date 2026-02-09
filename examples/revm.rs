@@ -60,9 +60,9 @@ async fn main() -> Result<()> {
 
         // Dump STATE:
 
-        use std::collections::BTreeMap;
         use evm_tracer::revm::primitives::{StorageKey, StorageValue};
         use serde_json::json;
+        use std::collections::BTreeMap;
         let state = result
             .state
             .iter()

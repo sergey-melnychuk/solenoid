@@ -1,4 +1,7 @@
-use std::{fs::File, io::{BufRead, BufReader}};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
 
 use crossterm::{
     event::{KeyCode, KeyModifiers, read},
@@ -72,7 +75,11 @@ fn main() -> eyre::Result<()> {
     for (revm, sole) in iter {
         let i = index as usize;
         if !non_interactive {
-            if i % 1000 == 0 { use std::io::Write; print!("\r(check: {i})"); std::io::stdout().flush().unwrap(); }
+            if i % 1000 == 0 {
+                use std::io::Write;
+                print!("\r(check: {i})");
+                std::io::stdout().flush().unwrap();
+            }
         }
         let (a, b) = (revm?, sole?);
         if a.is_empty() ^ b.is_empty() {
@@ -110,7 +117,10 @@ fn main() -> eyre::Result<()> {
             } else {
                 String::from("")
             };
-            println!("{block_number} {skip} LINE={i},pc={},op={}{suffix}", b.pc, b.name);
+            println!(
+                "{block_number} {skip} LINE={i},pc={},op={}{suffix}",
+                b.pc, b.name
+            );
             return Ok(());
         }
 

@@ -211,7 +211,10 @@ impl EthClient {
         let res = self.http.post(&self.url).json(&value).send().await?;
         #[cfg(feature = "tracing")]
         if tracing::enabled!(Level::TRACE) {
-            tracing::trace!(json=serde_json::to_string_pretty(&value).unwrap(), "HTTP request");
+            tracing::trace!(
+                json = serde_json::to_string_pretty(&value).unwrap(),
+                "HTTP request"
+            );
         }
 
         let status = res.status();
@@ -226,7 +229,10 @@ impl EthClient {
         let response: serde_json::Value = res.json().await?;
         #[cfg(feature = "tracing")]
         if tracing::enabled!(Level::TRACE) {
-            tracing::trace!(json=serde_json::to_string_pretty(&response).unwrap(), "HTTP response");
+            tracing::trace!(
+                json = serde_json::to_string_pretty(&response).unwrap(),
+                "HTTP response"
+            );
         }
 
         if let Some(error) = response["error"].as_object() {

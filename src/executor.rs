@@ -14,7 +14,9 @@ use crate::{
     decoder::{Bytecode, Decoder, Instruction},
     ext::Ext,
     precompiles,
-    tracer::{AccountEvent, CallType, Event, EventData, EventTracer, HaltReason, HashAlg, StateEvent},
+    tracer::{
+        AccountEvent, CallType, Event, EventData, EventTracer, HaltReason, HashAlg, StateEvent,
+    },
 };
 
 #[derive(Error, Debug)]
@@ -77,7 +79,13 @@ pub enum AccountTouch {
 
 impl AccountTouch {
     pub fn is_read_only(&self) -> bool {
-        matches!(self, AccountTouch::GetCode(_, _, _) | AccountTouch::GetState(_, _, _, _) | AccountTouch::GetNonce(_, _) | AccountTouch::GetValue(_, _))
+        matches!(
+            self,
+            AccountTouch::GetCode(_, _, _)
+                | AccountTouch::GetState(_, _, _, _)
+                | AccountTouch::GetNonce(_, _)
+                | AccountTouch::GetValue(_, _)
+        )
     }
     pub fn is_fee_pay(&self) -> bool {
         matches!(self, AccountTouch::FeePay(_, _, _))
@@ -86,7 +94,9 @@ impl AccountTouch {
     /// This includes read-only touches, fee-pay touches, and Create touches
     /// (because REVM includes created-then-reverted accounts in its state diff).
     pub fn survives_revert(&self) -> bool {
-        self.is_read_only() || self.is_fee_pay() || matches!(self, AccountTouch::Create(_, _, _, _, _))
+        self.is_read_only()
+            || self.is_fee_pay()
+            || matches!(self, AccountTouch::Create(_, _, _, _, _))
     }
 }
 
@@ -365,7 +375,8 @@ impl<T: EventTracer> Executor<T> {
 
             // EIP-7702: If call.to is delegated, also pre-warm the target address
             let (code, codehash) = ext.code(&call.to).await?;
-            evm.touches.push(AccountTouch::GetCode(call.to, codehash, code.clone()));
+            evm.touches
+                .push(AccountTouch::GetCode(call.to, codehash, code.clone()));
             if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
                 let target = Address::try_from(&code[3..]).expect("must succeed");
                 ext.warm_address(&target);
@@ -517,7 +528,7 @@ impl<T: EventTracer> Executor<T> {
         };
 
         let gas_final = evm.gas.finalized(gas_costs, evm.reverted).max(gas_floor);
-        
+
         // Calculate effective gas price for fee calculation
         // For EIP-1559: min(max_fee_per_gas, base_fee + max_priority_fee_per_gas)
         // For legacy: gas_price
@@ -529,7 +540,7 @@ impl<T: EventTracer> Executor<T> {
             let base_plus_priority = base_fee + ext.tx_ctx.gas_max_priority_fee;
             Word::min(ext.tx_ctx.gas_max_fee, base_plus_priority)
         };
-        
+
         let gas_used_fee = Word::from(gas_final) * effective_gas_price;
         let gas_refund = gas_prepayment - gas_used_fee;
 
@@ -541,8 +552,11 @@ impl<T: EventTracer> Executor<T> {
         }
 
         let balance_after = ext.balance(&call.from).await?;
-        evm.touches
-            .push(AccountTouch::FeePay(call.from, sender_balance, balance_after));
+        evm.touches.push(AccountTouch::FeePay(
+            call.from,
+            sender_balance,
+            balance_after,
+        ));
 
         // Transfer priority fee to coinbase (base fee is burned per EIP-1559)
         // Match revm's calculation: recalculate effective_gas_price from max_fee and max_priority
@@ -588,11 +602,19 @@ impl<T: EventTracer> Executor<T> {
                     depth: 1,
                     reverted: false,
                 });
-                evm.touches.push(AccountTouch::FeePay(coinbase, current_coinbase_balance, new_coinbase_balance));
+                evm.touches.push(AccountTouch::FeePay(
+                    coinbase,
+                    current_coinbase_balance,
+                    new_coinbase_balance,
+                ));
             } else {
                 // Even if no priority fees are paid, COINBASE should be marked as touched
                 // because we accessed it (read its balance) during fee calculation
-                evm.touches.push(AccountTouch::FeePay(coinbase, current_coinbase_balance, current_coinbase_balance));
+                evm.touches.push(AccountTouch::FeePay(
+                    coinbase,
+                    current_coinbase_balance,
+                    current_coinbase_balance,
+                ));
             }
         }
 
@@ -1362,7 +1384,8 @@ impl<T: EventTracer> Executor<T> {
                     return Ok(StepResult::Halt(gas));
                 }
                 let (code, codehash) = ext.code(&address).await?;
-                evm.touches.push(AccountTouch::GetCode(address, codehash, code.clone()));
+                evm.touches
+                    .push(AccountTouch::GetCode(address, codehash, code.clone()));
                 evm.push(Word::from(code.len()))?;
             }
             0x3c => {
@@ -1373,7 +1396,8 @@ impl<T: EventTracer> Executor<T> {
                 let size = evm.pop()?.as_usize();
 
                 let (mut code, codehash) = ext.code(&address).await?;
-                evm.touches.push(AccountTouch::GetCode(address, codehash, code.clone()));
+                evm.touches
+                    .push(AccountTouch::GetCode(address, codehash, code.clone()));
                 if evm.memory.len() < dest_offset + size {
                     if dest_offset + size > ALLOCATION_SANITY_LIMIT {
                         return Err(ExecutorError::InvalidAllocation(dest_offset + size).into());
@@ -1830,7 +1854,6 @@ impl<T: EventTracer> Executor<T> {
                             // gas_used: evm.gas.used,
                             // gas_back: 0,
                             // gas_left,
-
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
@@ -2331,7 +2354,8 @@ impl<T: EventTracer> Executor<T> {
 
         // Calculate address access cost (EIP-2929)
         let (code, codehash) = ext.code(&address).await?;
-        evm.touches.push(AccountTouch::GetCode(address, codehash, code.clone()));
+        evm.touches
+            .push(AccountTouch::GetCode(address, codehash, code.clone()));
         let mut access_cost = evm.address_access_cost(&address, ext);
 
         // Check and resolve delegation: CODE = <0xef0100> + <20 bytes address>
@@ -2340,7 +2364,8 @@ impl<T: EventTracer> Executor<T> {
             access_cost += 100;
             let target = Address::try_from(&code[3..]).expect("must succeed");
             let (code, codehash) = ext.code(&target).await?;
-            evm.touches.push(AccountTouch::GetCode(target, codehash, code.clone()));
+            evm.touches
+                .push(AccountTouch::GetCode(target, codehash, code.clone()));
             let target_cost = evm.address_access_cost(&target, ext);
             access_cost += target_cost - 100;
             code
@@ -2615,7 +2640,12 @@ impl<T: EventTracer> Executor<T> {
             self.ret = ret;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.survives_revert()));
+            evm.touches.extend(
+                inner_evm
+                    .touches
+                    .into_iter()
+                    .filter(|t| t.survives_revert()),
+            );
             return Ok(());
         }
 
@@ -2785,7 +2815,12 @@ impl<T: EventTracer> Executor<T> {
             evm.gas.used += base_cost_without_deploy + gas_to_forward;
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.survives_revert()));
+            evm.touches.extend(
+                inner_evm
+                    .touches
+                    .into_iter()
+                    .filter(|t| t.survives_revert()),
+            );
             return Ok(());
         }
 
@@ -2795,7 +2830,12 @@ impl<T: EventTracer> Executor<T> {
         if inner_evm.reverted {
             evm.push(Word::zero())?;
             inner_evm.revert(ext).await?;
-            evm.touches.extend(inner_evm.touches.into_iter().filter(|t| t.survives_revert()));
+            evm.touches.extend(
+                inner_evm
+                    .touches
+                    .into_iter()
+                    .filter(|t| t.survives_revert()),
+            );
             return Ok(());
         }
 

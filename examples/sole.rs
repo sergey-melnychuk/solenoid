@@ -71,7 +71,11 @@ async fn main() -> eyre::Result<()> {
         let mut traces = Vec::with_capacity(len);
         let mut i = 0;
         for event in events {
-            if i % 1000 == 0 { use std::io::Write; print!("\r(mapping: {i} / {len})"); std::io::stdout().flush().unwrap(); }
+            if i % 1000 == 0 {
+                use std::io::Write;
+                print!("\r(mapping: {i} / {len})");
+                std::io::stdout().flush().unwrap();
+            }
             if let Ok(trace) = evm_tracer::OpcodeTrace::try_from(event) {
                 traces.push(trace);
             }
@@ -165,33 +169,25 @@ async fn main() -> eyre::Result<()> {
 
         use std::collections::{BTreeMap, BTreeSet};
         let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
-        let mut touched = result.evm.touches
+        let mut touched = result
+            .evm
+            .touches
             .iter()
             .filter_map(|touch| match touch {
                 solenoid::executor::AccountTouch::GetState(address, key, _, _) => {
                     kv.entry(*address).or_default().insert(*key);
                     Some(*address)
                 }
-                solenoid::executor::AccountTouch::GetCode(address, _, _) => {
-                    Some(*address)
-                }
+                solenoid::executor::AccountTouch::GetCode(address, _, _) => Some(*address),
                 // touches that modify the state:
-                solenoid::executor::AccountTouch::FeePay(address, _, _) => {
-                    Some(*address)
-                }
+                solenoid::executor::AccountTouch::FeePay(address, _, _) => Some(*address),
                 solenoid::executor::AccountTouch::SetState(address, key, _, _, _) => {
                     kv.entry(*address).or_default().insert(*key);
                     Some(*address)
                 }
-                solenoid::executor::AccountTouch::SetNonce(address, _, _) => {
-                    Some(*address)
-                }
-                solenoid::executor::AccountTouch::SetValue(address, _, _) => {
-                    Some(*address)
-                }
-                solenoid::executor::AccountTouch::Create(address, _, _, _, _) => {
-                    Some(*address)
-                }
+                solenoid::executor::AccountTouch::SetNonce(address, _, _) => Some(*address),
+                solenoid::executor::AccountTouch::SetValue(address, _, _) => Some(*address),
+                solenoid::executor::AccountTouch::Create(address, _, _, _, _) => Some(*address),
                 _ => None,
             })
             .collect::<BTreeSet<_>>();
@@ -231,14 +227,14 @@ async fn main() -> eyre::Result<()> {
         // Dropping 400k+ traces can take a long time if they're in swap
         drop(traces);
         drop(result);
-        
+
         // Yield to allow the runtime to process the drops
         tokio::task::yield_now().await;
     }
-    
+
     // Explicitly drop ext to close HTTP client connections
     // The reqwest::Client connection pool can keep the Tokio runtime alive
     drop(ext);
-    
+
     Ok(())
 }

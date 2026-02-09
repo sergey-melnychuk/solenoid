@@ -22,7 +22,12 @@ use solenoid::{
 
 use evm_tracer::{OpcodeTrace, run::TxResult};
 
-async fn as_tx_result(gas_costs: i64, gas_floor: i64, result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Result<TxResult> {
+async fn as_tx_result(
+    gas_costs: i64,
+    gas_floor: i64,
+    result: &CallResult<LoggingTracer>,
+    ext: &mut Ext,
+) -> eyre::Result<TxResult> {
     let gas = result
         .evm
         .gas
@@ -37,35 +42,30 @@ async fn as_tx_result(gas_costs: i64, gas_floor: i64, result: &CallResult<Loggin
     })
 }
 
-async fn as_state(result: &CallResult<LoggingTracer>, ext: &mut Ext) -> eyre::Result<BTreeMap<String, Value>> {
+async fn as_state(
+    result: &CallResult<LoggingTracer>,
+    ext: &mut Ext,
+) -> eyre::Result<BTreeMap<String, Value>> {
     let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
-    let mut touched = result.evm.touches
+    let mut touched = result
+        .evm
+        .touches
         .iter()
         .filter_map(|touch| match touch {
             solenoid::executor::AccountTouch::GetState(address, key, _, _) => {
                 kv.entry(*address).or_default().insert(*key);
                 Some(*address)
             }
-            solenoid::executor::AccountTouch::GetCode(address, _, _) => {
-                Some(*address)
-            }
+            solenoid::executor::AccountTouch::GetCode(address, _, _) => Some(*address),
             // touches that modify the state:
-            solenoid::executor::AccountTouch::FeePay(address, _, _) => {
-                Some(*address)
-            }
+            solenoid::executor::AccountTouch::FeePay(address, _, _) => Some(*address),
             solenoid::executor::AccountTouch::SetState(address, key, _, _, _) => {
                 kv.entry(*address).or_default().insert(*key);
                 Some(*address)
             }
-            solenoid::executor::AccountTouch::SetNonce(address, _, _) => {
-                Some(*address)
-            }
-            solenoid::executor::AccountTouch::SetValue(address, _, _) => {
-                Some(*address)
-            }
-            solenoid::executor::AccountTouch::Create(address, _, _, _, _) => {
-                Some(*address)
-            }
+            solenoid::executor::AccountTouch::SetNonce(address, _, _) => Some(*address),
+            solenoid::executor::AccountTouch::SetValue(address, _, _) => Some(*address),
+            solenoid::executor::AccountTouch::Create(address, _, _, _, _) => Some(*address),
             _ => None,
         })
         .collect::<BTreeSet<_>>();
@@ -170,14 +170,14 @@ pub fn runner(
                         + deployed_code_cost
                         + access_list_cost
                 };
-    
+
                 let traces = result
                     .tracer
                     .take()
                     .into_iter()
                     .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
                     .collect::<Vec<_>>();
-    
+
                 let tx_result = as_tx_result(gas_costs, gas_floor, &result, &mut *guard).await?;
 
                 Ok::<_, eyre::Report>((tx_result, traces))
@@ -311,14 +311,8 @@ async fn main() -> eyre::Result<()> {
                 // Dump state to files for later analysis
                 let revm_state_file = format!("revm.{}.{}.state.json", block_number, idx);
                 let sole_state_file = format!("sole.{}.{}.state.json", block_number, idx);
-                std::fs::write(
-                    &revm_state_file,
-                    &revm_state
-                ).ok();
-                std::fs::write(
-                    &sole_state_file,
-                    &sole_state
-                ).ok();
+                std::fs::write(&revm_state_file, &revm_state).ok();
+                std::fs::write(&sole_state_file, &sole_state).ok();
 
                 let ret = if revm_result.ret.is_empty() {
                     "empty".to_string()
@@ -330,12 +324,17 @@ async fn main() -> eyre::Result<()> {
                     txs[idx].info().hash.unwrap_or_default()
                 );
                 let state_accounts = revm_result.state.len();
-                let state_keys = revm_result.state.iter()
-                    .map(|(_, value)| value.as_object()
-                        .and_then(|object| object.get("state"))
-                        .and_then(|v| v.as_object())
-                        .map(|object| object.len())
-                        .unwrap_or_default())
+                let state_keys = revm_result
+                    .state
+                    .iter()
+                    .map(|(_, value)| {
+                        value
+                            .as_object()
+                            .and_then(|object| object.get("state"))
+                            .and_then(|v| v.as_object())
+                            .map(|object| object.len())
+                            .unwrap_or_default()
+                    })
                     .sum::<usize>();
                 println!(
                     "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={:5<}\tSTATE={}+{}",
@@ -361,11 +360,16 @@ async fn main() -> eyre::Result<()> {
                     "match".to_string()
                 } else {
                     let state_accounts = sole_result.state.len();
-                    let state_keys = sole_result.state.iter()
-                        .map(|(_, value)| value.get("state")
-                            .and_then(|v| v.as_object())
-                            .map(|object| object.len())
-                            .unwrap_or_default())
+                    let state_keys = sole_result
+                        .state
+                        .iter()
+                        .map(|(_, value)| {
+                            value
+                                .get("state")
+                                .and_then(|v| v.as_object())
+                                .map(|object| object.len())
+                                .unwrap_or_default()
+                        })
                         .sum::<usize>();
                     format!("{}+{}", state_accounts, state_keys)
                 };

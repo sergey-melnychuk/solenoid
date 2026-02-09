@@ -73,13 +73,7 @@ async fn test_deploy() -> eyre::Result<()> {
             ),
             AccountTouch::SetState(created2, word("0x0"), word("0x0"), word("0x42"), false),
             AccountTouch::GetState(created1, word("0x1"), word("0x0"), false),
-            AccountTouch::SetState(
-                created1,
-                word("0x1"),
-                word("0x0"),
-                (&created2).into(),
-                true,
-            ),
+            AccountTouch::SetState(created1, word("0x1"), word("0x0"), (&created2).into(), true,),
             AccountTouch::FeePay(from, word("0x2e95cd937f107a2"), word("0x2e95cd937f107a2")),
         ]
     );
