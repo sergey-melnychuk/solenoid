@@ -257,6 +257,8 @@ impl Runner {
         let created = self.call.from.create(nonce);
         ext.created_accounts.push(created);
         ext.warm_address(&created);
+        // Initialize the created account in state with nonce=0 before constructor runs.
+        ext.state.entry(created).or_default();
         evm.touches.push(AccountTouch::WarmUp(created));
 
         if !self.call.to.is_zero() {

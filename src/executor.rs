@@ -2697,6 +2697,7 @@ impl<T: EventTracer> Executor<T> {
 
         ext.created_accounts.push(created);
         ext.warm_address(&created);
+        ext.state.entry(created).or_default();
         evm.touches.push(AccountTouch::WarmUp(created));
 
         let create_cost = 32000;

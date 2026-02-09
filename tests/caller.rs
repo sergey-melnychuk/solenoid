@@ -44,7 +44,8 @@ async fn test_deploy() -> eyre::Result<()> {
     ext.pull(&from).await?;
     ext.account_mut(&from).nonce = Word::zero();
     let created1 = from.create(Word::zero());
-    let created2 = created1.create(Word::one());
+    // During created1's constructor, its nonce is 0 (EIP-161 nonce=1 is set after deployment)
+    let created2 = created1.create(Word::zero());
 
     let mut evm = Evm::default();
     let (_, ret) = executor.execute(&code, &call, &mut evm, &mut ext).await?;
@@ -61,8 +62,8 @@ async fn test_deploy() -> eyre::Result<()> {
             AccountTouch::SetNonce(from, 0, 1),
             AccountTouch::GetState(created1, word("0x0"), word("0x0"), false),
             AccountTouch::SetState(created1, word("0x0"), word("0x0"), (&from).into(), true,),
-            AccountTouch::WarmUp(created2),
             AccountTouch::SetNonce(created1, 0, 1),
+            AccountTouch::WarmUp(created2),
             AccountTouch::Create(
                 created2,
                 word("0x0"),
