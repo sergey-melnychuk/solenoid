@@ -288,25 +288,8 @@ async fn main() -> eyre::Result<()> {
                 let revm_trace_file = format!("revm.{}.{}.log", block_number, idx);
                 let sole_trace_file = format!("sole.{}.{}.log", block_number, idx);
 
-                std::fs::write(
-                    &revm_trace_file,
-                    revm_traces
-                        .iter()
-                        .map(|t| serde_json::to_string(t).unwrap())
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                )
-                .ok();
-
-                std::fs::write(
-                    &sole_trace_file,
-                    sole_traces
-                        .iter()
-                        .map(|t| serde_json::to_string(t).unwrap())
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                )
-                .ok();
+                evm_tracer::aux::dump(&revm_trace_file, &revm_traces).ok();
+                evm_tracer::aux::dump(&sole_trace_file, &sole_traces).ok();
 
                 // Dump state to files for later analysis
                 let revm_state_file = format!("revm.{}.{}.state.json", block_number, idx);
