@@ -164,23 +164,25 @@ pub fn dump<T: serde::Serialize>(
         std::fs::remove_file(path)?;
     }
 
+    const CHUNK: usize = 10_000;
+
     let file = OpenOptions::new().create(true).append(true).open(path)?;
     let mut buffer = std::io::BufWriter::new(file);
     let len = entries.len();
     for (i, entry) in entries.iter().enumerate() {
-        if i > 0 && i % 1000 == 0 {
+        if i > 0 && i % CHUNK == 0 {
+            buffer.flush()?;
             use std::io::Write;
             print!("\r(write: entry {i} / {len})");
             std::io::stdout().flush().unwrap();
-        }
-        if i > 0 && i % 10_000 == 0 {
-            buffer.flush()?;
         }
         let json = serde_json::to_vec(entry)?;
         let _ = buffer.write(&json)?;
         let _ = buffer.write(b"\n")?;
     }
     buffer.flush()?;
-    println!("\r(write: entry {len} / {len})");
+    if len > CHUNK {
+        println!("\r(write: entry {len} / {len})");
+    }
     Ok(())
 }
