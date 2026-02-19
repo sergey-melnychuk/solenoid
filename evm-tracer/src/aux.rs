@@ -26,6 +26,7 @@ pub fn opcode_name(opcode: u8) -> &'static str {
         0x1b => "SHL",
         0x1c => "SHR",
         0x1d => "SAR",
+        0x1e => "CLZ",
         0x20 => "SHA3",
         0x30 => "ADDRESS",
         0x31 => "BALANCE",
@@ -156,8 +157,8 @@ pub fn dump<T: serde::Serialize>(
     path: &str,
     entries: &[T],
 ) -> eyre::Result<()> {
-    use std::io::Write as _;
     use std::fs::OpenOptions;
+    use std::io::Write as _;
 
     if std::fs::exists(path)? {
         std::fs::remove_file(path)?;
@@ -167,8 +168,12 @@ pub fn dump<T: serde::Serialize>(
     let mut buffer = std::io::BufWriter::new(file);
     let len = entries.len();
     for (i, entry) in entries.iter().enumerate() {
-        if i % 1000 == 0 { use std::io::Write; print!("\r(write: entry {i} / {len})"); std::io::stdout().flush().unwrap(); }
-        if i % 10_000 == 0 {
+        if i > 0 && i % 1000 == 0 {
+            use std::io::Write;
+            print!("\r(write: entry {i} / {len})");
+            std::io::stdout().flush().unwrap();
+        }
+        if i > 0 && i % 10_000 == 0 {
             buffer.flush()?;
         }
         let json = serde_json::to_vec(entry)?;
@@ -176,6 +181,6 @@ pub fn dump<T: serde::Serialize>(
         let _ = buffer.write(b"\n")?;
     }
     buffer.flush()?;
-    println!("\n(write: done)");
+    println!("\r(write: entry {len} / {len})");
     Ok(())
 }

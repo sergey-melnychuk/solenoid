@@ -7,6 +7,7 @@ use alloy_provider::Provider;
 use alloy_rpc_types::{Header, Transaction as Tx};
 use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
+use revm::primitives::hardfork::SpecId;
 use revm::primitives::{StorageKey, StorageValue};
 use revm::{
     context::{Context, TxEnv},
@@ -14,7 +15,7 @@ use revm::{
     MainBuilder,
 };
 use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::{OpcodeTrace, TxTrace};
 
@@ -52,24 +53,24 @@ impl From<ExecResultAndState<ExecutionResult>> for TxResult {
 
         Self {
             gas: value.result.gas_used() as i64,
-            ret: value.result.output().map(|bytes| bytes.to_vec()).unwrap_or_default(),
+            ret: value
+                .result
+                .output()
+                .map(|bytes| bytes.to_vec())
+                .unwrap_or_default(),
             rev: !value.result.is_success(),
             state,
         }
     }
 }
 
-
-
 pub fn runner(
     header: Header,
     client: impl Provider + 'static,
-) -> impl FnMut(Tx) -> Result<(TxResult, Vec<OpcodeTrace>)>
-{
+) -> impl FnMut(Tx) -> Result<(TxResult, Vec<OpcodeTrace>)> {
     let prev_id: BlockId = (header.number - 1).into();
-    let state_db =
-        WrapDatabaseAsync::new(AlloyDB::new(client, prev_id))
-            .expect("can only fail if tokio runtime is unavailable");
+    let state_db = WrapDatabaseAsync::new(AlloyDB::new(client, prev_id))
+        .expect("can only fail if tokio runtime is unavailable");
     let cache_db = CacheDB::new(state_db);
     let state = StateBuilder::new_with_database(cache_db).build();
 
@@ -84,9 +85,13 @@ pub fn runner(
             b.basefee = header.base_fee_per_gas.unwrap_or_default();
         })
         .modify_cfg_chained(|c| {
+            c.spec = SpecId::OSAKA;
             c.chain_id = 1;
             c.disable_nonce_check = true;
             c.disable_balance_check = true;
+        })
+        .modify_journal_chained(|j| {
+            j.set_spec_id(SpecId::OSAKA.into());
         });
 
     let tracer = TxTrace::new();
@@ -128,4 +133,3 @@ pub fn runner(
         Ok((result.into(), traces))
     }
 }
-

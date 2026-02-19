@@ -7,13 +7,14 @@ use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
 use revm::context::ContextTr;
 use revm::inspector::{Inspector, JournalExt};
-use revm::primitives::{StorageKey, StorageValue};
 use revm::interpreter::interpreter_types::InputsTr;
 use revm::interpreter::{
     interpreter_types::{Jumps, MemoryTr, StackTr},
     CallInputs, CallOutcome, CreateInputs, CreateOutcome, Interpreter,
     InterpreterTypes,
 };
+use revm::primitives::hardfork::SpecId;
+use revm::primitives::{StorageKey, StorageValue};
 use revm::{
     context::{Context, TxEnv},
     database::{AlloyDB, CacheDB, StateBuilder, WrapDatabaseAsync},
@@ -58,9 +59,13 @@ pub async fn trace_all(
             b.basefee = header.base_fee_per_gas.unwrap_or_default();
         })
         .modify_cfg_chained(|c| {
+            c.spec = SpecId::OSAKA;
             c.chain_id = 1;
             c.disable_nonce_check = true;
             c.disable_balance_check = true;
+        })
+        .modify_journal_chained(|j| {
+            j.set_spec_id(SpecId::OSAKA.into());
         });
 
     let mut tracer = TxTrace::default();
@@ -124,9 +129,13 @@ pub async fn trace_one(
             b.basefee = header.base_fee_per_gas.unwrap_or_default();
         })
         .modify_cfg_chained(|c| {
+            c.spec = SpecId::OSAKA;
             c.chain_id = 1;
             c.disable_nonce_check = true;
             c.disable_balance_check = true;
+        })
+        .modify_journal_chained(|j| {
+            j.set_spec_id(SpecId::OSAKA.into());
         });
 
     let tx_env = TxEnv::builder()
@@ -220,10 +229,7 @@ impl TxTrace {
         Self::default()
     }
 
-    pub fn setup(
-        &mut self,
-        hash: B256,
-    ) {
+    pub fn setup(&mut self, hash: B256) {
         *self = Self {
             hash,
             traces: Vec::new(),
@@ -257,7 +263,6 @@ where
             let val = stack[stack.len() - 2];
             self.sstore.key = key.into();
             self.sstore.val = val.into();
-
         }
     }
 
@@ -278,15 +283,17 @@ where
         });
 
         // Check storage warm/cold status for SSTORE (0x55) if JournalExt is available
-        if self.aux.opcode == 0x55 {            
+        if self.aux.opcode == 0x55 {
             // Get the target address from the interpreter
-            let target_address = <INTR::Input as InputsTr>::target_address(&interp.input);
+            let target_address =
+                <INTR::Input as InputsTr>::target_address(&interp.input);
             let journal = context.journal();
             use revm::inspector::JournalExt as _;
             let evm_state = journal.evm_state();
             if let Some(account) = evm_state.get(&target_address) {
                 if let Some(slot) = account.storage.get(&self.sstore.key) {
-                    let is_cold = slot.is_cold_transaction_id(account.transaction_id);
+                    let is_cold =
+                        slot.is_cold_transaction_id(account.transaction_id);
                     debug_value["SSTORE"] = json!({
                         "is_warm": !is_cold,
                         "original": format!("0x{:x}", slot.original_value),
@@ -307,14 +314,12 @@ where
             gas_left: interp.gas.remaining() as i64,
             gas_cost,
             gas_back: refund,
-            stack: stack.iter()
+            stack: stack
+                .iter()
                 .map(|x| hex::encode(&x.to_be_bytes::<32>()))
                 .rev()
                 .collect(),
-            memory: memory
-                .chunks(32)
-                .map(|chunk| hex::encode(chunk))
-                .collect(),
+            memory: memory.chunks(32).map(|chunk| hex::encode(chunk)).collect(),
             depth: self.aux.depth,
             debug: DebugInfo::new(debug_value),
         });
