@@ -12,13 +12,28 @@ use tiny_keccak::{Hasher, Keccak};
 
 use crate::common::address::Address;
 
+// EIP-7823: max allowed byte length for each MODEXP input field
+const MODEXP_MAX_INPUT_LEN: usize = 1024;
+
 pub fn is_precompile(address: &Address) -> bool {
-    let byte = address.0;
-    byte[0..19] == [0u8; 19] && (1..=10).contains(&byte[19])
+    let b = address.0;
+    // 0x01–0x0A: standard precompiles (bytes 0..19 all zero, last byte 1–10)
+    if b[0..19] == [0u8; 19] && (1..=10).contains(&b[19]) {
+        return true;
+    }
+    // 0x100: P256VERIFY (EIP-7951) — bytes 0..18 zero, byte 18 = 0x01, byte 19 = 0x00
+    if b[0..18] == [0u8; 18] && b[18] == 0x01 && b[19] == 0x00 {
+        return true;
+    }
+    false
 }
 
 pub fn execute(address: &Address, input: &[u8]) -> eyre::Result<Vec<u8>> {
-    match address.0[19] {
+    let b = address.0;
+    if b[0..18] == [0u8; 18] && b[18] == 0x01 && b[19] == 0x00 {
+        return p256verify(input);
+    }
+    match b[19] {
         1 => ecrecover(input),
         2 => sha256(input),
         3 => ripemd160(input),
@@ -34,7 +49,11 @@ pub fn execute(address: &Address, input: &[u8]) -> eyre::Result<Vec<u8>> {
 }
 
 pub fn gas_cost(address: &Address, input: &[u8]) -> i64 {
-    (match address.0[19] {
+    let b = address.0;
+    if b[0..18] == [0u8; 18] && b[18] == 0x01 && b[19] == 0x00 {
+        return 6900; // P256VERIFY (EIP-7951)
+    }
+    (match b[19] {
         1 => 3000,                                        // ecrecover
         2 => 60 + 12 * input.len().div_ceil(32) as u64,   // sha256
         3 => 600 + 120 * input.len().div_ceil(32) as u64, // ripemd160
@@ -154,6 +173,56 @@ fn identity(input: &[u8]) -> eyre::Result<Vec<u8>> {
     Ok(input.to_vec())
 }
 
+// 0x100: P256VERIFY — secp256r1 ECDSA signature verification (EIP-7951).
+// Input: msg_hash(32) ++ r(32) ++ s(32) ++ x(32) ++ y(32) = 160 bytes.
+// Returns 32-byte word with value 1 on success, empty bytes on failure.
+fn p256verify(input: &[u8]) -> eyre::Result<Vec<u8>> {
+    use p256::{
+        EncodedPoint, FieldBytes, PublicKey,
+        ecdsa::{Signature as P256Signature, signature::hazmat::PrehashVerifier},
+        elliptic_curve::sec1::FromEncodedPoint,
+    };
+
+    if input.len() != 160 {
+        return Ok(vec![]);
+    }
+
+    let msg_hash = &input[0..32];
+    let r_bytes = &input[32..64];
+    let s_bytes = &input[64..96];
+    let x_bytes = &input[96..128];
+    let y_bytes = &input[128..160];
+
+    let mut r_arr = FieldBytes::default();
+    r_arr.copy_from_slice(r_bytes);
+    let mut s_arr = FieldBytes::default();
+    s_arr.copy_from_slice(s_bytes);
+    let mut x_arr = FieldBytes::default();
+    x_arr.copy_from_slice(x_bytes);
+    let mut y_arr = FieldBytes::default();
+    y_arr.copy_from_slice(y_bytes);
+
+    let signature = match P256Signature::from_scalars(r_arr, s_arr) {
+        Ok(sig) => sig,
+        Err(_) => return Ok(vec![]),
+    };
+
+    let encoded_point = EncodedPoint::from_affine_coordinates(&x_arr, &y_arr, false);
+    let public_key = match PublicKey::from_encoded_point(&encoded_point).into_option() {
+        Some(pk) => pk,
+        None => return Ok(vec![]),
+    };
+
+    let verifying_key = p256::ecdsa::VerifyingKey::from(&public_key);
+    if verifying_key.verify_prehash(msg_hash, &signature).is_ok() {
+        let mut result = vec![0u8; 32];
+        result[31] = 1;
+        Ok(result)
+    } else {
+        Ok(vec![])
+    }
+}
+
 // 0x05: Modular exponentiation
 fn modexp(input: &[u8]) -> eyre::Result<Vec<u8>> {
     if input.len() < 96 {
@@ -169,6 +238,14 @@ fn modexp(input: &[u8]) -> eyre::Result<Vec<u8>> {
     let mod_len = BigUint::from_bytes_be(&input[64..96])
         .try_into()
         .unwrap_or(0usize);
+
+    // EIP-7823: each field must not exceed MODEXP_MAX_INPUT_LEN bytes
+    if base_len > MODEXP_MAX_INPUT_LEN
+        || exp_len > MODEXP_MAX_INPUT_LEN
+        || mod_len > MODEXP_MAX_INPUT_LEN
+    {
+        eyre::bail!("MODEXP input exceeds EIP-7823 size limit");
+    }
 
     if base_len + exp_len + mod_len + 96 > input.len() {
         return Ok(vec![]);
@@ -197,8 +274,11 @@ fn modexp(input: &[u8]) -> eyre::Result<Vec<u8>> {
 }
 
 fn modexp_gas_cost(input: &[u8]) -> u64 {
+    // EIP-7883: minimum cost raised to 500
+    const MIN_GAS: u64 = 500;
+
     if input.len() < 96 {
-        return 200;
+        return MIN_GAS;
     }
 
     let base_len = BigUint::from_bytes_be(&input[0..32])
@@ -211,13 +291,20 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
         .try_into()
         .unwrap_or(0u64);
 
-    // EIP-2565 (Berlin) gas calculation
+    // EIP-7823: reject oversized inputs (consume all gas — caller handles that)
+    if base_len > MODEXP_MAX_INPUT_LEN as u64
+        || exp_len > MODEXP_MAX_INPUT_LEN as u64
+        || mod_len > MODEXP_MAX_INPUT_LEN as u64
+    {
+        return u64::MAX;
+    }
+
+    // EIP-2565 multiplication complexity
     let max_len = base_len.max(mod_len);
-    // Calculate multiplication complexity: words² where words = ceil(max_len / 8)
     let words = max_len.div_ceil(8);
     let multiplication_complexity = words * words;
 
-    // Calculate iteration count based on exponent
+    // EIP-7883: iteration count — large-exponent multiplier raised from 8 to 16
     let iteration_count =
         if exp_len <= 32 && input.len() >= 96 + base_len as usize + exp_len as usize {
             let exp_start = 96 + base_len as usize;
@@ -226,11 +313,9 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
             if exp_bytes.iter().all(|&b| b == 0) {
                 0
             } else {
-                // Calculate bit length of exponent
                 let mut bit_len = 0u64;
                 for (i, &byte) in exp_bytes.iter().enumerate() {
                     if byte != 0 {
-                        // Found first non-zero byte
                         let remaining_bytes = exp_bytes.len() - i;
                         bit_len = (remaining_bytes as u64 - 1) * 8;
                         bit_len += 8 - byte.leading_zeros() as u64;
@@ -240,7 +325,6 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
                 bit_len.saturating_sub(1)
             }
         } else if exp_len > 32 {
-            // For long exponents: 8 * (exp_len - 32) + bit_length(first 32 bytes) - 1
             let exp_start = 96 + base_len as usize;
             if input.len() >= exp_start + 32 {
                 let exp_head = &input[exp_start..exp_start + 32];
@@ -253,16 +337,18 @@ fn modexp_gas_cost(input: &[u8]) -> u64 {
                         break;
                     }
                 }
-                8 * (exp_len - 32) + bit_len.saturating_sub(1)
+                // EIP-7883: multiplier is 16 (was 8 in EIP-2565)
+                16 * (exp_len - 32) + bit_len.saturating_sub(1)
             } else {
-                8 * (exp_len - 32)
+                16 * (exp_len - 32)
             }
         } else {
             1
         };
 
-    let gas = (multiplication_complexity * iteration_count.max(1)) / 3;
-    gas.max(200)
+    // EIP-7883: no division by 3; minimum raised to 500
+    let gas = multiplication_complexity * iteration_count.max(1);
+    gas.max(MIN_GAS)
 }
 
 // 0x06: BN128 elliptic curve point addition
@@ -723,6 +809,15 @@ mod tests {
             );
         }
 
+        // Test P256VERIFY precompile (EIP-7951): address 0x100
+        let mut addr_bytes = [0u8; 20];
+        addr_bytes[18] = 0x01;
+        addr_bytes[19] = 0x00;
+        assert!(
+            is_precompile(&Address(addr_bytes)),
+            "Address 0x100 should be a precompile (P256VERIFY)"
+        );
+
         // Test invalid addresses
         let mut addr_bytes = [0u8; 20];
         addr_bytes[19] = 0;
@@ -1001,17 +1096,17 @@ mod tests {
 
     #[test]
     fn test_modexp_gas_cost() {
+        // EIP-7883: minimum cost is now 500
         let input = vec![0u8; 50]; // Too short
-        assert_eq!(modexp_gas_cost(&input), 200); // Minimum cost
+        assert_eq!(modexp_gas_cost(&input), 500);
 
         let mut input = vec![0u8; 96];
-        // Small lengths should return minimum cost
         input[31] = 1; // base_len = 1
         input[63] = 1; // exp_len = 1
         input[95] = 1; // mod_len = 1
 
         let cost = modexp_gas_cost(&input);
-        assert!(cost >= 200); // Should be at least minimum
+        assert!(cost >= 500);
     }
 
     // 0x06: BN128 Add tests
