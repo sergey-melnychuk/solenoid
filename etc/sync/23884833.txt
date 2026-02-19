@@ -1,8 +1,0 @@
-📦 Fetched block number: 23884833 [329 txs]
-📦 Fetched block number: 23884833 [329 txs]
----
-### 23884833 245 hash=0x5afc2638eb04ae0fcd09904bd5f183190235e007ebd7cdf8c4802a9413709927
-REVM 	OK=true 	RET=empty	GAS=446160	TRACES=28248	STATE=22+67
-sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=22+65
-
-(total: 329, matched: 328, invalid: 1)

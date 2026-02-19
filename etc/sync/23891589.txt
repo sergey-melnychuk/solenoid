@@ -1,4 +1,0 @@
-📦 Fetched block number: 23891589 [443 txs]
-📦 Fetched block number: 23891589 [443 txs]
-
-(total: 443, matched: 443, invalid: 0)

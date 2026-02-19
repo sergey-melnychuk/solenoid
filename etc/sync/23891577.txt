@@ -1,4 +1,0 @@
-📦 Fetched block number: 23891577 [311 txs]
-📦 Fetched block number: 23891577 [311 txs]
-
-(total: 311, matched: 311, invalid: 0)

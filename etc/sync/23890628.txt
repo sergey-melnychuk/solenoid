@@ -1,4 +1,0 @@
-📦 Fetched block number: 23890628 [319 txs]
-📦 Fetched block number: 23890628 [319 txs]
-
-(total: 319, matched: 319, invalid: 0)

@@ -1,8 +1,0 @@
-📦 Fetched block number: 23884836 [360 txs]
-📦 Fetched block number: 23884836 [360 txs]
----
-### 23884836 180 hash=0x73721b65fa353514a90758bb9a942143a89ea95b1015ffcc09bb489ab422ba0c
-REVM 	OK=true 	RET=<32>	GAS=139429	TRACES=2185	STATE=7+32
-sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=6+32
-
-(total: 360, matched: 359, invalid: 1)

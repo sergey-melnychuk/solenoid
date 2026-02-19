@@ -1,4 +1,0 @@
-📦 Fetched block number: 23820667 [225 txs]
-📦 Fetched block number: 23820667 [225 txs]
-
-(total: 225, matched: 225, invalid: 0)
