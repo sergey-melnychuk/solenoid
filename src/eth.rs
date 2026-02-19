@@ -45,7 +45,7 @@ impl EthClient {
                 "method": "eth_getBlockByNumber",
                 "params": [
                     number,
-                    false
+                    true
                 ],
                 "id": 0
             }))
@@ -76,7 +76,7 @@ impl EthClient {
             "method": "eth_getBlockByNumber",
             "params": [
                 number,
-                false
+                true
             ],
             "id": 0
         }))
