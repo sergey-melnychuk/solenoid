@@ -55,12 +55,14 @@ impl Cache {
             }
         }
         let path = self.dir.join("storage").join(format!("{addr}.yak"));
-        let db = Arc::new(open_or_create_kv(&path)?);
-        self.storage_dbs
-            .write()
-            .unwrap()
-            .insert(addr, Arc::clone(&db));
-        Ok(db)
+        let mut dbs = self.storage_dbs.write().unwrap();
+        if let Some(db) = dbs.get(&addr) {
+            return Ok(Arc::clone(db));
+        } else {
+            let db = Arc::new(open_or_create_kv(&path)?);
+            dbs.insert(addr, Arc::clone(&db));
+            return Ok(db);
+        }
     }
 
     pub fn get_storage_at(
