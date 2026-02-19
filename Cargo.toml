@@ -29,6 +29,7 @@ tiny-keccak = { version = "2.0.0", features = ["keccak"] }
 tracing = { version = "0.1.41", optional = true }
 tracing-subscriber = { version = "0.3.19", optional = true }
 k256 = { version = "0.13.4", features = ["ecdsa"] }
+p256 = { version = "0.13.2", features = ["ecdsa"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.46.1", features = ["macros", "rt-multi-thread"] }
