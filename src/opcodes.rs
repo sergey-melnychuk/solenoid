@@ -57,6 +57,7 @@ static OPCODES: Lazy<[Opcode; 256]> = Lazy::new(|| {
     table[0x1b] = Opcode::new(0x1b, "SHL", 0);
     table[0x1c] = Opcode::new(0x1c, "SHR", 0);
     table[0x1d] = Opcode::new(0x1d, "SAR", 0);
+    table[0x1e] = Opcode::new(0x1e, "CLZ", 0);
 
     // 20s: SHA3
     table[0x20] = Opcode::new(0x20, "SHA3", 0);

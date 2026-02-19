@@ -1198,7 +1198,31 @@ impl<T: EventTracer> Executor<T> {
                 let ret = Word::from_bytes(&ret.to_be_bytes());
                 evm.push(ret)?;
             }
-
+            0x1e => {
+                // CLZ (EIP-7939): Count Leading Zeros on a 256-bit word.
+                // Returns 256 for input zero, otherwise the number of leading zero bits.
+                gas = 5;
+                if evm.gas.remaining() < gas {
+                    return Ok(StepResult::Halt(gas));
+                }
+                let value = evm.pop()?;
+                let clz = if value.is_zero() {
+                    256u64
+                } else {
+                    let bytes = value.into_bytes();
+                    let mut count = 0u64;
+                    for byte in bytes {
+                        if byte == 0 {
+                            count += 8;
+                        } else {
+                            count += byte.leading_zeros() as u64;
+                            break;
+                        }
+                    }
+                    count
+                };
+                evm.push(Word::from(clz))?;
+            }
             0x20 => {
                 // SHA3 (KECCAK256)
                 let offset = evm.pop()?.as_usize();
