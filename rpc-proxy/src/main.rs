@@ -1,16 +1,13 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    path::PathBuf,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+mod cache;
+
+use std::{collections::HashSet, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
+use cache::Cache;
 use reqwest::Client;
 use serde_json::{Value, json};
 use tokio::signal;
-use tokio::{fs, sync::RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 // curl -H 'Content-Type: application/json' -d '{"url":""}' http://localhost:8080/url
@@ -18,8 +15,7 @@ use tracing::{debug, error, info, warn};
 struct AppState {
     upstream_url: RwLock<String>,
     http_client: Client,
-    cache_file: PathBuf,
-    persistent: RwLock<HashMap<String, Value>>,
+    cache: Cache,
     offline: bool,
     empty: bool,
 }
@@ -29,9 +25,9 @@ async fn main() {
     tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
 
-    let offline = std::env::args().skip(1).any(|arg| arg == "--offline");
-
-    let empty = std::env::args().skip(1).any(|arg| arg == "--empty");
+    let args: HashSet<String> = std::env::args().collect();
+    let offline = args.contains("--offline");
+    let empty = args.contains("--empty");
 
     if offline && empty {
         error!("Cannot run in offline and empty mode at the same time");
@@ -46,15 +42,11 @@ async fn main() {
     let upstream_url =
         std::env::var("URL").unwrap_or_else(|_| "https://ethereum-rpc.publicnode.com".to_string());
 
-    let cache_file: PathBuf = std::env::var("CACHE_FILE")
+    let cache_dir: PathBuf = std::env::var("CACHE_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(".evm-proxy-cache.json"));
-    let initial_persistent = if !empty {
-        load_persistent(&cache_file).await.unwrap_or_default()
-    } else {
-        info!("Running in empty mode");
-        HashMap::new()
-    };
+        .unwrap_or_else(|_| PathBuf::from(".evm-proxy-cache"));
+
+    let cache = Cache::open(&cache_dir).expect("failed to open cache directory");
 
     let http_client = Client::builder()
         .pool_max_idle_per_host(8)
@@ -64,16 +56,12 @@ async fn main() {
     let state = Arc::new(AppState {
         upstream_url: RwLock::new(upstream_url),
         http_client,
-        cache_file: if !empty { cache_file } else { PathBuf::new() },
-        persistent: RwLock::new(initial_persistent),
+        cache,
         offline,
         empty,
     });
 
-    let app = Router::new()
-        .route("/rpc", post(handle_jsonrpc))
-        .route("/url", post(handle_update_url))
-        .with_state(state.clone());
+    let app = build_router(state.clone());
 
     info!(%bind_addr, "Starting EVM JSON-RPC caching proxy");
     if offline {
@@ -83,14 +71,21 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await
         .expect("failed to bind address");
-    let shutdown = shutdown_signal_with_persist(state.clone());
+    let shutdown = shutdown_signal();
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown)
         .await
         .expect("server error");
 }
 
-async fn shutdown_signal_with_persist(state: Arc<AppState>) {
+fn build_router(state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/rpc", post(handle_jsonrpc))
+        .route("/url", post(handle_update_url))
+        .with_state(state)
+}
+
+async fn shutdown_signal() {
     let ctrl_c = async {
         let _ = signal::ctrl_c().await;
     };
@@ -106,13 +101,7 @@ async fn shutdown_signal_with_persist(state: Arc<AppState>) {
         _ = ctrl_c => {}
         _ = terminate => {}
     }
-    if !state.offline {
-        if let Err(e) = save_persistent(&state).await {
-            error!(error = %e, "Failed to save persistent cache on shutdown");
-        } else {
-            info!("Persistent cache saved on shutdown");
-        }
-    }
+    info!("Shutting down");
 }
 
 async fn handle_update_url(
@@ -131,7 +120,6 @@ async fn handle_jsonrpc(
     State(state): State<Arc<AppState>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
-    // If batch (array), bypass cache and forward as-is
     if body.is_array() {
         match forward(&state, body).await {
             Ok(resp) => return (StatusCode::OK, Json(resp)).into_response(),
@@ -139,90 +127,249 @@ async fn handle_jsonrpc(
         }
     }
 
-    let Some(obj) = body.as_object() else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "jsonrpc": "2.0",
-                "error": {"code": -32600, "message": "Invalid Request"},
-                "id": null
-            })),
-        )
-            .into_response();
-    };
-
-    let method = obj.get("method").and_then(|v| v.as_str()).unwrap_or("");
-    let params = obj.get("params").cloned().unwrap_or_else(|| json!([]));
-
-    debug!(method, "Request");
-    let cacheable = matches!(
-        method,
-        "eth_getCode"
-            | "eth_getBalance"
-            | "eth_getTransactionCount"
-            | "eth_getStorageAt"
-            | "eth_getBlockByHash"
-            | "eth_getBlockByNumber"
-            | "eth_getTransactionReceipt"
-    );
-
-    let is_latest_block = (method == "eth_getBlockByNumber" || method == "eth_getBlockByHash")
-        && (params
-            .as_array()
-            .and_then(|a| a.first())
-            .and_then(|last| last.as_str())
-            .map(|last| last == "latest")
-            .unwrap_or_default());
-
-    let cacheable = cacheable && !is_latest_block && !state.empty;
-
-    if cacheable {
-        let key = cache_key(method, &params);
-
-        // Check persistent map
-        if let Some(v) = {
-            let store = state.persistent.read().await;
-            store.get(&key).cloned()
-        } {
-            info!(%key, "Cache hit");
-            return (StatusCode::OK, Json(v)).into_response();
-        }
-
-        if state.offline {
-            warn!(%key, "Cache miss (offline mode)");
+    let (method, params, id) = {
+        let Some(obj) = body.as_object() else {
             return (
-                StatusCode::OK,
+                StatusCode::BAD_REQUEST,
                 Json(json!({
                     "jsonrpc": "2.0",
-                    "error": {"code": -32001, "message": "Server running in offline mode"},
+                    "error": {"code": -32600, "message": "Invalid Request"},
                     "id": null
                 })),
             )
                 .into_response();
-        }
+        };
+        let method = obj
+            .get("method")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let params = obj.get("params").cloned().unwrap_or_else(|| json!([]));
+        let id = obj.get("id").cloned().unwrap_or(Value::Null);
+        (method, params, id)
+    };
+    let method = method.as_str();
 
-        warn!(%key, "Cache miss");
-        match forward(&state, body.clone()).await {
-            Ok(resp) => {
-                if resp.get("error").is_none() {
-                    let mut store = state.persistent.write().await;
-                    store.insert(key, resp.clone());
-                }
-                (StatusCode::OK, Json(resp)).into_response()
+    debug!(method, "Request");
+
+    let is_latest = params
+        .as_array()
+        .and_then(|a| a.first())
+        .and_then(|v| v.as_str())
+        .map(|s| s == "latest" || s == "pending" || s == "earliest")
+        .unwrap_or(false);
+
+    let cacheable = !state.empty && !is_latest;
+
+    if !cacheable {
+        return forward_and_respond(&state, body).await;
+    }
+
+    let arr = params.as_array();
+    let p = |i: usize| arr.and_then(|a| a.get(i)).and_then(|v| v.as_str());
+
+    match method {
+        "eth_getStorageAt" => {
+            let (Some(address), Some(slot), Some(block)) = (p(0), p(1), p(2)) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(val)) = state.cache.get_storage_at(address, slot, block) {
+                info!(method, address, slot, block, "Cache hit");
+                return jsonrpc_ok(&id, json!(val));
             }
-            Err(err) => error_response(err).into_response(),
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                let val = result.as_str().unwrap_or(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                );
+                if let Err(e) = state.cache.put_storage_at(address, slot, block, val) {
+                    error!(method, address, slot, block, error=%e, "Cache put failed");
+                }
+            })
+            .await
         }
-    } else {
-        match forward(&state, body).await {
-            Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
-            Err(err) => error_response(err).into_response(),
+        "eth_getBalance" => {
+            let (Some(address), Some(block)) = (p(0), p(1)) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(val)) = state.cache.get_balance(address, block) {
+                info!(method, address, block, "Cache hit");
+                return jsonrpc_ok(&id, json!(val));
+            }
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                if let Some(val) = result.as_str() {
+                    let _ = state.cache.put_balance(address, block, val);
+                }
+            })
+            .await
         }
+        "eth_getTransactionCount" => {
+            let (Some(address), Some(block)) = (p(0), p(1)) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(val)) = state.cache.get_tx_count(address, block) {
+                info!(method, address, block, "Cache hit");
+                return jsonrpc_ok(&id, json!(val));
+            }
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                if let Some(val) = result.as_str() {
+                    let _ = state.cache.put_tx_count(address, block, val);
+                }
+            })
+            .await
+        }
+        "eth_getCode" => {
+            let (Some(address), Some(_block)) = (p(0), p(1)) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(code)) = state.cache.get_code(address) {
+                info!(method, address, "Cache hit");
+                return jsonrpc_ok(&id, json!(code));
+            }
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                if let Some(code) = result.as_str() {
+                    let _ = state.cache.put_code(address, code);
+                }
+            })
+            .await
+        }
+        "eth_getBlockByHash" => {
+            let Some(hash) = p(0) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(json_str)) = state.cache.get_block_by_hash(hash) {
+                info!(method, hash, "Cache hit");
+                if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
+                    return jsonrpc_ok(&id, val);
+                }
+            }
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                if let Some(obj) = result.as_object() {
+                    let block_hash = obj.get("hash").and_then(|v| v.as_str());
+                    let block_number = obj.get("number").and_then(|v| v.as_str());
+                    if let (Some(h), Some(n)) = (block_hash, block_number) {
+                        let json_str = serde_json::to_string(result).unwrap_or_default();
+                        let _ = state.cache.put_block(h, n, &json_str);
+                    }
+                }
+            })
+            .await
+        }
+        "eth_getBlockByNumber" => {
+            let Some(number) = p(0) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(json_str)) = state.cache.get_block_by_number(number) {
+                info!(method, number, "Cache hit");
+                if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
+                    return jsonrpc_ok(&id, val);
+                }
+            }
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                if let Some(obj) = result.as_object() {
+                    let block_hash = obj.get("hash").and_then(|v| v.as_str());
+                    let block_number = obj.get("number").and_then(|v| v.as_str());
+                    if let (Some(h), Some(n)) = (block_hash, block_number) {
+                        let json_str = serde_json::to_string(result).unwrap_or_default();
+                        let _ = state.cache.put_block(h, n, &json_str);
+                    }
+                }
+            })
+            .await
+        }
+        "eth_getTransactionByHash" => {
+            let Some(hash) = p(0) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(json_str)) = state.cache.get_tx(hash) {
+                info!(method, hash, "Cache hit");
+                if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
+                    return jsonrpc_ok(&id, val);
+                }
+            }
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                if !result.is_null() {
+                    let json_str = serde_json::to_string(result).unwrap_or_default();
+                    let _ = state.cache.put_tx(hash, &json_str);
+                }
+            })
+            .await
+        }
+        "eth_getTransactionReceipt" => {
+            let Some(hash) = p(0) else {
+                return forward_and_respond(&state, body).await;
+            };
+            if let Ok(Some(json_str)) = state.cache.get_receipt(hash) {
+                info!(method, hash, "Cache hit");
+                if let Ok(val) = serde_json::from_str::<Value>(&json_str) {
+                    return jsonrpc_ok(&id, val);
+                }
+            }
+            cache_miss_and_forward(&state, method, body, &id, |result| {
+                if !result.is_null() {
+                    let json_str = serde_json::to_string(result).unwrap_or_default();
+                    let _ = state.cache.put_receipt(hash, &json_str);
+                }
+            })
+            .await
+        }
+        _ => forward_and_respond(&state, body).await,
     }
 }
 
-fn cache_key(method: &str, params: &Value) -> String {
-    let params_str = serde_json::to_string(params).unwrap_or_else(|_| "null".to_string());
-    format!("{}:{}", method, params_str)
+async fn cache_miss_and_forward(
+    state: &AppState,
+    method: &str,
+    body: Value,
+    id: &Value,
+    on_result: impl FnOnce(&Value),
+) -> axum::response::Response {
+    if state.offline {
+        warn!(method, "Cache miss (offline mode)");
+        return jsonrpc_err(id, -32001, "Server running in offline mode");
+    }
+    match forward(state, body).await {
+        Ok(resp) => {
+            warn!(request=%method, result=?resp.get("result"), "Cache miss");
+            if resp.get("error").is_none() {
+                if let Some(result) = resp.get("result") {
+                    on_result(result);
+                }
+            }
+            (StatusCode::OK, Json(resp)).into_response()
+        }
+        Err(err) => error_response(err).into_response(),
+    }
+}
+
+async fn forward_and_respond(state: &AppState, body: Value) -> axum::response::Response {
+    match forward(state, body).await {
+        Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
+        Err(err) => error_response(err).into_response(),
+    }
+}
+
+fn jsonrpc_ok(id: &Value, result: Value) -> axum::response::Response {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": result,
+        })),
+    )
+        .into_response()
+}
+
+fn jsonrpc_err(id: &Value, code: i64, message: &str) -> axum::response::Response {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": {"code": code, "message": message},
+        })),
+    )
+        .into_response()
 }
 
 async fn forward(state: &AppState, body: Value) -> anyhow::Result<Value> {
@@ -256,51 +403,235 @@ fn error_response(err: anyhow::Error) -> impl IntoResponse {
     )
 }
 
-async fn load_persistent(path: &PathBuf) -> anyhow::Result<HashMap<String, Value>> {
-    let data = match fs::read(path).await {
-        Ok(d) => d,
-        Err(_) => return Ok(HashMap::new()),
-    };
-    let v: Value = serde_json::from_slice(&data)?;
-    if let Some(map) = v.get("entries").and_then(|e| e.as_object()) {
-        let mut out = HashMap::new();
-        for (k, val) in map.iter() {
-            out.insert(k.clone(), val.clone());
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct Mock {
+        hits: Arc<AtomicUsize>,
+        url: String,
+    }
+
+    impl Mock {
+        async fn start() -> Self {
+            let hits = Arc::new(AtomicUsize::new(0));
+            let hits2 = hits.clone();
+
+            let app = Router::new().route(
+                "/",
+                post(move |Json(body): Json<Value>| {
+                    let hits = hits2.clone();
+                    async move {
+                        hits.fetch_add(1, Ordering::SeqCst);
+                        let method = body.get("method").and_then(|m| m.as_str()).unwrap_or("");
+                        let id = body.get("id").cloned().unwrap_or(Value::Null);
+                        let result = match method {
+                            "eth_getBalance" => json!("0xde0b6b3a7640000"),
+                            "eth_getTransactionCount" => json!("0x5"),
+                            "eth_getStorageAt" => json!(
+                                "0x00000000000000000000000000000000000000000000000000000000deadbeef"
+                            ),
+                            "eth_getCode" => json!("0x6080604052"),
+                            "eth_getBlockByHash" | "eth_getBlockByNumber" => json!({
+                                "hash": "0xabc123",
+                                "number": "0x100",
+                                "timestamp": "0x60000000"
+                            }),
+                            "eth_getTransactionByHash" => json!({
+                                "hash": "0xdeadbeef",
+                                "from": "0x1111111111111111111111111111111111111111"
+                            }),
+                            "eth_getTransactionReceipt" => json!({
+                                "transactionHash": "0xdeadbeef",
+                                "status": "0x1"
+                            }),
+                            _ => Value::Null,
+                        };
+                        Json(json!({"jsonrpc": "2.0", "id": id, "result": result}))
+                    }
+                }),
+            );
+
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            tokio::spawn(axum::serve(listener, app).into_future());
+
+            Mock {
+                hits,
+                url: format!("http://{addr}/"),
+            }
         }
-        return Ok(out);
-    }
-    // Fallback: plain map
-    if let Some(map) = v.as_object() {
-        let mut out = HashMap::new();
-        for (k, val) in map.iter() {
-            out.insert(k.clone(), val.clone());
+
+        fn hits(&self) -> usize {
+            self.hits.load(Ordering::SeqCst)
         }
-        return Ok(out);
-    }
-    Ok(HashMap::new())
-}
-
-async fn save_persistent(state: &AppState) -> anyhow::Result<()> {
-    let saved_at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let entries = {
-        let store = state.persistent.read().await;
-        serde_json::to_value(&*store)?
-    };
-    let wrapper = json!({
-        "saved_at": saved_at,
-        "entries": entries,
-    });
-    let pretty = serde_json::to_string_pretty(&wrapper)?;
-    let path = &state.cache_file;
-
-    let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, &pretty).await?;
-    if let Err(_e) = fs::rename(&tmp_path, path).await {
-        let _ = fs::remove_file(path).await;
-        let _ = fs::rename(&tmp_path, path).await;
     }
 
-    let bak_path = path.with_extension("json.bak");
-    fs::write(&bak_path, &pretty).await?;
-    Ok(())
+    async fn start_proxy(upstream_url: &str, cache_dir: &Path) -> String {
+        let cache = Cache::open(cache_dir).unwrap();
+        let state = Arc::new(AppState {
+            upstream_url: RwLock::new(upstream_url.to_string()),
+            http_client: Client::new(),
+            cache,
+            offline: false,
+            empty: false,
+        });
+        let app = build_router(state);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(listener, app).into_future());
+        format!("http://{addr}/rpc")
+    }
+
+    use std::path::Path;
+
+    async fn rpc(client: &Client, url: &str, method: &str, params: Value) -> Value {
+        client
+            .post(url)
+            .json(&json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}))
+            .send()
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()
+    }
+
+    async fn assert_cached(
+        client: &Client,
+        proxy_url: &str,
+        mock: &Mock,
+        method: &str,
+        params: Value,
+    ) {
+        let before = mock.hits();
+        let r1 = rpc(client, proxy_url, method, params.clone()).await;
+        assert_eq!(
+            mock.hits(),
+            before + 1,
+            "{method}: first call should hit upstream"
+        );
+        assert!(r1.get("result").is_some(), "{method}: should have result");
+
+        let r2 = rpc(client, proxy_url, method, params.clone()).await;
+        assert_eq!(
+            mock.hits(),
+            before + 1,
+            "{method}: second call should be cached"
+        );
+        assert_eq!(
+            r1.get("result"),
+            r2.get("result"),
+            "{method}: cached result should match"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_caching() {
+        let mock = Mock::start().await;
+        let cache_dir = PathBuf::from("target/test-cache");
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        let proxy_url = start_proxy(&mock.url, &cache_dir).await;
+        let client = Client::new();
+
+        assert_cached(
+            &client,
+            &proxy_url,
+            &mock,
+            "eth_getBalance",
+            json!(["0x1234", "0x100"]),
+        )
+        .await;
+        assert_cached(
+            &client,
+            &proxy_url,
+            &mock,
+            "eth_getTransactionCount",
+            json!(["0x1234", "0x100"]),
+        )
+        .await;
+        assert_cached(
+            &client,
+            &proxy_url,
+            &mock,
+            "eth_getStorageAt",
+            json!(["0x1234", "0x0", "0x100"]),
+        )
+        .await;
+        assert_cached(
+            &client,
+            &proxy_url,
+            &mock,
+            "eth_getCode",
+            json!(["0x1234", "0x100"]),
+        )
+        .await;
+        assert_cached(
+            &client,
+            &proxy_url,
+            &mock,
+            "eth_getTransactionByHash",
+            json!(["0xdeadbeef"]),
+        )
+        .await;
+        assert_cached(
+            &client,
+            &proxy_url,
+            &mock,
+            "eth_getTransactionReceipt",
+            json!(["0xdeadbeef"]),
+        )
+        .await;
+
+        assert_cached(
+            &client,
+            &proxy_url,
+            &mock,
+            "eth_getBlockByNumber",
+            json!(["0x100", false]),
+        )
+        .await;
+
+        let before = mock.hits();
+        let r = rpc(
+            &client,
+            &proxy_url,
+            "eth_getBlockByHash",
+            json!(["0xabc123", false]),
+        )
+        .await;
+        assert_eq!(
+            mock.hits(),
+            before,
+            "eth_getBlockByHash: should be cached from block-by-number"
+        );
+        assert!(r.get("result").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_storage() {
+        let mock = Mock::start().await;
+        let cache_dir = PathBuf::from("target/test-cache-slots");
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        let proxy_url = start_proxy(&mock.url, &cache_dir).await;
+        let client = Client::new();
+
+        let cases = [
+            ("0x1f98431c8ad98523631ae4a59f267346ea31f984", "0x3"),
+            ("0xf38521f130fccf29db1961597bc5d2b60f995f85", "0x1"),
+            ("0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f", "0x0"),
+        ];
+
+        for (addr, slot) in &cases {
+            assert_cached(
+                &client,
+                &proxy_url,
+                &mock,
+                "eth_getStorageAt",
+                json!([addr, slot, "0x17599f9"]),
+            )
+            .await;
+        }
+    }
 }
