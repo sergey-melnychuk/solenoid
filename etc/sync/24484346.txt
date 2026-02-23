@@ -1,0 +1,16 @@
+📦 Fetched block number: 24484346 [95 txs]
+📦 Fetched block number: 24484346 [95 txs]
+---
+### 24484346 32 hash=0x521db86cd7fccd09393dd557bced401624306db78d2423d989f1b47c2efdc570
+REVM 	OK=true 	RET=empty	GAS=776510	TRACES=60173	STATE=17+62
+sole 	OK=true 	RET=match	GAS=+2500	TRACES=false	STATE=17+62
+---
+### 24484346 80 hash=0xf3d629f54fb9724e90de98e209ea69a585a949cc7a17d65aed8f2038b939cdf5
+REVM 	OK=true 	RET=<128>	GAS=150876	TRACES=8289	STATE=7+20
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=7+25
+---
+### 24484346 81 hash=0x7fd1bafef4d9fc16529b7ac7bdc82ebdf3a019199c61e4954b67f094f1063a78
+REVM 	OK=true 	RET=<128>	GAS=121301	TRACES=7912	STATE=8+14
+sole 	OK=true 	RET=match	GAS=match	TRACES=match	STATE=8+15
+
+(total: 95, matched: 92, invalid: 3)
