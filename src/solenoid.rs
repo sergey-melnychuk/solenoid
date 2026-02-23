@@ -265,6 +265,29 @@ impl Runner {
         ext.state.entry(created).or_default();
         evm.touches.push(AccountTouch::WarmUp(created));
 
+        // Transfer CREATE value from tx sender to created address (before init code runs).
+        // Only for CREATE (to.is_zero()); for CALL/transfer the executor handles value transfer.
+        if self.call.to.is_zero() && !self.call.value.is_zero() {
+            let sender_balance = ext.balance(&self.call.from).await?;
+            let created_balance = ext.balance(&created).await?;
+            if sender_balance >= self.call.value {
+                let new_sender = sender_balance - self.call.value;
+                let new_created = created_balance + self.call.value;
+                ext.account_mut(&self.call.from).value = new_sender;
+                ext.account_mut(&created).value = new_created;
+                evm.touches.push(AccountTouch::SetValue(
+                    self.call.from,
+                    sender_balance,
+                    new_sender,
+                ));
+                evm.touches.push(AccountTouch::SetValue(
+                    created,
+                    created_balance,
+                    new_created,
+                ));
+            }
+        }
+
         if !self.call.to.is_zero() {
             let (tracer, ret) = exe.execute(&code, &self.call, &mut evm, ext).await?;
             if evm.reverted {

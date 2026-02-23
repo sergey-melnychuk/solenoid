@@ -669,6 +669,12 @@ impl<T: EventTracer> Executor<T> {
             reverted: false,
         });
 
+        // EIP-2929: Warm the caller when entering a call (CALLER in callee = warm for SELFDESTRUCT etc)
+        if !call.from.is_zero() {
+            ext.warm_address(&call.from);
+            evm.touches.push(AccountTouch::WarmUp(call.from));
+        }
+
         if ctx.depth > CALL_DEPTH_LIMIT {
             evm.stopped = true;
             evm.reverted = true;
@@ -1504,8 +1510,15 @@ impl<T: EventTracer> Executor<T> {
                     return Ok(StepResult::Halt(gas));
                 }
                 let block_number = evm.pop()?;
-                let block_hash = ext.get_block_hash(block_number).await?;
-                evm.push(block_hash)?;
+
+                if block_number >= self.header.number
+                    || self.header.number - block_number > Word::from(256)
+                {
+                    evm.push(Word::zero())?;
+                } else {
+                    let block_hash = ext.get_block_hash(block_number).await?;
+                    evm.push(block_hash)?;
+                }
             }
             0x41 => {
                 // COINBASE
@@ -2112,15 +2125,24 @@ impl<T: EventTracer> Executor<T> {
                     return Err(ExecutorError::StaticCallViolation(opcode).into());
                 }
                 let n = instruction.opcode.n as usize;
-                let offset = evm.pop()?.as_usize();
-                let size = evm.pop()?.as_usize();
 
+                let size = evm
+                    .stack
+                    .iter()
+                    .rev()
+                    .nth(1)
+                    .cloned()
+                    .unwrap_or_default()
+                    .as_usize();
                 gas = 375;
                 gas += 375 * n as i64 + 8 * size as i64;
                 gas += evm.memory_expansion_cost();
                 if evm.gas.remaining() < gas {
                     return Ok(StepResult::Halt(gas));
                 }
+
+                let offset = evm.pop()?.as_usize();
+                let size = evm.pop()?.as_usize();
 
                 let mut topics = Vec::with_capacity(n);
                 for _ in 0..n {
