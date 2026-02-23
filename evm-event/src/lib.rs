@@ -97,6 +97,7 @@ pub struct OpCode {
     pub pc: usize,
     pub op: u8,
     pub name: String,
+    #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Hex>,
     pub gas_cost: i64,

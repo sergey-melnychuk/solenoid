@@ -185,7 +185,7 @@ pub fn dump_filtered<T: serde::Serialize>(
         if i > 0 && i % CHUNK == 0 {
             buffer.flush()?;
             use std::io::Write;
-            print!("\r(write: entry {i} / {len})");
+            eprint!("\r(write: entry {i} / {len})");
             std::io::stdout().flush().unwrap();
         }
         if !f(entry) {
@@ -198,7 +198,7 @@ pub fn dump_filtered<T: serde::Serialize>(
     }
     buffer.flush()?;
     if len > CHUNK {
-        println!("\r(write: entry {len} / {len})");
+        eprintln!("\r(write: entry {len} / {len})");
     }
     Ok(ret)
 }
