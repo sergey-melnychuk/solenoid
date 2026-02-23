@@ -1,11 +1,13 @@
+use evm_event::CallType;
 use serde::{Deserialize, Serialize};
 
+use evm_common::{address::Address, block::Header, call::Call, hash::keccak256, word::Word};
+
 use crate::{
-    common::{address::Address, block::Header, call::Call, hash::keccak256, word::Word},
     decoder::Decoder,
     executor::{AccountTouch, Context, Evm, Executor, Gas},
     ext::Ext,
-    tracer::{CallType, EventTracer, LoggingTracer},
+    tracer::{EventTracer, LoggingTracer},
 };
 
 #[derive(Default)]

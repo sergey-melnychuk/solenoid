@@ -5,6 +5,7 @@ use alloy_eips::BlockId;
 use alloy_primitives::{TxKind, U256};
 use alloy_provider::Provider;
 use alloy_rpc_types::{Header, Transaction as Tx};
+use evm_event::Event;
 use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
 use revm::primitives::hardfork::SpecId;
@@ -17,7 +18,7 @@ use revm::{
 use revm::{ExecuteCommitEvm as _, InspectEvm, MainContext};
 use serde_json::{json, Value};
 
-use crate::{OpcodeTrace, TxTrace};
+use crate::TxTrace;
 
 pub struct TxResult {
     pub gas: i64,
@@ -67,7 +68,7 @@ impl From<ExecResultAndState<ExecutionResult>> for TxResult {
 pub fn runner(
     header: Header,
     client: impl Provider + 'static,
-) -> impl FnMut(Tx) -> Result<(TxResult, Vec<OpcodeTrace>)> {
+) -> impl FnMut(Tx) -> Result<(TxResult, Vec<Event>)> {
     let prev_id: BlockId = (header.number - 1).into();
     let state_db = WrapDatabaseAsync::new(AlloyDB::new(client, prev_id))
         .expect("can only fail if tokio runtime is unavailable");

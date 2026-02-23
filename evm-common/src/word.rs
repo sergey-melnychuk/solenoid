@@ -2,12 +2,18 @@ use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::common::decode;
+use crate::decode;
 
 type U256 = primitive_types::U256;
 
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Word(U256);
+
+impl From<U256> for Word {
+    fn from(value: U256) -> Self {
+        Self(value)
+    }
+}
 
 impl Word {
     pub fn mul_modulo(&self, that: &Word, modulo: &Word) -> Word {
@@ -175,14 +181,6 @@ impl From<usize> for Word {
 impl From<u128> for Word {
     fn from(value: u128) -> Self {
         Self(primitive_types::U256::from(value))
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-#[cfg(feature = "testkit")]
-impl From<Word> for evm_tracer::alloy_primitives::U256 {
-    fn from(value: Word) -> Self {
-        Self::from_be_slice(&value.0.to_big_endian())
     }
 }
 

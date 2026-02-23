@@ -13,7 +13,6 @@ fi
 
 etc/run.sh 24484346
 etc/run.sh 24486519
-
-#etc/run.sh 24486577 100
+etc/run.sh 24486570
 
 etc/todo.sh

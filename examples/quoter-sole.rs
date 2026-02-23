@@ -1,10 +1,10 @@
+use evm_common::{
+    address::{Address, addr},
+    hash::keccak256,
+    word::{Word, decode_error_string},
+};
 use eyre::Context;
 use solenoid::{
-    common::{
-        address::{Address, addr},
-        hash::keccak256,
-        word::{Word, decode_error_string},
-    },
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},
@@ -98,12 +98,7 @@ async fn main() -> eyre::Result<()> {
     println!("⛽ Gas used: {total_gas}");
 
     let path = "quoter-sole.log";
-    let traces = result
-        .tracer
-        .take()
-        .into_iter()
-        .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
-        .collect::<Vec<_>>();
+    let traces = result.tracer.take();
     evm_tracer::aux::dump(path, &traces)?;
     println!("TRACES: {} in {path}", traces.len());
 

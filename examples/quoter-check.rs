@@ -2,7 +2,7 @@ use crossterm::{
     event::{KeyCode, read},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use evm_tracer::OpcodeTrace;
+use evm_event::Event;
 use serde_json::Value;
 
 fn main() -> eyre::Result<()> {
@@ -62,8 +62,8 @@ fn main() -> eyre::Result<()> {
             continue;
         }
 
-        let trace: OpcodeTrace = parse(trace, &overrides);
-        let block: OpcodeTrace = parse(block, &overrides);
+        let trace = parse(trace, &overrides);
+        let block = parse(block, &overrides);
         let r = std::panic::catch_unwind(|| {
             pretty_assertions::assert_eq!(block, trace);
         });
@@ -94,7 +94,7 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-fn parse(s: &str, overrides: &[(String, Value)]) -> OpcodeTrace {
+fn parse(s: &str, overrides: &[(String, Value)]) -> Event {
     let mut json: Value = serde_json::from_str(s).expect("opcode:json");
     for (name, value) in overrides {
         if let Some(field) = json.get_mut(name) {

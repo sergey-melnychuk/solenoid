@@ -7,7 +7,7 @@ pub mod error;
 pub mod hash;
 pub mod word;
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Hex(Vec<u8>);
 
 impl AsRef<[u8]> for Hex {

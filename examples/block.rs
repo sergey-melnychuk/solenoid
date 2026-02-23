@@ -4,15 +4,15 @@ use std::{
     time::Instant,
 };
 
+use evm_common::{
+    Hex,
+    address::Address,
+    word::{Word, decode_error_string},
+};
 use eyre::{Context, eyre};
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use solenoid::{
-    common::{
-        Hex,
-        address::Address,
-        word::{Word, decode_error_string},
-    },
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},

@@ -1,9 +1,9 @@
+use evm_common::{
+    address::addr,
+    word::{Word, decode_error_string},
+};
 use eyre::Context;
 use solenoid::{
-    common::{
-        address::addr,
-        word::{Word, decode_error_string},
-    },
     ext::Ext,
     solenoid::{Builder, Solenoid},
     tracer::EventTracer,

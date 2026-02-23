@@ -2,7 +2,7 @@ use eyre::OptionExt;
 #[cfg(feature = "tracing")]
 use tracing::Level;
 
-use crate::common::{
+use evm_common::{
     address::Address,
     block::{Block, Header},
     word::Word,
@@ -269,7 +269,7 @@ fn hex_to_vec(val: &serde_json::Value) -> eyre::Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::common::hash::keccak256;
+    use evm_common::hash::keccak256;
 
     fn get_method_selector(signature: &str) -> String {
         let hash = keccak256(signature.as_bytes());

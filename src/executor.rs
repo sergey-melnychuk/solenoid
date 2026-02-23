@@ -1,22 +1,24 @@
+use evm_event::{
+    AccountEvent, CallType, Event, EventData, HaltReason, HashAlg, OpCode, StateEvent,
+};
 use eyre::Context as _;
 use i256::I256;
 use serde_json::json;
 use thiserror::Error;
 
+use evm_common::{
+    address::Address,
+    block::Header,
+    call::Call,
+    hash::{empty, keccak256},
+    word::{Word, decode_error_string},
+};
+
 use crate::{
-    common::{
-        address::Address,
-        block::Header,
-        call::Call,
-        hash::{empty, keccak256},
-        word::{Word, decode_error_string},
-    },
     decoder::{Bytecode, Decoder, Instruction},
     ext::Ext,
     precompiles,
-    tracer::{
-        AccountEvent, CallType, Event, EventData, EventTracer, HaltReason, HashAlg, StateEvent,
-    },
+    tracer::EventTracer,
 };
 
 #[derive(Error, Debug)]
@@ -702,7 +704,7 @@ impl<T: EventTracer> Executor<T> {
                         self.tracer.push(Event {
                             depth: ctx.depth,
                             reverted: false,
-                            data: EventData::OpCode {
+                            data: EventData::OpCode(OpCode {
                                 pc: instruction.offset,
                                 op: instruction.opcode.code,
                                 name: instruction.opcode.name(),
@@ -714,7 +716,7 @@ impl<T: EventTracer> Executor<T> {
                                 stack: evm.stack.clone(),
                                 memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                                 debug: self.debug.take(),
-                            },
+                            }),
                         });
                     }
                     if halt || instruction.opcode.code == 0xfe {
@@ -760,7 +762,7 @@ impl<T: EventTracer> Executor<T> {
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: true,
-                        data: EventData::OpCode {
+                        data: EventData::OpCode(OpCode {
                             pc: instruction.offset,
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
@@ -772,7 +774,7 @@ impl<T: EventTracer> Executor<T> {
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
-                        },
+                        }),
                     });
 
                     evm.gas(evm.gas.remaining()).expect("must succeed");
@@ -811,7 +813,7 @@ impl<T: EventTracer> Executor<T> {
             self.tracer.push(Event {
                 depth: ctx.depth,
                 reverted: false,
-                data: EventData::OpCode {
+                data: EventData::OpCode(OpCode {
                     pc: evm.pc,
                     op: 0x00,
                     name: "STOP".to_string(),
@@ -823,7 +825,7 @@ impl<T: EventTracer> Executor<T> {
                     stack: evm.stack.clone(),
                     memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                     debug: self.debug.take(),
-                },
+                }),
             });
         }
 
@@ -1835,7 +1837,7 @@ impl<T: EventTracer> Executor<T> {
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: true,
-                        data: EventData::OpCode {
+                        data: EventData::OpCode(OpCode {
                             pc: instruction.offset,
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
@@ -1847,7 +1849,7 @@ impl<T: EventTracer> Executor<T> {
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
-                        },
+                        }),
                     });
                     return Ok(StepResult::Halt(0));
                 }
@@ -1859,7 +1861,7 @@ impl<T: EventTracer> Executor<T> {
                     self.tracer.push(Event {
                         depth: ctx.depth,
                         reverted: true,
-                        data: EventData::OpCode {
+                        data: EventData::OpCode(OpCode {
                             pc: instruction.offset,
                             op: instruction.opcode.code,
                             name: instruction.opcode.name(),
@@ -1881,7 +1883,7 @@ impl<T: EventTracer> Executor<T> {
                             stack: evm.stack.clone(),
                             memory: evm.memory.chunks(32).map(Word::from_bytes).collect(),
                             debug: self.debug.take(),
-                        },
+                        }),
                     });
                     return Ok(StepResult::Halt(0));
                 }
@@ -2416,7 +2418,7 @@ impl<T: EventTracer> Executor<T> {
             self.tracer.push(Event {
                 depth: ctx.depth,
                 reverted: false,
-                data: EventData::OpCode {
+                data: EventData::OpCode(OpCode {
                     pc: instruction.offset,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
@@ -2438,7 +2440,7 @@ impl<T: EventTracer> Executor<T> {
                         "access_cost": access_cost,
                         "memory_expansion_cost": memory_expansion_cost,
                     }),
-                },
+                }),
             });
 
             // Don't add refunds from reverted calls
@@ -2480,7 +2482,7 @@ impl<T: EventTracer> Executor<T> {
             self.tracer.push(Event {
                 depth: ctx.depth,
                 reverted: false,
-                data: EventData::OpCode {
+                data: EventData::OpCode(OpCode {
                     pc: instruction.offset,
                     op: instruction.opcode.code,
                     name: instruction.opcode.name(),
@@ -2507,7 +2509,7 @@ impl<T: EventTracer> Executor<T> {
                         "memory_expansion_cost": memory_expansion_cost,
                         "ret": hex::encode(&self.ret),
                     }),
-                },
+                }),
             });
 
             let copy_len = self.ret.len().min(ret_size);
@@ -2610,7 +2612,7 @@ impl<T: EventTracer> Executor<T> {
         self.tracer.push(Event {
             depth: ctx.depth,
             reverted: false,
-            data: EventData::OpCode {
+            data: EventData::OpCode(OpCode {
                 pc: instruction.offset,
                 op: instruction.opcode.code,
                 name: instruction.opcode.name(),
@@ -2644,7 +2646,7 @@ impl<T: EventTracer> Executor<T> {
                     "code.len": code.bytecode.len(),
                     "ret": hex::encode(&self.ret),
                 }),
-            },
+            }),
         });
         self.tracer.join(tracer, inner_evm.reverted);
 
@@ -2802,7 +2804,7 @@ impl<T: EventTracer> Executor<T> {
         self.tracer.push(Event {
             depth: ctx.depth,
             reverted: false,
-            data: EventData::OpCode {
+            data: EventData::OpCode(OpCode {
                 pc: instruction.offset,
                 op: instruction.opcode.code,
                 name: instruction.opcode.name(),
@@ -2826,7 +2828,7 @@ impl<T: EventTracer> Executor<T> {
                     "inner_evm.reverted": inner_evm.reverted,
                     "inner_call": inner_call,
                 }),
-            },
+            }),
         });
 
         self.tracer.join(tracer, inner_evm.reverted);

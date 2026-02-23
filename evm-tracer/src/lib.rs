@@ -3,6 +3,8 @@ use alloy_eips::BlockId;
 use alloy_primitives::Address;
 use alloy_provider::Provider;
 use alloy_rpc_types::{Header, Transaction as Tx};
+use evm_common::word::Word;
+use evm_event::{Event, EventData, OpCode};
 use eyre::Result;
 use revm::context::result::{ExecResultAndState, ExecutionResult};
 use revm::context::ContextTr;
@@ -40,7 +42,7 @@ pub async fn trace_all(
     txs: impl Iterator<Item = Tx>,
     header: &Header,
     client: impl Provider + Clone,
-) -> Result<Vec<(ExecResultAndState<ExecutionResult>, Vec<OpcodeTrace>)>> {
+) -> Result<Vec<(ExecResultAndState<ExecutionResult>, Vec<Event>)>> {
     let prev_id: BlockId = (header.number - 1).into();
     let state_db =
         WrapDatabaseAsync::new(AlloyDB::new(client.clone(), prev_id))
@@ -163,21 +165,6 @@ pub async fn trace_one(
     Ok((result, tracer))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct OpcodeTrace {
-    pub pc: u64,
-    pub op: u8,
-    pub name: String,
-    pub gas_used: i64,
-    pub gas_left: i64,
-    pub gas_cost: i64,
-    pub gas_back: i64,
-    pub stack: Vec<String>,
-    pub memory: Vec<String>,
-    pub depth: usize,
-    pub debug: DebugInfo,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DebugInfo {
     #[serde(flatten)]
@@ -201,7 +188,7 @@ impl Eq for DebugInfo {}
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TxTrace {
     pub hash: B256,
-    pub traces: Vec<OpcodeTrace>,
+    pub traces: Vec<Event>,
 
     #[serde(skip)]
     aux: Aux,
@@ -238,7 +225,7 @@ impl TxTrace {
         }
     }
 
-    pub fn reset(&mut self) -> (B256, Vec<OpcodeTrace>) {
+    pub fn reset(&mut self) -> (B256, Vec<Event>) {
         let traces = self.traces.drain(..).collect::<Vec<_>>();
         let hash = self.hash;
         (hash, traces)
@@ -306,22 +293,29 @@ where
             }
         }
 
-        self.traces.push(OpcodeTrace {
-            pc: self.aux.pc,
-            op: self.aux.opcode,
-            name: aux::opcode_name(self.aux.opcode).to_string(),
-            gas_used: interp.gas.spent() as i64,
-            gas_left: interp.gas.remaining() as i64,
-            gas_cost,
-            gas_back: refund,
-            stack: stack
-                .iter()
-                .map(|x| hex::encode(&x.to_be_bytes::<32>()))
-                .rev()
-                .collect(),
-            memory: memory.chunks(32).map(|chunk| hex::encode(chunk)).collect(),
+        self.traces.push(Event {
+            data: EventData::OpCode(OpCode {
+                pc: self.aux.pc as usize,
+                op: self.aux.opcode,
+                name: aux::opcode_name(self.aux.opcode).to_string(),
+                data: None,
+                gas_used: interp.gas.spent() as i64,
+                gas_left: interp.gas.remaining() as i64,
+                gas_cost,
+                gas_back: refund,
+                stack: stack
+                    .into_iter()
+                    .rev()
+                    .map(|word| Word::from_bytes(&word.to_be_bytes::<32>()))
+                    .collect(),
+                memory: memory
+                    .chunks(32)
+                    .map(|chunk| Word::from_bytes(&chunk))
+                    .collect(),
+                debug: debug_value,
+            }),
             depth: self.aux.depth,
-            debug: DebugInfo::new(debug_value),
+            reverted: false,
         });
     }
 

@@ -1,9 +1,10 @@
+use evm_common::{
+    address::{Address, addr},
+    call::Call,
+    word::{Word, word},
+};
+
 use solenoid::{
-    common::{
-        address::{Address, addr},
-        call::Call,
-        word::{Word, word},
-    },
     decoder::{Bytecode, Decoder},
     eth::EthClient,
     executor::{AccountTouch, Evm, Executor},

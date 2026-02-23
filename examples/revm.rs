@@ -1,9 +1,9 @@
+use evm_common::hash;
+use evm_common::word::Word;
 use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::network::primitives::BlockTransactions;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::eyre::{self, Result};
-use solenoid::common::hash;
-use solenoid::common::word::Word;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
         let ret = result.result.output().unwrap_or_default().as_ref();
         eprintln!("---");
         if ret.len() <= 512 {
-            eprintln!("RET: {}", hex::encode(ret));
+            eprintln!("RET: 0x{}", hex::encode(ret));
         } else {
             eprintln!(
                 "RET: len={} hash={}",
@@ -54,11 +54,12 @@ async fn main() -> Result<()> {
         eprintln!("GAS: {}", result.result.gas_used());
         eprintln!("OK: {}", !result.result.is_halt());
 
+        // Dump TRACES and STATE:
+
         let path = format!("revm.{block_number}.{skip}.log");
         evm_tracer::aux::dump(&path, &traces)?;
         println!("TRACES: {} in {path}", traces.len());
-
-        // Dump STATE:
+        drop(traces);
 
         use evm_tracer::revm::primitives::{StorageKey, StorageValue};
         use serde_json::json;

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::common::{address::Address, word::Word};
+use crate::{address::Address, word::Word};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Call {

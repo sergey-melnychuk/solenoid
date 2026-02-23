@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::common::{Hex, address::Address, word::Word};
+use crate::{Hex, address::Address, word::Word};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tx {

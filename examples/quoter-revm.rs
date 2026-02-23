@@ -10,7 +10,7 @@ use revm::database::{AlloyDB, CacheDB, StateBuilder, WrapDatabaseAsync};
 use revm::primitives::{Address, Bytes, TxKind, U256};
 use revm::{MainBuilder, MainContext};
 
-use solenoid::common::hash::keccak256;
+use evm_common::hash::keccak256;
 
 // RUST_LOG=off cargo run --release --example quoter-revm
 

@@ -1,0 +1,13 @@
+[package]
+name = "evm-common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eyre = "0.6.12"
+hex = "0.4.3"
+primitive-types = "0.14.0"
+serde = "1.0.228"
+thiserror = "2.0.18"
+tiny-keccak = { version = "2.0.0", features = ["keccak"] }
+

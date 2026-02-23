@@ -3,10 +3,9 @@ use std::collections::{HashMap, HashSet};
 #[cfg(all(feature = "tracing", not(target_arch = "wasm32")))]
 use std::time::Instant;
 
-use crate::{
-    common::{address::Address, block::AccessListItem, hash::keccak256, word::Word},
-    eth::EthClient,
-};
+use evm_common::{address::Address, block::AccessListItem, hash::keccak256, word::Word};
+
+use crate::eth::EthClient;
 
 #[derive(Debug, Default)]
 pub struct Account {

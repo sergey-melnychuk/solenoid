@@ -7,7 +7,7 @@ use crossterm::{
     event::{KeyCode, KeyModifiers, read},
     terminal::{disable_raw_mode, enable_raw_mode},
 };
-use evm_tracer::OpcodeTrace;
+use evm_event::{Event, EventData, OpCode};
 use serde_json::json;
 
 enum Predicate {
@@ -17,10 +17,14 @@ enum Predicate {
 }
 
 impl Predicate {
-    fn check(&self, trace: &OpcodeTrace) -> bool {
+    fn check(&self, depth: usize, opcode: &OpCode) -> bool {
         match self {
-            Self::Depth(d) => &trace.depth == d,
-            Self::IsCall => trace.debug.value["is_call"].as_bool().unwrap_or_default(),
+            Self::Depth(d) => &depth == d,
+            Self::IsCall => opcode
+                .debug
+                .get("is_call")
+                .and_then(|v| v.as_bool())
+                .unwrap_or_default(),
             Self::None => false,
         }
     }
@@ -86,8 +90,17 @@ fn main() -> eyre::Result<()> {
             break;
         }
 
-        let mut a: OpcodeTrace = serde_json::from_str(&a).unwrap();
-        let mut b: OpcodeTrace = serde_json::from_str(&b).unwrap();
+        let a: Event = serde_json::from_str(&a).unwrap();
+        let b: Event = serde_json::from_str(&b).unwrap();
+        let d = b.depth;
+        let mut a = match a.data {
+            EventData::OpCode(opcode) => opcode,
+            _ => return Err(eyre::eyre!("expected OpCode")),
+        };
+        let mut b = match b.data {
+            EventData::OpCode(opcode) => opcode,
+            _ => return Err(eyre::eyre!("expected OpCode")),
+        };
         if is_compact {
             if a.memory == b.memory {
                 a.memory.clear();
@@ -98,6 +111,17 @@ fn main() -> eyre::Result<()> {
                 b.stack.clear();
             }
         }
+
+        let a_debug = a.debug.take();
+        let b_debug = b.debug.take();
+
+        let _ = a.data.take();
+        let _ = b.data.take();
+
+        let mut a_stack = a.stack.clone();
+        a_stack.reverse();
+        a.stack = a_stack;
+
         let r = std::panic::catch_unwind(|| {
             pretty_assertions::assert_eq!(b, a);
         });
@@ -111,8 +135,8 @@ fn main() -> eyre::Result<()> {
             } else if b.name == "BALANCE" {
                 format!(
                     ",revm.stack[0]=0x{},sole.stack[0]=0x{}",
-                    a.stack[0].replace("00", ""),
-                    b.stack[0].replace("00", ""),
+                    hex::encode(&a.stack[0].into_bytes()),
+                    hex::encode(&b.stack[0].into_bytes()),
                 )
             } else {
                 String::from("")
@@ -128,17 +152,17 @@ fn main() -> eyre::Result<()> {
         if is_failed && matches!(p, Predicate::None) {
             eprintln!("LINE: {i}");
             failed = true;
-        } else if explore || p.check(&b) {
+        } else if explore || p.check(d, &b) {
             let mut entry = serde_json::to_value(a.clone())?;
             entry["debug"] = json!({
-                "revm": a.debug,
-                "sole": b.debug,
+                "revm": a_debug,
+                "sole": b_debug,
             });
             eprintln!("{}", serde_json::to_string_pretty(&entry).unwrap());
             eprintln!("\nLINE: {i} [explore]");
         }
 
-        if !non_interactive && (is_failed || explore || p.check(&b)) {
+        if !non_interactive && (is_failed || explore || p.check(d, &b)) {
             explore = false;
             enable_raw_mode()?;
             let event = read()?;
@@ -157,7 +181,7 @@ fn main() -> eyre::Result<()> {
                         p = Predicate::None;
                     }
                     KeyCode::Char('d') | KeyCode::Char('D') => {
-                        p = Predicate::Depth(b.depth + 1);
+                        p = Predicate::Depth(d + 1);
                         explore = false;
                         step = if !shift { 1 } else { -1 };
                     }

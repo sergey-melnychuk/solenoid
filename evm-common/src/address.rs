@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::common::{decode, hash::keccak256, word::Word};
+use crate::{decode, hash::keccak256, word::Word};
 
 #[derive(Clone, Copy, Default, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Address(pub [u8; 20]);
@@ -126,11 +126,11 @@ impl From<[u8; 20]> for Address {
 }
 
 impl TryFrom<&[u8]> for Address {
-    type Error = crate::common::error::Error;
+    type Error = crate::error::Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         if value.len() != 20 {
-            return Err(crate::common::error::Error::InvalidAddress);
+            return Err(crate::error::Error::InvalidAddress);
         }
         let mut bytes = [0u8; 20];
         bytes.copy_from_slice(value);
@@ -139,15 +139,15 @@ impl TryFrom<&[u8]> for Address {
 }
 
 impl TryFrom<&str> for Address {
-    type Error = crate::common::error::Error;
+    type Error = crate::error::Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         if value.len() != 40 && value.len() != 42 {
-            return Err(crate::common::error::Error::InvalidAddress);
+            return Err(crate::error::Error::InvalidAddress);
         }
         let mut bytes = [0u8; 20];
         hex::decode_to_slice(value.trim_start_matches("0x"), &mut bytes)
-            .map_err(|_| crate::common::error::Error::InvalidAddress)?;
+            .map_err(|_| crate::error::Error::InvalidAddress)?;
         Ok(Address(bytes))
     }
 }

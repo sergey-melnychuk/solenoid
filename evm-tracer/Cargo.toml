@@ -5,6 +5,9 @@ edition = "2021"
 description = "EVM transaction tracer"
 
 [dependencies]
+evm-event = { path = "../evm-event" }
+evm-common = { path = "../evm-common" }
+
 # revm crates
 revm = { version = "34.0.0", features = ["alloydb", "optional_balance_check"] }
 

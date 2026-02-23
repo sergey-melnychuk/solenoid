@@ -12,6 +12,14 @@ use tracing::{debug, error, info, warn};
 
 // curl -H 'Content-Type: application/json' -d '{"url":""}' http://localhost:8080/url
 
+// tar -cjf evm-cache.tar.gz .evm-proxy-cache
+// scp evm-cache.tar.gz nuc:/home/work/Code/solenoid/evm-cache.tar.gz
+// ssh nuc
+// cd /home/work/Code/solenoid/rpc-proxy
+// tar -cjf evm-cache-backup.tar.gz .evm-proxy-cache
+// rm -rf .evm-proxy-cache
+// tar -xjf evm-cache.tar.gz
+
 struct AppState {
     upstream_url: RwLock<String>,
     http_client: Client,

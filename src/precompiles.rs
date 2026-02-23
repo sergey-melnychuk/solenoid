@@ -10,7 +10,7 @@ use ripemd::Ripemd160;
 use sha2::{Digest, Sha256};
 use tiny_keccak::{Hasher, Keccak};
 
-use crate::common::address::Address;
+use evm_common::address::Address;
 
 // EIP-7823: max allowed byte length for each MODEXP input field
 const MODEXP_MAX_INPUT_LEN: usize = 1024;

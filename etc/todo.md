@@ -1,6 +1,11 @@
 ---
 24486519 242 - SELFDESTRUCT, state/balance
-24484346 1 - CLZ opcode
+
+[Type-3 TX mishandled (adding 8 versioned blobs - succeeds, gas mismatch)]
+24486570 136 hash=0x9274b96c95a5e6ecfbc1a62dfcbedff7a4db034a187ce9c2853a2f4ba1167895
+REVM 	OK=false 	RET=<4> 	GAS=73201	TRACES=629	    STATE=5+4
+sole 	OK=false 	RET=match	GAS=match	TRACES=match	STATE=7+19
+eth:    OK=true     ...         GAS=168858  ...             STATE=4
 ---
 
 Heavy transactions: 400k (57GB) traces

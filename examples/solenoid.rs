@@ -1,6 +1,6 @@
+use evm_common::{address::addr, word::Word};
 use eyre::Context;
 use solenoid::{
-    common::{address::addr, word::Word},
     eth,
     ext::Ext,
     solenoid::{Builder, Solenoid},

@@ -1,6 +1,6 @@
+use evm_common::hash;
 use eyre::Result;
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
-use solenoid::common::hash;
 
 fn main() -> Result<()> {
     // Signature data from the user

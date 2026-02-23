@@ -1,6 +1,7 @@
+use evm_common::{address::Address, hash, word::Word};
+use evm_event::EventData;
 use eyre::{Context, eyre};
 use solenoid::{
-    common::{address::Address, hash, word::Word},
     eth,
     ext::{Ext, TxContext},
     solenoid::{Builder, Solenoid},
@@ -67,24 +68,11 @@ async fn main() -> eyre::Result<()> {
             .map_err(|_| eyre!("panic-caught"))
             .with_context(|| format!("TX:{idx}:{}", tx.hash))?;
         let events = result.tracer.take();
-        let len = result.tracer.peek().len();
-        let mut traces = Vec::with_capacity(len);
-        let mut i = 0;
-        for event in events {
-            if i % 1000 == 0 {
-                use std::io::Write;
-                print!("\r(mapping: {i} / {len})");
-                std::io::stdout().flush().unwrap();
-            }
-            if let Ok(trace) = evm_tracer::OpcodeTrace::try_from(event) {
-                traces.push(trace);
-            }
-            i += 1;
-        }
+
         println!();
         eprintln!("---");
         if result.ret.len() <= 512 {
-            eprintln!("RET: {}", hex::encode(&result.ret));
+            eprintln!("RET: 0x{}", hex::encode(&result.ret));
         } else {
             eprintln!(
                 "RET: len={} hash={}",
@@ -161,11 +149,14 @@ async fn main() -> eyre::Result<()> {
 
         eprintln!("OK: {}", !result.evm.reverted);
 
-        let path = format!("sole.{block_number}.{skip}.log");
-        evm_tracer::aux::dump(&path, &traces)?;
-        println!("TRACES: {} in {path}", traces.len());
+        // Dump TRACES and STATE:
 
-        // Dump STATE:
+        let path = format!("sole.{block_number}.{skip}.log");
+        let len = evm_tracer::aux::dump_filtered(&path, &events, |event| {
+            matches!(event.data, EventData::OpCode(_))
+        })?;
+        drop(events);
+        println!("TRACES: {len} in {path}");
 
         use std::collections::{BTreeMap, BTreeSet};
         let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
@@ -222,14 +213,6 @@ async fn main() -> eyre::Result<()> {
         let path = format!("sole.{block_number}.{skip}.state.json");
         evm_tracer::aux::dump(&path, &[ret])?;
         println!("STATE: {path}");
-
-        // Explicitly drop large data structures to free memory immediately
-        // Dropping 400k+ traces can take a long time if they're in swap
-        drop(traces);
-        drop(result);
-
-        // Yield to allow the runtime to process the drops
-        tokio::task::yield_now().await;
     }
 
     // Explicitly drop ext to close HTTP client connections

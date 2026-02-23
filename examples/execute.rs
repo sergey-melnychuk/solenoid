@@ -1,9 +1,10 @@
-use solenoid::{common::word::word, executor::AccountTouch};
+use evm_common::word::word;
+use evm_common::{address::addr, call::Call, word::Word};
+use solenoid::executor::AccountTouch;
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     use solenoid::{
-        common::{address::addr, call::Call, word::Word},
         decoder::{Bytecode, Decoder},
         eth::EthClient,
         executor::{Evm, Executor},

@@ -1,26 +1,25 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::{pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin, sync::Arc};
 
+use evm_common::address::Address;
+use evm_event::{Event, EventData};
 use evm_tracer::alloy_eips::BlockNumberOrTag;
 use evm_tracer::alloy_provider::{Provider, ProviderBuilder};
 use evm_tracer::alloy_rpc_types::BlockTransactions;
 use serde_json::Value;
-use solenoid::common::address::Address;
-use solenoid::ext::TxContext;
 use tokio::sync::Mutex;
 
+use evm_common::block::{Block, Header, Tx};
+use evm_common::word::Word;
 use solenoid::{
-    common::block::{Header, Tx},
+    eth,
+    ext::Ext,
+    ext::TxContext,
     solenoid::{Builder as _, CallResult, Solenoid},
     tracer::{EventTracer as _, LoggingTracer},
 };
-use solenoid::{
-    common::{block::Block, word::Word},
-    eth,
-    ext::Ext,
-};
 
-use evm_tracer::{OpcodeTrace, run::TxResult};
+use evm_tracer::run::TxResult;
 
 async fn as_tx_result(
     gas_costs: i64,
@@ -103,7 +102,7 @@ async fn as_state(
 pub fn runner(
     header: Header,
     ext: Ext,
-) -> impl FnMut(Tx) -> Pin<Box<dyn Future<Output = eyre::Result<(TxResult, Vec<OpcodeTrace>)>>>> {
+) -> impl FnMut(Tx) -> Pin<Box<dyn Future<Output = eyre::Result<(TxResult, Vec<Event>)>>>> {
     let ext = Arc::new(Mutex::new(ext));
     let base_fee = header.base_fee;
     move |tx| {
@@ -175,8 +174,14 @@ pub fn runner(
                     .tracer
                     .take()
                     .into_iter()
-                    .filter_map(|event| evm_tracer::OpcodeTrace::try_from(event).ok())
-                    .collect::<Vec<_>>();
+                    .filter(|event| matches!(event.data, EventData::OpCode(_)))
+                    .map(|mut event| {
+                        if let EventData::OpCode(opcode) = &mut event.data {
+                            opcode.stack.reverse();
+                        }
+                        event
+                    })
+                    .collect();
 
                 let tx_result = as_tx_result(gas_costs, gas_floor, &result, &mut *guard).await?;
 
@@ -289,7 +294,10 @@ async fn main() -> eyre::Result<()> {
                 let sole_trace_file = format!("sole.{}.{}.log", block_number, idx);
 
                 evm_tracer::aux::dump(&revm_trace_file, &revm_traces).ok();
-                evm_tracer::aux::dump(&sole_trace_file, &sole_traces).ok();
+                evm_tracer::aux::dump_filtered(&sole_trace_file, &sole_traces, |event| {
+                    matches!(event.data, EventData::OpCode(_))
+                })
+                .ok();
 
                 // Dump state to files for later analysis
                 let revm_state_file = format!("revm.{}.{}.state.json", block_number, idx);

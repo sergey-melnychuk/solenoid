@@ -1,9 +1,9 @@
+use evm_common::{
+    address::{Address, addr},
+    word::{Word, word},
+};
 use eyre::Context;
 use solenoid::{
-    common::{
-        address::{Address, addr},
-        word::{Word, word},
-    },
     eth,
     ext::Ext,
     solenoid::{Builder, CallResult, Solenoid},

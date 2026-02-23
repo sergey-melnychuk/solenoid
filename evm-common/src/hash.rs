@@ -1,4 +1,4 @@
-use crate::common::decode;
+use crate::decode;
 
 pub fn keccak256(input: &[u8]) -> [u8; 32] {
     use tiny_keccak::Hasher;
