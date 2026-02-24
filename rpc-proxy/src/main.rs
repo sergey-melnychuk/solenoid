@@ -1,8 +1,15 @@
 mod cache;
+mod retry;
 
 use std::{collections::HashSet, net::SocketAddr, path::PathBuf, sync::Arc};
 
-use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::{get, post}};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
+};
 use cache::Cache;
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -125,9 +132,15 @@ async fn handle_ready(State(state): State<Arc<AppState>>) -> impl IntoResponse {
             if let Some(result) = resp.get("result").and_then(|v| v.as_str()) {
                 (StatusCode::OK, Json(json!({ "block": result })))
             } else if resp.get("error").is_some() {
-                (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "upstream error" })))
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({ "error": "upstream error" })),
+                )
             } else {
-                (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "invalid response" })))
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(json!({ "error": "invalid response" })),
+                )
             }
         }
         Err(err) => {
@@ -366,10 +379,10 @@ async fn cache_miss_and_forward(
     match forward(state, body).await {
         Ok(resp) => {
             warn!(request=%method, result=?resp.get("result"), "Cache miss");
-            if resp.get("error").is_none() {
-                if let Some(result) = resp.get("result") {
-                    on_result(result);
-                }
+            if resp.get("error").is_none()
+                && let Some(result) = resp.get("result")
+            {
+                on_result(result);
             }
             (StatusCode::OK, Json(resp)).into_response()
         }
@@ -408,23 +421,64 @@ fn jsonrpc_err(id: &Value, code: i64, message: &str) -> axum::response::Response
         .into_response()
 }
 
-async fn forward(state: &AppState, body: Value) -> anyhow::Result<Value> {
-    let response = state
-        .http_client
-        .post(&*state.upstream_url.read().await)
-        .json(&body)
-        .send()
-        .await?;
+#[derive(Debug)]
+enum ForwardError {
+    Reqwest(reqwest::Error),
+    Http {
+        status: reqwest::StatusCode,
+        body: String,
+    },
+}
 
-    if !response.status().is_success() {
-        let status = response.status();
-        let text = response.text().await.unwrap_or_default();
-        error!(?status, body = %text, "Upstream returned error");
-        anyhow::bail!("upstream error: {}", status);
+impl ForwardError {
+    fn is_retryable(&self) -> bool {
+        match self {
+            Self::Reqwest(e) => e.is_connect() || e.is_timeout() || e.is_request(),
+            Self::Http { status, .. } => status.is_server_error() || status.as_u16() == 429,
+        }
     }
+}
 
-    let v = response.json::<Value>().await?;
-    Ok(v)
+impl std::fmt::Display for ForwardError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Reqwest(e) => write!(f, "Request failed: {}", e),
+            Self::Http { status, body } => write!(f, "upstream error: {} - {}", status, body),
+        }
+    }
+}
+
+impl std::error::Error for ForwardError {}
+
+async fn forward(state: &AppState, body: Value) -> anyhow::Result<Value> {
+    let url = state.upstream_url.read().await.clone();
+    retry::retry(
+        || async {
+            let response = state
+                .http_client
+                .post(&url)
+                .json(&body)
+                .send()
+                .await
+                .map_err(ForwardError::Reqwest)?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(ForwardError::Http { status, body });
+            }
+
+            response.json().await.map_err(ForwardError::Reqwest)
+        },
+        ForwardError::is_retryable,
+        retry::RetryConfig {
+            max_attempts: 30,
+            initial_delay_ms: 1000,
+            max_delay_ms: 20_000,
+        },
+    )
+    .await
+    .map_err(Into::into)
 }
 
 fn error_response(err: anyhow::Error) -> impl IntoResponse {

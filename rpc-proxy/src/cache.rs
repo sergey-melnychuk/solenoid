@@ -57,11 +57,11 @@ impl Cache {
         let path = self.dir.join("storage").join(format!("{addr}.yak"));
         let mut dbs = self.storage_dbs.write().unwrap();
         if let Some(db) = dbs.get(&addr) {
-            return Ok(Arc::clone(db));
+            Ok(Arc::clone(db))
         } else {
             let db = Arc::new(open_or_create_kv(&path)?);
             dbs.insert(addr, Arc::clone(&db));
-            return Ok(db);
+            Ok(db)
         }
     }
 
@@ -242,7 +242,7 @@ fn decode_hex_compact(s: &str) -> Vec<u8> {
     if clean.is_empty() {
         return vec![0];
     }
-    let even = if clean.len() % 2 != 0 {
+    let even = if !clean.len().is_multiple_of(2) {
         format!("0{clean}")
     } else {
         clean.to_string()
