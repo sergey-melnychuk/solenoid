@@ -54,8 +54,11 @@ async fn main() {
         .parse()
         .expect("invalid BIND_ADDR");
 
-    let upstream_url =
-        std::env::var("URL").unwrap_or_else(|_| "https://ethereum-rpc.publicnode.com".to_string());
+    let upstream_url: Arc<str> = Arc::from(
+        std::env::var("URL")
+            .unwrap_or_else(|_| "https://ethereum-rpc.publicnode.com".to_string())
+            .as_str(),
+    );
 
     let cache_dir: PathBuf = std::env::var("CACHE_DIR")
         .map(PathBuf::from)
@@ -64,7 +67,7 @@ async fn main() {
     let cache = Cache::open(&cache_dir).expect("failed to open cache directory");
 
     let http_client = Client::builder()
-        .pool_max_idle_per_host(8)
+        .pool_max_idle_per_host(64)
         .build()
         .expect("failed building reqwest client");
 
@@ -158,7 +161,7 @@ async fn handle_update_url(
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
     if let Some(url) = body.get("url").and_then(|url| url.as_str()) {
-        *state.upstream_url.write().await = url.to_string();
+        *state.upstream_url.write().await = Arc::from(url);
     } else {
         return (StatusCode::BAD_REQUEST, "ignored").into_response();
     }
@@ -197,9 +200,8 @@ async fn handle_jsonrpc(
         let id = obj.get("id").cloned().unwrap_or(Value::Null);
         (method, params, id)
     };
-    let method = method.as_str();
 
-    debug!(method, "Request");
+    debug!(method = %method, "Request");
 
     let is_latest = params
         .as_array()
@@ -217,7 +219,7 @@ async fn handle_jsonrpc(
     let arr = params.as_array();
     let p = |i: usize| arr.and_then(|a| a.get(i)).and_then(|v| v.as_str());
 
-    match method {
+    match method.as_str() {
         "eth_getStorageAt" => {
             let (Some(address), Some(slot), Some(block)) = (p(0), p(1), p(2)) else {
                 return forward_and_respond(&state, body).await;
@@ -226,11 +228,12 @@ async fn handle_jsonrpc(
                 info!(method, address, slot, block, "Cache hit");
                 return jsonrpc_ok(&id, json!(val));
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            let (address, slot, block) = (address.to_string(), slot.to_string(), block.to_string());
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 let val = result.as_str().unwrap_or(
                     "0x0000000000000000000000000000000000000000000000000000000000000000",
                 );
-                if let Err(e) = state.cache.put_storage_at(address, slot, block, val) {
+                if let Err(e) = state.cache.put_storage_at(&address, &slot, &block, val) {
                     error!(method, address, slot, block, error=%e, "Cache put failed");
                 }
             })
@@ -244,9 +247,10 @@ async fn handle_jsonrpc(
                 info!(method, address, block, "Cache hit");
                 return jsonrpc_ok(&id, json!(val));
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            let (address, block) = (address.to_string(), block.to_string());
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 if let Some(val) = result.as_str() {
-                    let _ = state.cache.put_balance(address, block, val);
+                    let _ = state.cache.put_balance(&address, &block, val);
                 }
             })
             .await
@@ -259,9 +263,10 @@ async fn handle_jsonrpc(
                 info!(method, address, block, "Cache hit");
                 return jsonrpc_ok(&id, json!(val));
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            let (address, block) = (address.to_string(), block.to_string());
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 if let Some(val) = result.as_str() {
-                    let _ = state.cache.put_tx_count(address, block, val);
+                    let _ = state.cache.put_tx_count(&address, &block, val);
                 }
             })
             .await
@@ -274,9 +279,10 @@ async fn handle_jsonrpc(
                 info!(method, address, "Cache hit");
                 return jsonrpc_ok(&id, json!(code));
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            let address = address.to_string();
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 if let Some(code) = result.as_str() {
-                    let _ = state.cache.put_code(address, code);
+                    let _ = state.cache.put_code(&address, code);
                 }
             })
             .await
@@ -291,7 +297,7 @@ async fn handle_jsonrpc(
                     return jsonrpc_ok(&id, val);
                 }
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 if let Some(obj) = result.as_object() {
                     let block_hash = obj.get("hash").and_then(|v| v.as_str());
                     let block_number = obj.get("number").and_then(|v| v.as_str());
@@ -313,7 +319,7 @@ async fn handle_jsonrpc(
                     return jsonrpc_ok(&id, val);
                 }
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 if let Some(obj) = result.as_object() {
                     let block_hash = obj.get("hash").and_then(|v| v.as_str());
                     let block_number = obj.get("number").and_then(|v| v.as_str());
@@ -335,10 +341,11 @@ async fn handle_jsonrpc(
                     return jsonrpc_ok(&id, val);
                 }
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            let hash = hash.to_string();
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 if !result.is_null() {
                     let json_str = serde_json::to_string(result).unwrap_or_default();
-                    let _ = state.cache.put_tx(hash, &json_str);
+                    let _ = state.cache.put_tx(&hash, &json_str);
                 }
             })
             .await
@@ -353,10 +360,11 @@ async fn handle_jsonrpc(
                     return jsonrpc_ok(&id, val);
                 }
             }
-            cache_miss_and_forward(&state, method, body, &id, |result| {
+            let hash = hash.to_string();
+            cache_miss_and_forward(&state, method.as_str(), body, &id, |result| {
                 if !result.is_null() {
                     let json_str = serde_json::to_string(result).unwrap_or_default();
-                    let _ = state.cache.put_receipt(hash, &json_str);
+                    let _ = state.cache.put_receipt(&hash, &json_str);
                 }
             })
             .await
@@ -373,7 +381,7 @@ async fn cache_miss_and_forward(
     on_result: impl FnOnce(&Value),
 ) -> axum::response::Response {
     if state.offline {
-        warn!(method, "Cache miss (offline mode)");
+        warn!(%method, "Cache miss (offline mode)");
         return jsonrpc_err(id, -32001, "Server running in offline mode");
     }
     match forward(state, body).await {
@@ -451,12 +459,12 @@ impl std::fmt::Display for ForwardError {
 impl std::error::Error for ForwardError {}
 
 async fn forward(state: &AppState, body: Value) -> anyhow::Result<Value> {
-    let url = state.upstream_url.read().await.clone();
+    let url = state.upstream_url.read().await.clone(); // Arc clone is cheap
     retry::retry(
         || async {
             let response = state
                 .http_client
-                .post(&url)
+                .post(url.as_ref())
                 .json(&body)
                 .send()
                 .await
@@ -561,7 +569,7 @@ mod tests {
     async fn start_proxy(upstream_url: &str, cache_dir: &Path) -> String {
         let cache = Cache::open(cache_dir).unwrap();
         let state = Arc::new(AppState {
-            upstream_url: RwLock::new(upstream_url.to_string()),
+            upstream_url: RwLock::new(Arc::from(upstream_url)),
             http_client: Client::new(),
             cache,
             offline: false,

@@ -68,7 +68,7 @@ impl From<ExecResultAndState<ExecutionResult>> for TxResult {
 pub fn runner(
     header: Header,
     client: impl Provider + 'static,
-) -> impl FnMut(Tx) -> Result<(TxResult, Vec<Event>)> {
+) -> impl FnMut(Tx) -> Result<(TxResult, Vec<Event>, u64)> {
     let prev_id: BlockId = (header.number - 1).into();
     let state_db = WrapDatabaseAsync::new(AlloyDB::new(client, prev_id))
         .expect("can only fail if tokio runtime is unavailable");
@@ -99,6 +99,7 @@ pub fn runner(
     let mut evm = ctx.build_mainnet_with_inspector(tracer);
 
     move |tx: Tx| {
+        let now = std::time::Instant::now();
         let tx_env = TxEnv::builder()
             .caller(tx.inner.signer())
             .gas_limit(tx.gas_limit())
@@ -131,6 +132,7 @@ pub fn runner(
         // println!("\n[REVM] COINBASE BALANCE: {coinbase_balance:#x}");
 
         let (_, traces) = evm.inspector.reset();
-        Ok((result.into(), traces))
+        let ms = now.elapsed().as_millis() as u64;
+        Ok((result.into(), traces, ms))
     }
 }

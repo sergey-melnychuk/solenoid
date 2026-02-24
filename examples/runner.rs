@@ -94,7 +94,7 @@ async fn as_state(
 pub fn runner(
     header: Header,
     ext: Ext,
-) -> impl FnMut(Tx) -> Pin<Box<dyn Future<Output = eyre::Result<(TxResult, Vec<Event>)>>>> {
+) -> impl FnMut(Tx) -> Pin<Box<dyn Future<Output = eyre::Result<(TxResult, Vec<Event>, u64)>>>> {
     let ext = Arc::new(Mutex::new(ext));
     let base_fee = header.base_fee;
     move |tx| {
@@ -133,10 +133,11 @@ pub fn runner(
         let access_list_cost = tx_ctx.access_list_cost();
 
         Box::pin(async move {
-            let (tx_result, traces) = tokio::spawn(async move {
+            let (tx_result, traces, ms) = tokio::spawn(async move {
                 let mut guard = ext.lock().await;
                 guard.reset(tx_ctx);
 
+                let now = std::time::Instant::now();
                 let mut result = Solenoid::new()
                     .execute(tx.to.unwrap_or_default(), "", tx.input.as_ref())
                     .with_header(header.clone())
@@ -146,6 +147,7 @@ pub fn runner(
                     .ready()
                     .apply(&mut *guard)
                     .await?;
+                let ms = now.elapsed().as_millis() as u64;
 
                 // let coinbase_balance = guard.balance(&header.miner).await?;
                 // println!("[SOLE] COINBASE BALANCE: {coinbase_balance:#x}");
@@ -177,11 +179,11 @@ pub fn runner(
 
                 let tx_result = as_tx_result(gas_costs, gas_floor, &result, &mut *guard).await?;
 
-                Ok::<_, eyre::Report>((tx_result, traces))
+                Ok::<_, eyre::Report>((tx_result, traces, ms))
             })
             .await??;
 
-            Ok((tx_result, traces))
+            Ok((tx_result, traces, ms))
         })
     }
 }
@@ -261,19 +263,23 @@ async fn main() -> eyre::Result<()> {
 
     let mut matched = 0;
     for idx in 0..len {
-        if progress {
-            use std::io::Write;
-            eprint!("\rTX: {idx:>3}/{:>3}", len - 1);
-            std::io::stdout().flush().unwrap();
-        }
-
         let tx = txs[idx].clone();
-        let (revm_result, revm_traces) = g(tx)?;
+        let (revm_result, revm_traces, revm_ms) = g(tx)?;
 
         let tx = transactions[idx].clone();
         let result = f(tx).await;
+
         match result {
-            Ok((sole_result, sole_traces)) => {
+            Ok((sole_result, sole_traces, sole_ms)) => {
+                if progress {
+                    use std::io::Write;
+                    eprint!(
+                        "\rTX: {idx:>3}/{:>3} | REVM: {revm_ms:>5} ms | SOLE: {sole_ms:>5} ms",
+                        len - 1
+                    );
+                    std::io::stdout().flush().unwrap();
+                }
+
                 let rev_ok = revm_result.rev == sole_result.rev;
                 let ret_ok = revm_result.ret == sole_result.ret;
                 let gas_ok = revm_result.gas == sole_result.gas;
@@ -338,7 +344,7 @@ async fn main() -> eyre::Result<()> {
                     })
                     .sum::<usize>();
                 println!(
-                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={:5<}\tSTATE={}+{}",
+                    "REVM \tOK={} \tRET={:4}\tGAS={}\tTRACES={:5<}\tSTATE={}+{}\t{revm_ms} ms",
                     !revm_result.rev,
                     ret,
                     revm_result.gas,
@@ -375,7 +381,7 @@ async fn main() -> eyre::Result<()> {
                     format!("{}+{}", state_accounts, state_keys)
                 };
                 println!(
-                    "sole \tOK={} \tRET={}\tGAS={}\tTRACES={:5<}\tSTATE={}",
+                    "sole \tOK={} \tRET={}\tGAS={}\tTRACES={:5<}\tSTATE={}\t{sole_ms} ms",
                     !sole_result.rev,
                     ret_diff,
                     gas_diff,
