@@ -95,7 +95,7 @@ async fn test_get() -> eyre::Result<()> {
         evm.touches,
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
-            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::WarmUp(to),
             AccountTouch::GetCode(
                 to,
                 word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),
@@ -136,7 +136,7 @@ async fn test_get_with_override() -> eyre::Result<()> {
         evm.touches,
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
-            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::WarmUp(to),
             AccountTouch::GetCode(to, word("0x0"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
             AccountTouch::GetState(to, word("0x0"), word("0x1"), false),
@@ -164,7 +164,7 @@ async fn test_dec() -> eyre::Result<()> {
         evm.touches,
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
-            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::WarmUp(to),
             AccountTouch::GetCode(
                 to,
                 word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),
@@ -202,7 +202,7 @@ async fn test_dec_with_override() -> eyre::Result<()> {
         evm.touches,
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
-            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::WarmUp(to),
             AccountTouch::GetCode(to, word("0x0"), vec![]),
             AccountTouch::SetNonce(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266"), 2887, 2888),
             AccountTouch::GetState(to, word("0x0"), word("0x1"), false),
@@ -228,7 +228,7 @@ async fn test_inc() -> eyre::Result<()> {
         evm.touches,
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
-            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::WarmUp(to),
             AccountTouch::GetCode(
                 to,
                 word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),
@@ -261,7 +261,7 @@ async fn test_set() -> eyre::Result<()> {
         evm.touches,
         vec![
             AccountTouch::WarmUp(addr("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")),
-            AccountTouch::WarmUp(addr("e7f1725e7734ce288f8367e1bb143e90bb3f0512")),
+            AccountTouch::WarmUp(to),
             AccountTouch::GetCode(
                 to,
                 word("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"),

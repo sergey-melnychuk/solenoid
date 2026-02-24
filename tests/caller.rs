@@ -72,6 +72,7 @@ async fn test_deploy() -> eyre::Result<()> {
                 code,
                 Word::from_bytes(&hash),
             ),
+            AccountTouch::WarmUp(created1), // warmed when entering created2's constructor (call.from)
             AccountTouch::SetState(created2, word("0x0"), word("0x0"), word("0x42"), false),
             AccountTouch::GetState(created1, word("0x1"), word("0x0"), false),
             AccountTouch::SetState(created1, word("0x1"), word("0x0"), (&created2).into(), true,),
