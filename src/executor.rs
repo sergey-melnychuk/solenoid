@@ -2128,23 +2128,15 @@ impl<T: EventTracer> Executor<T> {
                 }
                 let n = instruction.opcode.n as usize;
 
-                let size = evm
-                    .stack
-                    .iter()
-                    .rev()
-                    .nth(1)
-                    .cloned()
-                    .unwrap_or_default()
-                    .as_usize();
+                let offset = evm.pop()?.as_usize();
+                let size = evm.pop()?.as_usize();
+
                 gas = 375;
                 gas += 375 * n as i64 + 8 * size as i64;
-                gas += evm.memory_expansion_cost();
+
                 if evm.gas.remaining() < gas {
                     return Ok(StepResult::Halt(gas));
                 }
-
-                let offset = evm.pop()?.as_usize();
-                let size = evm.pop()?.as_usize();
 
                 let mut topics = Vec::with_capacity(n);
                 for _ in 0..n {
