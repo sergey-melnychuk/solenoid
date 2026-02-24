@@ -114,8 +114,8 @@ impl Ext {
     }
 
     /// Mark an address as accessed in the current transaction (EIP-2929)
-    pub fn warm_address(&mut self, addr: &Address) {
-        self.accessed_addresses.insert(*addr);
+    pub fn warm_address(&mut self, addr: &Address) -> bool {
+        self.accessed_addresses.insert(*addr)
     }
 
     /// Check if a storage slot has been accessed in the current transaction (EIP-2929)
@@ -124,8 +124,8 @@ impl Ext {
     }
 
     /// Mark a storage slot as accessed in the current transaction (EIP-2929)
-    pub fn warm_storage(&mut self, addr: &Address, key: &Word) {
-        self.accessed_storage.insert((*addr, *key));
+    pub fn warm_storage(&mut self, addr: &Address, key: &Word) -> bool {
+        self.accessed_storage.insert((*addr, *key))
     }
 
     pub async fn get(&mut self, addr: &Address, key: &Word) -> eyre::Result<Word> {

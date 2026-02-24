@@ -260,10 +260,11 @@ impl Runner {
         let nonce = ext.account_mut(&self.call.from).nonce;
         let created = self.call.from.create(nonce);
         ext.created_accounts.push(created);
-        ext.warm_address(&created);
+        if ext.warm_address(&created) {
+            evm.touches.push(AccountTouch::WarmUp(created));
+        }
         // Initialize the created account in state with nonce=0 before constructor runs.
         ext.state.entry(created).or_default();
-        evm.touches.push(AccountTouch::WarmUp(created));
 
         // Transfer CREATE value from tx sender to created address (before init code runs).
         // Only for CREATE (to.is_zero()); for CALL/transfer the executor handles value transfer.

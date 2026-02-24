@@ -46,7 +46,7 @@ async fn as_state(
     ext: &mut Ext,
 ) -> eyre::Result<BTreeMap<String, Value>> {
     let mut kv: BTreeMap<Address, BTreeSet<Word>> = BTreeMap::new();
-    let mut touched = result
+    let touched = result
         .evm
         .touches
         .iter()
@@ -68,14 +68,6 @@ async fn as_state(
             _ => None,
         })
         .collect::<BTreeSet<_>>();
-
-    // Include addresses from access list (REVM includes these in state diff)
-    for item in &ext.tx_ctx.access_list {
-        touched.insert(item.address);
-        for key in &item.storage_keys {
-            kv.entry(item.address).or_default().insert(*key);
-        }
-    }
 
     let mut ret: BTreeMap<String, serde_json::Value> = BTreeMap::new();
     for address in touched.into_iter() {

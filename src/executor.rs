@@ -92,13 +92,14 @@ impl AccountTouch {
     pub fn is_fee_pay(&self) -> bool {
         matches!(self, AccountTouch::FeePay(_, _, _))
     }
+    pub fn is_create(&self) -> bool {
+        matches!(self, AccountTouch::Create(_, _, _, _, _))
+    }
     /// Returns true if this touch should be preserved even when the call reverts.
     /// This includes read-only touches, fee-pay touches, and Create touches
     /// (because REVM includes created-then-reverted accounts in its state diff).
     pub fn survives_revert(&self) -> bool {
-        self.is_read_only()
-            || self.is_fee_pay()
-            || matches!(self, AccountTouch::Create(_, _, _, _, _))
+        self.is_read_only() || self.is_fee_pay() || self.is_create()
     }
 }
 
@@ -369,11 +370,13 @@ impl<T: EventTracer> Executor<T> {
         ext: &mut Ext,
     ) -> eyre::Result<(T, Vec<u8>)> {
         // EIP-2929: Pre-warm sender and target addresses at transaction start
-        ext.warm_address(&call.from);
-        evm.touches.push(AccountTouch::WarmUp(call.from));
+        if ext.warm_address(&call.from) {
+            evm.touches.push(AccountTouch::WarmUp(call.from));
+        }
         if !call.to.is_zero() {
-            ext.warm_address(&call.to);
-            evm.touches.push(AccountTouch::WarmUp(call.to));
+            if ext.warm_address(&call.to) {
+                evm.touches.push(AccountTouch::WarmUp(call.to));
+            }
 
             // EIP-7702: If call.to is delegated, also pre-warm the target address
             let (code, codehash) = ext.code(&call.to).await?;
@@ -381,15 +384,15 @@ impl<T: EventTracer> Executor<T> {
                 .push(AccountTouch::GetCode(call.to, codehash, code.clone()));
             if code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]) {
                 let target = Address::try_from(&code[3..]).expect("must succeed");
-                ext.warm_address(&target);
-                evm.touches.push(AccountTouch::WarmUp(target));
+                if ext.warm_address(&target) {
+                    evm.touches.push(AccountTouch::WarmUp(target));
+                }
             }
         }
 
         // EIP-3651 (Shanghai): Pre-warm coinbase address
         let coinbase = self.header.miner;
-        if !coinbase.is_zero() {
-            ext.warm_address(&coinbase);
+        if !coinbase.is_zero() && ext.warm_address(&coinbase) {
             evm.touches.push(AccountTouch::WarmUp(coinbase));
         }
 
@@ -670,8 +673,7 @@ impl<T: EventTracer> Executor<T> {
         });
 
         // EIP-2929: Warm the caller when entering a call (CALLER in callee = warm for SELFDESTRUCT etc)
-        if !call.from.is_zero() {
-            ext.warm_address(&call.from);
+        if !call.from.is_zero() && ext.warm_address(&call.from) {
             evm.touches.push(AccountTouch::WarmUp(call.from));
         }
 
@@ -2774,9 +2776,10 @@ impl<T: EventTracer> Executor<T> {
         };
 
         ext.created_accounts.push(created);
-        ext.warm_address(&created);
+        if ext.warm_address(&created) {
+            evm.touches.push(AccountTouch::WarmUp(created));
+        }
         ext.state.entry(created).or_default();
-        evm.touches.push(AccountTouch::WarmUp(created));
 
         let create_cost = 32000;
         let base_gas_cost = memory_expansion_cost + create_cost + init_code_cost;
