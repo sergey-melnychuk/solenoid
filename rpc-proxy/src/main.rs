@@ -2,7 +2,7 @@ mod cache;
 
 use std::{collections::HashSet, net::SocketAddr, path::PathBuf, sync::Arc};
 
-use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::post};
+use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::{get, post}};
 use cache::Cache;
 use reqwest::Client;
 use serde_json::{Value, json};
@@ -13,12 +13,12 @@ use tracing::{debug, error, info, warn};
 // curl -H 'Content-Type: application/json' -d '{"url":""}' http://localhost:8080/url
 
 // tar -cjf evm-cache.tar.gz .evm-proxy-cache
-// scp evm-cache.tar.gz nuc:/home/work/Code/solenoid/evm-cache.tar.gz
+// scp evm-cache.tar.gz nuc:/home/work/Code/solenoid/rpc-proxy/evm-cache.tar.gz
 // ssh nuc
 // cd /home/work/Code/solenoid/rpc-proxy
 // tar -cjf evm-cache-backup.tar.gz .evm-proxy-cache
 // rm -rf .evm-proxy-cache
-// tar -xjf evm-cache.tar.gz
+// tar -xf evm-cache.tar.gz
 
 struct AppState {
     upstream_url: RwLock<String>,
@@ -90,6 +90,7 @@ fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/rpc", post(handle_jsonrpc))
         .route("/url", post(handle_update_url))
+        .route("/ready", get(handle_ready))
         .with_state(state)
 }
 
@@ -110,6 +111,33 @@ async fn shutdown_signal() {
         _ = terminate => {}
     }
     info!("Shutting down");
+}
+
+async fn handle_ready(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "eth_blockNumber",
+        "params": []
+    });
+    match forward(&state, body).await {
+        Ok(resp) => {
+            if let Some(result) = resp.get("result").and_then(|v| v.as_str()) {
+                (StatusCode::OK, Json(json!({ "block": result })))
+            } else if resp.get("error").is_some() {
+                (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "upstream error" })))
+            } else {
+                (StatusCode::SERVICE_UNAVAILABLE, Json(json!({ "error": "invalid response" })))
+            }
+        }
+        Err(err) => {
+            error!(error = %err, "Ready check failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "error": err.to_string() })),
+            )
+        }
+    }
 }
 
 async fn handle_update_url(

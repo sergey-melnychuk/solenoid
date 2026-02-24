@@ -1,6 +1,4 @@
 target/
 .env
-*.json
-*.bak
-*.json.tar.gz
 .evm-proxy-cache
+*.tar.gz
