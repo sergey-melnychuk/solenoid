@@ -2128,8 +2128,9 @@ impl<T: EventTracer> Executor<T> {
                 }
                 let n = instruction.opcode.n as usize;
 
-                let offset = evm.pop()?.as_usize();
-                let size = evm.pop()?.as_usize();
+                let [offset, size] = evm.peek::<2>()?;
+                let offset = offset.as_usize();
+                let size = size.as_usize();
 
                 gas = 375;
                 gas += 375 * n as i64 + 8 * size as i64;
@@ -2137,6 +2138,9 @@ impl<T: EventTracer> Executor<T> {
                 if evm.gas.remaining() < gas {
                     return Ok(StepResult::Halt(gas));
                 }
+
+                let _offset = evm.pop()?;
+                let _size = evm.pop()?;
 
                 let mut topics = Vec::with_capacity(n);
                 for _ in 0..n {
