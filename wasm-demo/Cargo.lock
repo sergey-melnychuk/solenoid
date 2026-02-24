@@ -55,7 +55,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -82,7 +82,7 @@ dependencies = [
  "alloy-rlp",
  "crc",
  "serde",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -108,7 +108,7 @@ dependencies = [
  "borsh",
  "k256",
  "serde",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -144,7 +144,7 @@ dependencies = [
  "serde",
  "serde_with",
  "sha2",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -170,7 +170,7 @@ dependencies = [
  "http",
  "serde",
  "serde_json",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -197,7 +197,7 @@ dependencies = [
  "futures-utils-wasm",
  "serde",
  "serde_json",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -272,7 +272,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "url",
@@ -384,7 +384,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -410,7 +410,7 @@ dependencies = [
  "either",
  "elliptic-curve",
  "k256",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -498,7 +498,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
  "tower",
  "tracing",
@@ -535,7 +535,7 @@ dependencies = [
  "nybbles",
  "serde",
  "smallvec",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -1520,6 +1520,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "evm-common"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "hex",
+ "primitive-types 0.14.0",
+ "serde",
+ "thiserror 2.0.18",
+ "tiny-keccak",
+]
+
+[[package]]
+name = "evm-event"
+version = "0.1.0"
+dependencies = [
+ "evm-common",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "evm-tracer"
 version = "0.1.0"
 dependencies = [
@@ -1529,6 +1550,8 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types",
  "dotenv",
+ "evm-common",
+ "evm-event",
  "eyre",
  "hex",
  "revm",
@@ -2834,9 +2857,9 @@ dependencies = [
 
 [[package]]
 name = "primitive-types"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d15600a7d856470b7d278b3fe0e311fe28c2526348549f8ef2ff7db3299c87f5"
+checksum = "721a1da530b5a2633218dc9f75713394c983c352be88d2d7c9ee85e2c4c21794"
 dependencies = [
  "fixed-hash",
  "impl-codec 0.7.1",
@@ -3177,7 +3200,7 @@ dependencies = [
  "revm-primitives",
  "revm-state",
  "serde",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "tokio",
 ]
 
@@ -3771,7 +3794,7 @@ checksum = "297f631f50729c8c99b84667867963997ec0b50f32b2a7dbcab828ef0541e8bb"
 dependencies = [
  "num-bigint",
  "num-traits",
- "thiserror 2.0.17",
+ "thiserror 2.0.18",
  "time",
 ]
 
@@ -3817,6 +3840,8 @@ dependencies = [
  "ark-serialize 0.5.0",
  "blake2",
  "dotenv",
+ "evm-common",
+ "evm-event",
  "evm-tracer",
  "eyre",
  "futures",
@@ -3829,7 +3854,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "p256",
- "primitive-types 0.13.1",
+ "primitive-types 0.14.0",
  "reqwest",
  "ripemd",
  "serde",
@@ -4000,11 +4025,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.17",
+ "thiserror-impl 2.0.18",
 ]
 
 [[package]]
@@ -4020,9 +4045,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.17"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4487,6 +4512,8 @@ name = "wasm-demo"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
+ "evm-common",
+ "evm-event",
  "hex",
  "js-sys",
  "serde-json-wasm",

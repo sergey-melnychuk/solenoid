@@ -8,6 +8,9 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 solenoid = { path = "..", default-features = false }
+evm-event = { path = "../evm-event" }
+evm-common = { path = "../evm-common" }
+
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 serde-wasm-bindgen = "0.6"

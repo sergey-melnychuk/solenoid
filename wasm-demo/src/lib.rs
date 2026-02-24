@@ -1,13 +1,14 @@
+use evm_common::{
+    address::{Address, addr},
+    hash::keccak256,
+    word::Word,
+};
+use evm_event::EventData;
 use solenoid::{
-    common::{
-        address::{addr, Address},
-        hash::keccak256,
-        word::Word,
-    },
     eth::EthClient,
     ext::{Ext, TxContext},
     solenoid::{Builder, Solenoid},
-    tracer::{EventData, EventTracer},
+    tracer::EventTracer,
 };
 use wasm_bindgen::prelude::*;
 
@@ -59,8 +60,13 @@ pub async fn get_transaction_hash(
         .map_err(|e| JsValue::from_str(&format!("Failed to get block: {}", e)))?;
 
     // Get transaction by index
-    let tx = block.transactions.get(tx_index)
-        .ok_or_else(|| JsValue::from_str(&format!("Transaction index {} out of range (block has {} transactions)", tx_index, block.transactions.len())))?;
+    let tx = block.transactions.get(tx_index).ok_or_else(|| {
+        JsValue::from_str(&format!(
+            "Transaction index {} out of range (block has {} transactions)",
+            tx_index,
+            block.transactions.len()
+        ))
+    })?;
 
     let tx_hash = format!("{:064x}", tx.hash);
     Ok(format!("0x{}", tx_hash))
@@ -370,7 +376,13 @@ pub async fn trace_transaction(
         .parse()
         .map_err(|e| JsValue::from_str(&format!("Invalid transaction index: {}", e)))?;
 
-    web_sys::console::log_1(&format!("Debug - Tracing transaction at block {}, index {}", block_number, tx_index).into());
+    web_sys::console::log_1(
+        &format!(
+            "Debug - Tracing transaction at block {}, index {}",
+            block_number, tx_index
+        )
+        .into(),
+    );
 
     // Initialize Ethereum client
     let eth = EthClient::new(&rpc_url);
@@ -381,14 +393,31 @@ pub async fn trace_transaction(
         .await
         .map_err(|e| JsValue::from_str(&format!("Failed to get block: {}", e)))?;
 
-    web_sys::console::log_1(&format!("Debug - Got block with {} transactions", block.transactions.len()).into());
+    web_sys::console::log_1(
+        &format!(
+            "Debug - Got block with {} transactions",
+            block.transactions.len()
+        )
+        .into(),
+    );
 
     // Get transaction by index
-    let tx = block.transactions.get(tx_index)
-        .ok_or_else(|| JsValue::from_str(&format!("Transaction index {} out of range (block has {} transactions)", tx_index, block.transactions.len())))?;
+    let tx = block.transactions.get(tx_index).ok_or_else(|| {
+        JsValue::from_str(&format!(
+            "Transaction index {} out of range (block has {} transactions)",
+            tx_index,
+            block.transactions.len()
+        ))
+    })?;
 
     let tx_hash = format!("{:064x}", tx.hash);
-    web_sys::console::log_1(&format!("Debug - Transaction hash: 0x{}, from={:?}, to={:?}, gas={:?}", tx_hash, tx.from, tx.to, tx.gas).into());
+    web_sys::console::log_1(
+        &format!(
+            "Debug - Transaction hash: 0x{}, from={:?}, to={:?}, gas={:?}",
+            tx_hash, tx.from, tx.to, tx.gas
+        )
+        .into(),
+    );
 
     // Create Ext at block_number - 1
     let mut ext = Ext::at_number(Word::from(block_number - 1), eth)
@@ -419,15 +448,21 @@ pub async fn trace_transaction(
         .await
         .map_err(|e| JsValue::from_str(&format!("Execution failed: {:?}", e)))?;
 
-    web_sys::console::log_1(&format!("Debug - Execution completed, got {} traces", result.tracer.peek().len()).into());
+    web_sys::console::log_1(
+        &format!(
+            "Debug - Execution completed, got {} traces",
+            result.tracer.peek().len()
+        )
+        .into(),
+    );
 
     // Get all traces and filter for CALL, RETURN, State, Account, Fee, and Halt events
     let traces = result.tracer.take();
     for event in traces {
         let should_include = matches!(
             event.data,
-            EventData::Call { .. } 
-                | EventData::Return { .. } 
+            EventData::Call { .. }
+                | EventData::Return { .. }
                 | EventData::State(_)
                 | EventData::Account(_)
                 | EventData::Fee { .. }
@@ -438,7 +473,7 @@ pub async fn trace_transaction(
             // Serialize event to JSON
             let json_str = serde_json_wasm::to_string(&event)
                 .map_err(|e| JsValue::from_str(&format!("Failed to serialize event: {}", e)))?;
-            
+
             // Call JavaScript callback with the event JSON
             let js_value = JsValue::from_str(&json_str);
             let _ = callback.call1(&JsValue::NULL, &js_value);
