@@ -14,5 +14,7 @@ fi
 etc/run.sh 24484346
 etc/run.sh 24486519
 etc/run.sh 24486570
+etc/run.sh 24526715
+etc/run.sh 24526755
 
 etc/todo.sh
