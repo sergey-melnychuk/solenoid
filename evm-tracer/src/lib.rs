@@ -226,7 +226,7 @@ impl TxTrace {
     }
 
     pub fn reset(&mut self) -> (B256, Vec<Event>) {
-        let traces = self.traces.drain(..).collect::<Vec<_>>();
+        let traces = std::mem::take(&mut self.traces);
         let hash = self.hash;
         (hash, traces)
     }

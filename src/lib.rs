@@ -1,3 +1,4 @@
+pub mod allocator;
 pub mod decoder;
 pub mod eth;
 pub mod executor;

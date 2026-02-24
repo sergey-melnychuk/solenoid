@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use evm_common::address::Address;
@@ -186,6 +186,12 @@ pub fn runner(
     }
 }
 
+use solenoid::allocator::LoggingAllocator;
+use std::alloc::System;
+
+#[global_allocator]
+static GLOBAL: LoggingAllocator<System> = LoggingAllocator(System);
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     dotenv::dotenv().ok();
@@ -210,7 +216,9 @@ async fn main() -> eyre::Result<()> {
             .unwrap_or(23027350) // https://xkcd.com/221/
     };
 
-    let progress = std::env::args().skip(2).any(|arg| arg == "--progress");
+    let args = std::env::args().skip(1).collect::<HashSet<String>>();
+    let progress = args.contains("--progress");
+    let memory = args.contains("--memory");
 
     let Block {
         header,
@@ -270,13 +278,14 @@ async fn main() -> eyre::Result<()> {
                 let ret_ok = revm_result.ret == sole_result.ret;
                 let gas_ok = revm_result.gas == sole_result.gas;
                 let traces_ok = revm_traces == sole_traces;
+                let state_ok = revm_result.state == sole_result.state;
 
-                let revm_state = serde_json::to_string_pretty(&revm_result.state).unwrap();
-                let sole_state = serde_json::to_string_pretty(&sole_result.state).unwrap();
-                let state_ok = sole_state == revm_state;
+                if memory {
+                    let (used, diff) = solenoid::allocator::stats();
+                    println!("MEMORY: {used:>10} \t {diff:>10}");
+                }
 
-                let ok = rev_ok && ret_ok && gas_ok && traces_ok && state_ok;
-                if ok {
+                if rev_ok && ret_ok && gas_ok && traces_ok && state_ok {
                     matched += 1;
                     continue;
                 }
@@ -284,18 +293,27 @@ async fn main() -> eyre::Result<()> {
                 // Dump traces to files for later analysis
                 let revm_trace_file = format!("revm.{}.{}.log", block_number, idx);
                 let sole_trace_file = format!("sole.{}.{}.log", block_number, idx);
-
                 evm_tracer::aux::dump(&revm_trace_file, &revm_traces).ok();
-                evm_tracer::aux::dump_filtered(&sole_trace_file, &sole_traces, |event| {
-                    matches!(event.data, EventData::OpCode(_))
-                })
-                .ok();
+                let is_opcode = |e: &Event| matches!(e.data, EventData::OpCode(_));
+                evm_tracer::aux::dump_filtered(&sole_trace_file, &sole_traces, is_opcode).ok();
 
-                // Dump state to files for later analysis
+                let revm_traces_len = revm_traces.len();
+                drop(revm_traces);
+                drop(sole_traces);
+
+                // Dump state to files for later analysis (only serialize when needed)
                 let revm_state_file = format!("revm.{}.{}.state.json", block_number, idx);
                 let sole_state_file = format!("sole.{}.{}.state.json", block_number, idx);
-                std::fs::write(&revm_state_file, &revm_state).ok();
-                std::fs::write(&sole_state_file, &sole_state).ok();
+                std::fs::write(
+                    &revm_state_file,
+                    serde_json::to_string_pretty(&revm_result.state).unwrap_or_default(),
+                )
+                .ok();
+                std::fs::write(
+                    &sole_state_file,
+                    serde_json::to_string_pretty(&sole_result.state).unwrap_or_default(),
+                )
+                .ok();
 
                 let ret = if revm_result.ret.is_empty() {
                     "empty".to_string()
@@ -324,7 +342,7 @@ async fn main() -> eyre::Result<()> {
                     !revm_result.rev,
                     ret,
                     revm_result.gas,
-                    revm_traces.len(),
+                    revm_traces_len,
                     state_accounts,
                     state_keys,
                 );
@@ -364,6 +382,9 @@ async fn main() -> eyre::Result<()> {
                     if traces_ok { "match" } else { "false" },
                     state_diff,
                 );
+
+                drop(revm_result);
+                drop(sole_result);
             }
             Err(e) => {
                 println!(
