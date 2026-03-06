@@ -1,5 +1,5 @@
-use evm_common::{address::addr, word::Word};
 use solenoid::{
+    common::{address::addr, word::Word},
     eth,
     ext::{Account, Ext},
     solenoid::{Builder, Solenoid},
