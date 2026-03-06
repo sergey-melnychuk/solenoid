@@ -14,18 +14,13 @@ async fn main() -> eyre::Result<()> {
     let url = std::env::var("URL")?;
     let eth = eth::EthClient::new(&url);
     let mut ext = Ext::at_number(Word::from(23505042), eth).await?;
-    /* Uncomment lines below to avoid JSON-RPC requests */
-    // ext.data_mut(&addr("0xc26297fdd7b51a5c8c4ffe76f06af56680e2b552"))
-    //     .insert(Word::zero(), Word::zero()); // Call.owner
-    // ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
-    //     .insert(Word::zero(), Word::zero()); // Call.target
-    // ext.data_mut(&addr("0xc80a141ce8a5b73371043cba5cee40437975bb37"))
-    //     .insert(Word::one(), Word::zero()); // Cell.value
+    // let mut ext = Ext::at_latest(eth).await?;
 
     let code = include_str!("../etc/call/Call.bin");
     let code = hex::decode(code.trim_start_matches("0x"))?;
 
     let from = addr("0xe7f1725e7734ce288f8367e1bb143e90bb3f0512");
+    ext.pull(&from).await?;
     ext.account_mut(&from).value = Word::from(100_000_000_000_000_000u64);
 
     let sole = Solenoid::new();

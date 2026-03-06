@@ -964,7 +964,7 @@ mod tests {
         input[96..128].copy_from_slice(&sig_bytes[32..]); // s
 
         let result = ecrecover(&input).unwrap();
-        assert_eq!(hex::encode(&result), hex::encode(&expected_address));
+        assert_eq!(hex::encode(&result), hex::encode(expected_address));
     }
 
     // 0x02: SHA-256 tests
@@ -1211,6 +1211,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[allow(clippy::needless_range_loop)] // clippy, just let this one go
     #[test]
     fn test_blake2f_valid_input() {
         let mut input = vec![0u8; 213];
@@ -1404,6 +1405,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[allow(clippy::needless_range_loop)] // clippy, just let this one go
     #[test]
     fn test_kzg_valid_format() {
         let mut input = vec![0u8; 192];

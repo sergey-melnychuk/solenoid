@@ -10,10 +10,10 @@ use solenoid::{
 
 #[allow(dead_code)]
 async fn patch(ext: &mut Ext, acc: &Address, val: &str) -> eyre::Result<()> {
-    ext.pull(&acc).await?;
-    let old = ext.account_mut(&acc).value;
+    ext.pull(acc).await?;
+    let old = ext.account_mut(acc).value;
     let val = Word::from_hex(val)?;
-    ext.account_mut(&acc).value = val;
+    ext.account_mut(acc).value = val;
     eprintln!("PATCH: {acc} balance {old} -> {val}");
     Ok(())
 }

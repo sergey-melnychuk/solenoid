@@ -91,10 +91,12 @@ async fn as_state(
     Ok(ret)
 }
 
+pub type FutureResult = dyn Future<Output = eyre::Result<(TxResult, Vec<Event>)>>;
+
 pub fn runner(
     header: Header,
     ext: Ext,
-) -> impl FnMut(Tx) -> Pin<Box<dyn Future<Output = eyre::Result<(TxResult, Vec<Event>)>>>> {
+) -> impl FnMut(Tx) -> Pin<Box<FutureResult>> {
     let ext = Arc::new(Mutex::new(ext));
     let base_fee = header.base_fee;
     move |tx| {
@@ -144,7 +146,7 @@ pub fn runner(
                     .with_gas(tx.gas)
                     .with_value(tx.value)
                     .ready()
-                    .apply(&mut *guard)
+                    .apply(&mut guard)
                     .await?;
 
                 // let coinbase_balance = guard.balance(&header.miner).await?;
@@ -175,7 +177,7 @@ pub fn runner(
                     })
                     .collect();
 
-                let tx_result = as_tx_result(gas_costs, gas_floor, &result, &mut *guard).await?;
+                let tx_result = as_tx_result(gas_costs, gas_floor, &result, &mut guard).await?;
 
                 Ok::<_, eyre::Report>((tx_result, traces))
             })
@@ -207,7 +209,7 @@ async fn main() -> eyre::Result<()> {
     }
 
     let block_number = std::env::args().nth(1);
-    let block_number = if block_number.as_ref().map(|s| s.as_str()) == Some("latest") {
+    let block_number = if block_number.as_deref() == Some("latest") {
         let (block_number, _) = eth.get_latest_block().await?;
         block_number
     } else {
@@ -326,9 +328,7 @@ async fn main() -> eyre::Result<()> {
                 );
                 let state_accounts = revm_result.state.len();
                 let state_keys = revm_result
-                    .state
-                    .iter()
-                    .map(|(_, value)| {
+                    .state.values().map(|value| {
                         value
                             .as_object()
                             .and_then(|object| object.get("state"))
@@ -362,9 +362,7 @@ async fn main() -> eyre::Result<()> {
                 } else {
                     let state_accounts = sole_result.state.len();
                     let state_keys = sole_result
-                        .state
-                        .iter()
-                        .map(|(_, value)| {
+                        .state.values().map(|value| {
                             value
                                 .get("state")
                                 .and_then(|v| v.as_object())

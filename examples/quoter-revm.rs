@@ -128,7 +128,7 @@ async fn main() -> Result<()> {
         for chunk in output.chunks(32) {
             eprintln!("{}", hex::encode(chunk));
         }
-        decode_quoter_output(&output, amount_in);
+        decode_quoter_output(output, amount_in);
     }
 
     println!("✅ Transaction executed successfully!");

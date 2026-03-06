@@ -195,7 +195,6 @@ impl Builder for TransferBuilder {
 pub struct Runner {
     header: Header,
     call: Call,
-    #[allow(dead_code)] // TODO: sort this out
     code: Vec<u8>,
 }
 
@@ -215,7 +214,7 @@ impl Runner {
         let mut evm = Evm::new();
 
         let code = if self.call.to.is_zero() {
-            self.call.data.clone()
+            self.code.clone()
         } else {
             let (code, codehash) = ext.code(&self.call.to).await?;
             evm.touches

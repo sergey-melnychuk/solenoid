@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
                     .storage
                     .iter()
                     .map(|(key, value)| -> (StorageKey, StorageValue) {
-                        (key.clone(), value.present_value.clone())
+                        (*key, value.present_value)
                     })
                     .collect::<BTreeMap<_, _>>();
                 let mut json = json!({

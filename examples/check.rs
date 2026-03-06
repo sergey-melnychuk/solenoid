@@ -43,8 +43,8 @@ fn main() -> eyre::Result<()> {
         .and_then(|number| number.parse::<usize>().ok())
         .unwrap_or(0);
 
-    let revm_state = std::fs::read_to_string(&format!("revm.{block_number}.{skip}.state.json"))?;
-    let sole_state = std::fs::read_to_string(&format!("sole.{block_number}.{skip}.state.json"))?;
+    let revm_state = std::fs::read_to_string(format!("revm.{block_number}.{skip}.state.json"))?;
+    let sole_state = std::fs::read_to_string(format!("sole.{block_number}.{skip}.state.json"))?;
 
     let revm_state = serde_json::from_str::<serde_json::Value>(&revm_state)?;
     let sole_state = serde_json::from_str::<serde_json::Value>(&sole_state)?;
@@ -78,13 +78,12 @@ fn main() -> eyre::Result<()> {
     let mut step = 1i64;
     for (revm, sole) in iter {
         let i = index as usize;
-        if !non_interactive {
-            if i % 1000 == 0 {
+        if !non_interactive
+            && i.is_multiple_of(1000) {
                 use std::io::Write;
                 print!("\r(check: {i})");
                 std::io::stdout().flush().unwrap();
             }
-        }
         let (a, b) = (revm?, sole?);
         if a.is_empty() ^ b.is_empty() {
             break;
@@ -135,8 +134,8 @@ fn main() -> eyre::Result<()> {
             } else if b.name == "BALANCE" {
                 format!(
                     ",revm.stack[0]=0x{},sole.stack[0]=0x{}",
-                    hex::encode(&a.stack[0].into_bytes()),
-                    hex::encode(&b.stack[0].into_bytes()),
+                    hex::encode(a.stack[0].into_bytes()),
+                    hex::encode(b.stack[0].into_bytes()),
                 )
             } else {
                 String::from("")
