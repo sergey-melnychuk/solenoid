@@ -2454,7 +2454,7 @@ impl<T: EventTracer> Executor<T> {
                         "evm.gas.used": evm.gas.used,
                         "evm.gas.refund": evm.gas.refund,
                         "call.address": address,
-                        "call.input": hex::encode(&evm.memory[args_offset..args_offset + args_size]),
+                        "call.input": hex::encode(&evm.memory[args_offset.min(evm.memory.len())..(args_offset + args_size).min(evm.memory.len())]),
                         "call.result": "OOG",
                         "call.gas": call_gas.as_u64(),
                         "access_cost": access_cost,
