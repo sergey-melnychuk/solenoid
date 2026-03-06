@@ -62,7 +62,6 @@ async fn test_tx_()
 */
 
 #[tokio::test]
-#[ignore = "TODO: FIXME: 2nd delegatecall has all-zeroes calldata"]
 async fn test_tx_0xe30bacb372ab39e3cfc57c2b939ed1962833852e884d60fcbca6f82d2c2a6507()
 -> eyre::Result<()> {
     let mut res = tx(
@@ -147,7 +146,7 @@ async fn test_tx_0x3db7dd66f03757ef51fd8c2cd98d533a76f9eca8373d2daf8793e271842e2
 }
 
 #[tokio::test]
-async fn test_tx_0xda636204dd50e257aa537a96470e161cde951932cf28d0347ae35977769e971a_subcall()
+async fn test_tx_0xda636204dd50e257aa537a96470e161cde951932cf28d0347ae35977769e971a()
 -> eyre::Result<()> {
     let mut res = tx(
         23635581,
