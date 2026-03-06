@@ -93,10 +93,7 @@ async fn as_state(
 
 pub type FutureResult = dyn Future<Output = eyre::Result<(TxResult, Vec<Event>)>>;
 
-pub fn runner(
-    header: Header,
-    ext: Ext,
-) -> impl FnMut(Tx) -> Pin<Box<FutureResult>> {
+pub fn runner(header: Header, ext: Ext) -> impl FnMut(Tx) -> Pin<Box<FutureResult>> {
     let ext = Arc::new(Mutex::new(ext));
     let base_fee = header.base_fee;
     move |tx| {
@@ -328,7 +325,9 @@ async fn main() -> eyre::Result<()> {
                 );
                 let state_accounts = revm_result.state.len();
                 let state_keys = revm_result
-                    .state.values().map(|value| {
+                    .state
+                    .values()
+                    .map(|value| {
                         value
                             .as_object()
                             .and_then(|object| object.get("state"))
@@ -362,7 +361,9 @@ async fn main() -> eyre::Result<()> {
                 } else {
                     let state_accounts = sole_result.state.len();
                     let state_keys = sole_result
-                        .state.values().map(|value| {
+                        .state
+                        .values()
+                        .map(|value| {
                             value
                                 .get("state")
                                 .and_then(|v| v.as_object())

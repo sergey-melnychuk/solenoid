@@ -76,9 +76,27 @@ async fn main() -> eyre::Result<()> {
     // Fund all three actors with 2 ETH each so they can pay for gas and value transfers.
     let one = Word::from(10u64.pow(18));
     let two = Word::from(2 * 10u64.pow(18));
-    ext.state.insert(aa, Account { value: two, ..Default::default() });
-    ext.state.insert(bb, Account { value: two, ..Default::default() });
-    ext.state.insert(cc, Account { value: two, ..Default::default() });
+    ext.state.insert(
+        aa,
+        Account {
+            value: two,
+            ..Default::default()
+        },
+    );
+    ext.state.insert(
+        bb,
+        Account {
+            value: two,
+            ..Default::default()
+        },
+    );
+    ext.state.insert(
+        cc,
+        Account {
+            value: two,
+            ..Default::default()
+        },
+    );
 
     // --- Deploy Vulnerable ---
     // cc deploys the vault contract. The constructor takes no ETH (value = 0).
@@ -106,7 +124,11 @@ async fn main() -> eyre::Result<()> {
     // Sanity check: verify the runtime bytecode was stored correctly.
     let expected = include_str!("../etc/reentrancy/Vulnerable.bin-runtime");
     let expected = hex::decode(expected.trim_start_matches("0x"))?;
-    assert_eq!(ext.code(&target).await?.0.len(), expected.len(), "target code mismatch");
+    assert_eq!(
+        ext.code(&target).await?.0.len(),
+        expected.len(),
+        "target code mismatch"
+    );
 
     // --- Deploy Attacker ---
     // aa deploys the attack contract. No ETH is sent at construction time —
@@ -133,7 +155,11 @@ async fn main() -> eyre::Result<()> {
     // Sanity check: verify the Attacker runtime bytecode as well.
     let expected = include_str!("../etc/reentrancy/Attacker.bin-runtime");
     let expected = hex::decode(expected.trim_start_matches("0x"))?;
-    assert_eq!(ext.code(&attack).await?.0.len(), expected.len(), "attack code mismatch");
+    assert_eq!(
+        ext.code(&attack).await?.0.len(),
+        expected.len(),
+        "attack code mismatch"
+    );
 
     println!("---");
 
@@ -189,7 +215,9 @@ async fn main() -> eyre::Result<()> {
 
 fn format_eth(word: &Word) -> String {
     let base = Word::from(10u64.pow(18));
-    let before = *word / base;
-    let after = *word % base;
-    format!("{}.{} ETH", before.as_u64(), after.as_u64())
+    format!(
+        "{}.{} ETH",
+        (*word / base).as_u64(),
+        (*word % base).as_u64()
+    )
 }

@@ -78,12 +78,11 @@ fn main() -> eyre::Result<()> {
     let mut step = 1i64;
     for (revm, sole) in iter {
         let i = index as usize;
-        if !non_interactive
-            && i.is_multiple_of(1000) {
-                use std::io::Write;
-                print!("\r(check: {i})");
-                std::io::stdout().flush().unwrap();
-            }
+        if !non_interactive && i.is_multiple_of(1000) {
+            use std::io::Write;
+            print!("\r(check: {i})");
+            std::io::stdout().flush().unwrap();
+        }
         let (a, b) = (revm?, sole?);
         if a.is_empty() ^ b.is_empty() {
             break;
