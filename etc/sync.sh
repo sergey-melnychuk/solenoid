@@ -19,5 +19,7 @@ etc/run.sh 24526715
 etc/run.sh 24526755
 etc/run.sh 24527394
 etc/run.sh 24565996
+#etc/run.sh 24595896 ### TODO: proper EIP-7702 handling (TX: 75, 76)
+etc/run.sh 24596006
 
 etc/todo.sh
