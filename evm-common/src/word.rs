@@ -148,6 +148,18 @@ impl Word {
     }
 }
 
+impl From<[u8; 32]> for Word {
+    fn from(value: [u8; 32]) -> Self {
+        Self(U256::from_big_endian(&value))
+    }
+}
+
+impl From<&[u8; 32]> for Word {
+    fn from(value: &[u8; 32]) -> Self {
+        Self(U256::from_big_endian(value))
+    }
+}
+
 impl From<u8> for Word {
     fn from(value: u8) -> Self {
         Self(primitive_types::U256::from(value))
