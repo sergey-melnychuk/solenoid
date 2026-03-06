@@ -31,12 +31,12 @@ tracing-subscriber = { version = "0.3.19", optional = true }
 k256 = { version = "0.13.4", features = ["ecdsa"] }
 p256 = { version = "0.13.2", features = ["ecdsa"] }
 
-evm-event = { path = "./evm-event" }
-evm-common = { path = "./evm-common" }
+evm-event = { version = "0.1", path = "./evm-event" }
+evm-common = { version = "0.1", path = "./evm-common" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.46.1", features = ["macros", "rt-multi-thread"] }
-evm-tracer = { path = "./evm-tracer" }
+evm-tracer = { version = "0.1", path = "./evm-tracer" }
 mimalloc = { version = "0.1", optional = true, default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
