@@ -1,6 +1,7 @@
+use evm_common::address::Address;
+use evm_event::{AccountEvent, EventData};
 use solenoid::{
     common::{address::addr, word::Word},
-    eth,
     ext::{Account, Ext},
     solenoid::{Builder, Solenoid},
 };
@@ -56,7 +57,6 @@ use solenoid::{
 
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
-    dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
 
     // Three actors:
@@ -67,11 +67,7 @@ async fn main() -> eyre::Result<()> {
     let bb = addr("0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
     let cc = addr("0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
 
-    // Fork state from the latest block. All on-chain accounts and storage are
-    // available; reads that miss the local cache are fetched lazily via JSON-RPC.
-    let url = std::env::var("URL")?;
-    let eth = eth::EthClient::new(&url);
-    let mut ext = Ext::at_latest(eth).await?;
+    let mut ext = Ext::local();
 
     // Fund all three actors with 2 ETH each so they can pay for gas and value transfers.
     let one = Word::from(10u64.pow(18));
@@ -203,6 +199,63 @@ async fn main() -> eyre::Result<()> {
         .apply(&mut ext)
         .await?;
     println!("Attack: OK={:#?} {}", !r.evm.reverted, format_eth(&one));
+
+    let name = |address: &Address| {
+        if address == &attack {
+            "ATTACK"
+        } else if address == &target {
+            "TARGET"
+        } else if address == &aa {
+            "HACKER"
+        } else {
+            unreachable!("no more addresses");
+        }
+    };
+
+    println!("---");
+    use solenoid::tracer::EventTracer;
+    let tab = ".";
+    for trace in r.tracer.peek() {
+        match &trace.data {
+            EventData::Call {
+                from, to, value, ..
+            } => {
+                let value = if *value > Word::zero() {
+                    format!(" [{}]", format_eth(value))
+                } else {
+                    "".to_string()
+                };
+                println!(
+                    "{}Call: {} -> {}{value}",
+                    tab.repeat(trace.depth - 1),
+                    name(from),
+                    name(to)
+                );
+            }
+            EventData::Return { ok, gas_used, .. } => {
+                println!(
+                    "{}Exit: ok={ok} gas={gas_used}",
+                    tab.repeat(trace.depth - 1)
+                );
+            }
+            EventData::Account(AccountEvent::SetValue { address, val, new }) => {
+                let (sig, sub) = if new > val {
+                    ("+", *new - *val)
+                } else {
+                    ("-", *val - *new)
+                };
+                println!(
+                    "{}$ETH: {}: {} ({sig}{})",
+                    tab.repeat(trace.depth - 1),
+                    name(address),
+                    format_eth(new),
+                    format_eth(&sub)
+                );
+            }
+            _ => (), // ignore all other events (opcodes, state, fees, logs, etc)
+        }
+    }
+    println!("---");
 
     // After a successful attack: Vulnerable should be empty, Attacker holds all the ETH.
     let balance = ext.balance(&target).await?;
